@@ -2,7 +2,7 @@ import type { Translation } from "./types";
 
 const es: Translation = {
   home: {
-    title: "Supaplate",
+    title: "억까",
     subtitle: "Es hora de construir!",
   },
   navigation: {

@@ -26,7 +26,7 @@ import makeServerClient from "~/core/lib/supa-client.server";
 export const meta: Route.MetaFunction = () => {
   return [
     {
-      title: `Confirm | ${import.meta.env.VITE_APP_NAME}`,
+      title: `로그인 확인 | ${import.meta.env.VITE_APP_NAME}`,
     },
   ];
 };
@@ -68,30 +68,30 @@ const errorSchema = z.object({
 export async function loader({ request }: Route.LoaderArgs) {
   // Extract query parameters from the URL
   const { searchParams } = new URL(request.url);
-  
+
   // Try to validate the parameters as a successful OAuth callback
   const { success, data: validData } = searchParamsSchema.safeParse(
     Object.fromEntries(searchParams),
   );
-  
+
   // If not a successful callback, check if it's an error callback
   if (!success) {
     const { data: errorData, success: errorSuccess } = errorSchema.safeParse(
       Object.fromEntries(searchParams),
     );
-    
+
     // If neither a successful nor error callback, return generic error
     if (!errorSuccess) {
-      return data({ error: "Invalid code" }, { status: 400 });
+      return data({ error: "유효하지 않은 인증 코드입니다." }, { status: 400 });
     }
-    
+
     // Return the error description from the provider
     return data({ error: errorData.error_description }, { status: 400 });
   }
 
   // Create Supabase client and get response headers for auth cookies
   const [client, headers] = makeServerClient(request);
-  
+
   // Exchange the OAuth code for a session
   const { error } = await client.auth.exchangeCodeForSession(validData.code);
 

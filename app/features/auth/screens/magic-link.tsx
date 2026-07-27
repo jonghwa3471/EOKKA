@@ -3,7 +3,7 @@
  *
  * This component handles passwordless authentication via magic links.
  * Users enter their email and receive a link that automatically logs them in.
- * 
+ *
  * The component includes:
  * - Email input field with validation
  * - Form submission handling
@@ -38,7 +38,7 @@ import makeServerClient from "~/core/lib/supa-client.server";
 export const meta: Route.MetaFunction = () => {
   return [
     {
-      title: `Magic Link | ${import.meta.env.VITE_APP_NAME}`,
+      title: `이메일 링크 로그인 | ${import.meta.env.VITE_APP_NAME}`,
     },
   ];
 };
@@ -79,7 +79,10 @@ export async function action({ request }: Route.ActionArgs) {
 
   // Return validation error if email is invalid
   if (!success) {
-    return data({ error: "Invalid email" }, { status: 400 });
+    return data(
+      { error: "올바른 이메일 주소를 입력해주세요." },
+      { status: 400 },
+    );
   }
 
   // Create Supabase client
@@ -98,10 +101,7 @@ export async function action({ request }: Route.ActionArgs) {
   if (error) {
     // Handle case where user doesn't exist
     if (error.code === "otp_disabled") {
-      return data(
-        { error: "Create an account before signing in." },
-        { status: 400 },
-      );
+      return data({ error: "먼저 회원가입을 완료해주세요." }, { status: 400 });
     }
     // Handle other errors
     return data({ error: error.message }, { status: 400 });
@@ -128,7 +128,7 @@ export async function action({ request }: Route.ActionArgs) {
 export default function MagicLink({ actionData }: Route.ComponentProps) {
   // Reference to the form element for resetting after successful submission
   const formRef = useRef<HTMLFormElement>(null);
-  
+
   // Reset the form when the magic link is successfully sent
   useEffect(() => {
     if (actionData && "success" in actionData && actionData.success) {
@@ -141,10 +141,10 @@ export default function MagicLink({ actionData }: Route.ComponentProps) {
       <Card className="w-full max-w-md">
         <CardHeader className="flex flex-col items-center">
           <CardTitle className="text-2xl font-semibold">
-            Enter your email
+            이메일을 입력해주세요
           </CardTitle>
           <CardDescription className="text-center text-base">
-            We&apos;ll send you a verification code.
+            비밀번호 없이 로그인할 수 있는 링크를 보내드려요.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -155,22 +155,22 @@ export default function MagicLink({ actionData }: Route.ComponentProps) {
           >
             <div className="flex flex-col items-start space-y-2">
               <Label htmlFor="name" className="flex flex-col items-start gap-1">
-                Email
+                이메일
               </Label>
               <Input
                 id="email"
                 name="email"
                 required
                 type="email"
-                placeholder="nico@supaplate.com"
+                placeholder="name@example.com"
               />
             </div>
-            <FormButton label="Send magic link" className="w-full" />
+            <FormButton label="이메일 링크 보내기" className="w-full" />
             {actionData && "error" in actionData && actionData.error ? (
               <FormErrors errors={[actionData.error]} />
             ) : null}
             {actionData && "success" in actionData && actionData.success ? (
-              <FormSuccess message="Check your email and click the magic link to continue. You can close this tab." />
+              <FormSuccess message="로그인 링크를 이메일로 보냈어요." />
             ) : null}
           </Form>
         </CardContent>

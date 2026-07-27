@@ -17,7 +17,6 @@
  * - Unauthenticated state with sign in/sign up buttons
  */
 import { CogIcon, HomeIcon, LogOutIcon, MenuIcon } from "lucide-react";
-import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
 import LangSwitcher from "./lang-switcher";
@@ -43,17 +42,17 @@ import {
 
 /**
  * UserMenu Component
- * 
+ *
  * Displays the authenticated user's profile menu with avatar and dropdown options.
  * This component is shown in the navigation bar when a user is logged in and provides
  * quick access to user-specific actions and information.
- * 
+ *
  * Features:
  * - Avatar display with image or fallback initials
  * - User name and email display
  * - Quick navigation to dashboard
  * - Logout functionality
- * 
+ *
  * @param name - The user's display name
  * @param email - The user's email address (optional)
  * @param avatarUrl - URL to the user's avatar image (optional)
@@ -77,7 +76,7 @@ function UserMenu({
           <AvatarFallback>{name.slice(0, 2)}</AvatarFallback>
         </Avatar>
       </DropdownMenuTrigger>
-      
+
       {/* Dropdown content with user info and actions */}
       <DropdownMenuContent className="w-56">
         {/* User information display */}
@@ -86,23 +85,23 @@ function UserMenu({
           <span className="truncate text-xs">{email}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        
-        {/* Dashboard link */}
+
+        {/* 대시보드 link */}
         <DropdownMenuItem asChild>
           <SheetClose asChild>
             <Link to="/dashboard" viewTransition>
               <HomeIcon className="size-4" />
-              Dashboard
+              대시보드
             </Link>
           </SheetClose>
         </DropdownMenuItem>
-        
+
         {/* Logout link */}
         <DropdownMenuItem asChild>
           <SheetClose asChild>
             <Link to="/logout" viewTransition>
               <LogOutIcon className="size-4" />
-              Log out
+              로그아웃
             </Link>
           </SheetClose>
         </DropdownMenuItem>
@@ -113,36 +112,36 @@ function UserMenu({
 
 /**
  * AuthButtons Component
- * 
- * Displays authentication buttons (Sign in and Sign up) for unauthenticated users.
+ *
+ * Displays authentication buttons (로그인 and 회원가입) for unauthenticated users.
  * This component is shown in the navigation bar when no user is logged in and provides
  * quick access to authentication screens.
- * 
+ *
  * Features:
- * - Sign in button with ghost styling (less prominent)
- * - Sign up button with default styling (more prominent)
+ * - 로그인 button with ghost styling (less prominent)
+ * - 회원가입 button with default styling (more prominent)
  * - View transitions for smooth navigation to auth screens
  * - Compatible with mobile navigation drawer (SheetClose integration)
- * 
+ *
  * @returns Fragment containing sign in and sign up buttons
  */
 function AuthButtons() {
   return (
     <>
-      {/* Sign in button (less prominent) */}
+      {/* 로그인 button (less prominent) */}
       <Button variant="ghost" asChild>
         <SheetClose asChild>
           <Link to="/login" viewTransition>
-            Sign in
+            로그인
           </Link>
         </SheetClose>
       </Button>
-      
-      {/* Sign up button (more prominent) */}
+
+      {/* 회원가입 button (more prominent) */}
       <Button variant="default" asChild>
         <SheetClose asChild>
           <Link to="/join" viewTransition>
-            Sign up
+            회원가입
           </Link>
         </SheetClose>
       </Button>
@@ -152,15 +151,15 @@ function AuthButtons() {
 
 /**
  * Actions Component
- * 
+ *
  * Displays utility actions and settings in the navigation bar, including:
  * - Debug/settings dropdown menu with links to monitoring tools
  * - Theme switcher for toggling between light and dark mode
  * - Language switcher for changing the application language
- * 
+ *
  * This component is shown in the navigation bar for all users regardless of
  * authentication state and provides access to application-wide settings and tools.
- * 
+ *
  * @returns Fragment containing settings dropdown, theme switcher, and language switcher
  */
 function Actions() {
@@ -192,10 +191,10 @@ function Actions() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      
+
       {/* Theme switcher component (light/dark mode) */}
       <ThemeSwitcher />
-      
+
       {/* Language switcher component */}
       <LangSwitcher />
     </>
@@ -204,20 +203,20 @@ function Actions() {
 
 /**
  * NavigationBar Component
- * 
+ *
  * The main navigation header for the application that adapts to different screen sizes
  * and user authentication states. This component serves as the primary navigation
  * interface and combines several sub-components to create a complete navigation experience.
- * 
+ *
  * Features:
  * - Responsive design with desktop navigation and mobile drawer
  * - Application branding with localized title
- * - Main navigation links (Blog, Contact, Payments)
+ * - Main navigation links (투자 이야기, 문의하기, 이용권)
  * - User authentication state handling (loading, authenticated, unauthenticated)
  * - User profile menu with avatar for authenticated users
- * - Sign in/sign up buttons for unauthenticated users
+ * - 로그인/sign up buttons for unauthenticated users
  * - Theme and language switching options
- * 
+ *
  * @param name - The authenticated user's name (if available)
  * @param email - The authenticated user's email (if available)
  * @param avatarUrl - The authenticated user's avatar URL (if available)
@@ -235,9 +234,6 @@ export function NavigationBar({
   avatarUrl?: string | null;
   loading: boolean;
 }) {
-  // Get translation function for internationalization
-  const { t } = useTranslation();
-  
   return (
     <nav
       className={
@@ -247,9 +243,9 @@ export function NavigationBar({
       <div className="mx-auto flex h-full w-full max-w-screen-2xl items-center justify-between py-3">
         {/* Application logo/title with link to home */}
         <Link to="/">
-          <h1 className="text-lg font-extrabold">{t("home.title")}</h1>
+          <h1 className="text-lg font-extrabold">EOKKA</h1>
         </Link>
-        
+
         {/* Desktop navigation menu (hidden on mobile) */}
         <div className="hidden h-full items-center gap-5 md:flex">
           {/* Main navigation links */}
@@ -258,30 +254,30 @@ export function NavigationBar({
             viewTransition
             className="text-muted-foreground hover:text-foreground text-sm transition-colors"
           >
-            Blog
+            투자 이야기
           </Link>
           <Link
             to="/contact"
             viewTransition
             className="text-muted-foreground hover:text-foreground text-sm transition-colors"
           >
-            Contact
+            문의하기
           </Link>
           <Link
             to="/payments/checkout"
             viewTransition
             className="text-muted-foreground hover:text-foreground text-sm transition-colors"
           >
-            Payments
+            이용권
           </Link>
-          
+
           <Separator orientation="vertical" />
-          
+
           {/* Settings, theme switcher, and language switcher */}
           <Actions />
-          
+
           <Separator orientation="vertical" />
-          
+
           {/* Conditional rendering based on authentication state */}
           {loading ? (
             // Loading state with skeleton placeholder
@@ -300,7 +296,7 @@ export function NavigationBar({
             </>
           )}
         </div>
-        
+
         {/* Mobile menu trigger (hidden on desktop) */}
         <SheetTrigger className="size-6 md:hidden">
           <MenuIcon />
@@ -308,13 +304,13 @@ export function NavigationBar({
         <SheetContent>
           <SheetHeader>
             <SheetClose asChild>
-              <Link to="/blog">Blog</Link>
+              <Link to="/blog">투자 이야기</Link>
             </SheetClose>
             <SheetClose asChild>
-              <Link to="/contact">Contact</Link>
+              <Link to="/contact">문의하기</Link>
             </SheetClose>
             <SheetClose asChild>
-              <Link to="/payments/checkout">Payments</Link>
+              <Link to="/payments/checkout">이용권</Link>
             </SheetClose>
           </SheetHeader>
           {loading ? (

@@ -1,9 +1,9 @@
 /**
  * Application Routes Configuration
- * 
+ *
  * This file defines all routes for the application using React Router's
  * file-based routing system. Routes are organized by feature and access level.
- * 
+ *
  * The structure uses layouts for shared UI elements and prefixes for route grouping.
  * This approach creates a hierarchical routing system that's both maintainable and scalable.
  */
@@ -59,10 +59,6 @@ export default [
           "features/auth/screens/forgot-password.tsx",
         ),
         route("/magic-link", "features/auth/screens/magic-link.tsx"),
-        ...prefix("/otp", [
-          route("/start", "features/auth/screens/otp/start.tsx"),
-          route("/complete", "features/auth/screens/otp/complete.tsx"),
-        ]),
         ...prefix("/social", [
           route("/start/:provider", "features/auth/screens/social/start.tsx"),
           route(

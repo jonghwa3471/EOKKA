@@ -38,7 +38,7 @@ import makeServerClient from "~/core/lib/supa-client.server";
 export const meta: Route.MetaFunction = () => {
   return [
     {
-      title: `Forgot Password | ${import.meta.env.VITE_APP_NAME}`,
+      title: `비밀번호 찾기 | ${import.meta.env.VITE_APP_NAME}`,
     },
   ];
 };
@@ -124,10 +124,10 @@ export default function ForgotPassword({ actionData }: Route.ComponentProps) {
       <Card className="w-full max-w-md">
         <CardHeader className="flex flex-col items-center">
           <CardTitle className="text-2xl font-semibold">
-            Forgot your password?
+            비밀번호를 잊으셨나요?
           </CardTitle>
           <CardDescription className="text-center text-base">
-            Enter your email and we&apos;ll send you a reset link.
+            가입한 이메일을 입력하면 비밀번호 재설정 링크를 보내드려요.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -138,14 +138,14 @@ export default function ForgotPassword({ actionData }: Route.ComponentProps) {
           >
             <div className="flex flex-col items-start space-y-2">
               <Label htmlFor="name" className="flex flex-col items-start gap-1">
-                Email
+                이메일
               </Label>
               <Input
                 id="email"
                 name="email"
                 required
                 type="email"
-                placeholder="nico@supaplate.com"
+                placeholder="name@example.com"
               />
               {actionData &&
               "fieldErrors" in actionData &&
@@ -153,12 +153,12 @@ export default function ForgotPassword({ actionData }: Route.ComponentProps) {
                 <FormErrors errors={actionData.fieldErrors.email} />
               ) : null}
             </div>
-            <FormButton label="Send reset link" className="w-full" />
+            <FormButton label="재설정 링크 보내기" className="w-full" />
             {actionData && "error" in actionData && actionData.error ? (
               <FormErrors errors={[actionData.error]} />
             ) : null}
             {actionData && "success" in actionData && actionData.success ? (
-              <FormSuccess message="Check your email for a reset link, you can close this tab." />
+              <FormSuccess message="비밀번호 재설정 링크를 이메일로 보냈어요." />
             ) : null}
           </Form>
         </CardContent>

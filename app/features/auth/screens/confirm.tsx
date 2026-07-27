@@ -28,7 +28,7 @@ import makeServerClient from "~/core/lib/supa-client.server";
 export const meta: Route.MetaFunction = () => {
   return [
     {
-      title: `Confirm | ${import.meta.env.VITE_APP_NAME}`,
+      title: `이메일 확인 | ${import.meta.env.VITE_APP_NAME}`,
     },
   ];
 };
@@ -75,7 +75,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // Return error if parameters are invalid
   if (!success) {
-    return data({ error: "Invalid confirmation code" }, { status: 400 });
+    return data({ error: "유효하지 않은 인증 코드입니다." }, { status: 400 });
   }
 
   // Create Supabase client and get response headers for auth cookies
