@@ -39,6 +39,7 @@ type Holding = {
   id: number;
   symbol: string;
   averagePrice: string;
+  currency: "KRW" | "USD";
   quantity: string;
 };
 
@@ -46,6 +47,7 @@ const emptyHolding = (id: number): Holding => ({
   id,
   symbol: "",
   averagePrice: "",
+  currency: "KRW",
   quantity: "",
 });
 
@@ -64,6 +66,12 @@ export default function Home() {
       items.map((item) =>
         item.id === id ? { ...item, [field]: value } : item,
       ),
+    );
+  };
+
+  const updateCurrency = (id: number, currency: Holding["currency"]) => {
+    setHoldings((items) =>
+      items.map((item) => (item.id === id ? { ...item, currency } : item)),
     );
   };
 
@@ -146,8 +154,8 @@ export default function Home() {
                         보유 주식을 알려주세요
                       </h2>
                       <p className="text-muted-foreground mt-1 text-sm">
-                        미국 주식 기준이며, 로그인 전에는 입력 정보가 저장되지
-                        않아요.
+                        국내 주식과 미국 주식을 모두 입력할 수 있어요. 로그인
+                        전에는 입력 정보가 저장되지 않아요.
                       </p>
                     </div>
                   </div>
@@ -205,35 +213,77 @@ export default function Home() {
                                     event.target.value.toUpperCase(),
                                   )
                                 }
-                                placeholder="예: AAPL, Apple"
+                                placeholder="예: 삼성전자, AAPL"
                                 autoComplete="off"
                                 className="bg-background h-11 pl-9"
                               />
                             </div>
                           </Field>
 
-                          <Field label="평균 매수가" id={`price-${holding.id}`}>
-                            <div className="relative">
-                              <span className="text-muted-foreground absolute top-1/2 left-3 -translate-y-1/2 text-sm">
-                                $
-                              </span>
-                              <Input
-                                id={`price-${holding.id}`}
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                inputMode="decimal"
-                                value={holding.averagePrice}
-                                onChange={(event) =>
-                                  updateHolding(
-                                    holding.id,
-                                    "averagePrice",
-                                    event.target.value,
-                                  )
-                                }
-                                placeholder="180.00"
-                                className="bg-background h-11 pl-7"
-                              />
+                          <Field
+                            label={
+                              holding.currency === "USD" ? (
+                                <>
+                                  평균 매수가{" "}
+                                  <span className="text-muted-foreground text-xs font-normal">
+                                    (달러는 소수점 없이 입력)
+                                  </span>
+                                </>
+                              ) : (
+                                "평균 매수가"
+                              )
+                            }
+                            id={`price-${holding.id}`}
+                          >
+                            <div className="flex gap-2">
+                              <div
+                                className="bg-muted flex h-11 shrink-0 rounded-md p-1"
+                                aria-label="매수 통화"
+                              >
+                                {(["KRW", "USD"] as const).map((currency) => (
+                                  <button
+                                    key={currency}
+                                    type="button"
+                                    aria-pressed={holding.currency === currency}
+                                    onClick={() =>
+                                      updateCurrency(holding.id, currency)
+                                    }
+                                    className={cn(
+                                      "min-w-9 rounded-sm px-2 text-sm font-bold transition-all",
+                                      holding.currency === currency
+                                        ? "bg-background text-foreground shadow-sm"
+                                        : "text-muted-foreground hover:text-foreground",
+                                    )}
+                                  >
+                                    {currency === "KRW" ? "₩" : "$"}
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="relative min-w-0 flex-1">
+                                <span className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm">
+                                  {holding.currency === "KRW" ? "₩" : "$"}
+                                </span>
+                                <Input
+                                  id={`price-${holding.id}`}
+                                  type="text"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  value={holding.averagePrice}
+                                  onChange={(event) =>
+                                    updateHolding(
+                                      holding.id,
+                                      "averagePrice",
+                                      event.target.value.replace(/\D/g, ""),
+                                    )
+                                  }
+                                  placeholder={
+                                    holding.currency === "KRW"
+                                      ? "예: 70000"
+                                      : "예: 180"
+                                  }
+                                  className="bg-background h-11 pl-7"
+                                />
+                              </div>
                             </div>
                           </Field>
 
@@ -405,7 +455,7 @@ function Field({
   id,
   children,
 }: {
-  label: string;
+  label: React.ReactNode;
   id: string;
   children: React.ReactNode;
 }) {

@@ -211,7 +211,7 @@ function Actions() {
  * Features:
  * - Responsive design with desktop navigation and mobile drawer
  * - Application branding with localized title
- * - Main navigation links (투자 이야기, 문의하기, 이용권)
+ * - Main navigation links (분석 피드, 문의하기, 이용권)
  * - User authentication state handling (loading, authenticated, unauthenticated)
  * - User profile menu with avatar for authenticated users
  * - 로그인/sign up buttons for unauthenticated users
@@ -254,7 +254,7 @@ export function NavigationBar({
             viewTransition
             className="text-muted-foreground hover:text-foreground text-sm transition-colors"
           >
-            투자 이야기
+            분석 피드
           </Link>
           <Link
             to="/contact"
@@ -304,7 +304,7 @@ export function NavigationBar({
         <SheetContent>
           <SheetHeader>
             <SheetClose asChild>
-              <Link to="/blog">투자 이야기</Link>
+              <Link to="/blog">분석 피드</Link>
             </SheetClose>
             <SheetClose asChild>
               <Link to="/contact">문의하기</Link>
