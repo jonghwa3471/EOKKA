@@ -146,10 +146,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!draftLoaded || !analysis) return;
-    window.localStorage.setItem(
-      ANALYSIS_STORAGE_KEY,
-      JSON.stringify(analysis),
-    );
+    window.localStorage.setItem(ANALYSIS_STORAGE_KEY, JSON.stringify(analysis));
   }, [analysis, draftLoaded]);
 
   const updateHolding = (
@@ -196,6 +193,16 @@ export default function Home() {
   const addHolding = () => {
     const nextId = Math.max(...holdings.map(({ id }) => id), 0) + 1;
     setHoldings((items) => [...items, emptyHolding(nextId)]);
+  };
+
+  const clearStoredPortfolio = () => {
+    window.localStorage.removeItem(HOLDINGS_STORAGE_KEY);
+    window.localStorage.removeItem(ANALYSIS_STORAGE_KEY);
+    setHoldings([emptyHolding(1)]);
+    setShowMonthlyInvestment(false);
+    setMonthlyInvestment("");
+    setAnalysis(null);
+    setAnalysisError("");
   };
 
   const canAnalyze = holdings.every(
@@ -559,6 +566,13 @@ export default function Home() {
                       <LockKeyholeIcon className="size-3.5" />
                       로그인하지 않아도 입력 정보는 이 브라우저에만 저장돼요
                     </p>
+                    <button
+                      type="button"
+                      onClick={clearStoredPortfolio}
+                      className="text-muted-foreground hover:text-foreground mx-auto mt-2 block text-xs underline-offset-4 hover:underline"
+                    >
+                      브라우저에 저장된 정보 삭제
+                    </button>
                   </div>
                   {analysisError && (
                     <p

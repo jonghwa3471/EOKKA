@@ -19,7 +19,7 @@ export default [
   route("/robots.txt", "core/screens/robots.ts"),
   route("/sitemap.xml", "core/screens/sitemap.ts"),
   ...prefix("/debug", [
-    // You should delete this in production.
+    // Each debug route returns 404 in production.
     route("/sentry", "debug/sentry.tsx"),
     route("/analytics", "debug/analytics.tsx"),
   ]),

@@ -19,12 +19,22 @@ import { Form } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
 
+function requireDevelopment() {
+  if (process.env.NODE_ENV === "production")
+    throw new Response("Not Found", { status: 404 });
+}
+
+export function loader() {
+  requireDevelopment();
+  return null;
+}
+
 /**
  * Meta function for setting page metadata
- * 
+ *
  * This function sets the page title for the Sentry test page,
  * using the application name from environment variables.
- * 
+ *
  * @returns Array of metadata objects for the page
  */
 export const meta: Route.MetaFunction = () => {
@@ -37,31 +47,32 @@ export const meta: Route.MetaFunction = () => {
 
 /**
  * Action function that deliberately throws an error
- * 
+ *
  * This function is called when the form is submitted. It intentionally throws
  * an error with a descriptive message to test that Sentry is properly capturing
  * and reporting errors from server-side actions.
- * 
+ *
  * The error should appear in the Sentry dashboard with the full stack trace and
  * any additional context that Sentry is configured to capture.
- * 
+ *
  * @throws Error - A test error to be captured by Sentry
  */
 export function action() {
+  requireDevelopment();
   throw new Error("This is a test error, you should see it in Sentry");
 }
 
 /**
  * Sentry Test Component
- * 
+ *
  * This component renders a simple interface for testing Sentry error monitoring integration.
  * It displays a button that triggers a test error when clicked by submitting a form that
  * calls the action function, which throws an error.
- * 
+ *
  * The component uses React Router's Form component to handle the form submission.
  * When the button is clicked, the action function is called, an error is thrown,
  * and Sentry should capture and report it.
- * 
+ *
  * @returns React component for testing Sentry error monitoring
  */
 export default function TriggerError() {
@@ -72,7 +83,7 @@ export default function TriggerError() {
         Test that the Sentry integration is working by triggering an error
         clicking the button below.
       </p>
-      
+
       {/* Form that calls the action function which throws an error */}
       <Form method="post" className="mt-5">
         <Button>Trigger Error</Button>

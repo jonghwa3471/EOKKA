@@ -47,6 +47,23 @@ const searchParamsSchema = z.object({
   next: z.string().default("/"),
 });
 
+function safeRedirectPath(next: string, requestUrl: string) {
+  try {
+    const requestOrigin = new URL(requestUrl).origin;
+    const destination = new URL(next, requestOrigin);
+    if (
+      destination.origin !== requestOrigin ||
+      !next.startsWith("/") ||
+      next.startsWith("//") ||
+      next.includes("\\")
+    )
+      return "/";
+    return `${destination.pathname}${destination.search}${destination.hash}`;
+  } catch {
+    return "/";
+  }
+}
+
 /**
  * Loader function for the confirmation page
  *
@@ -78,11 +95,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     return data({ error: "유효하지 않은 인증 코드입니다." }, { status: 400 });
   }
 
+  const nextPath = safeRedirectPath(validData.next, request.url);
+
   // Create Supabase client and get response headers for auth cookies
   const [client, headers] = makeServerClient(request);
 
   // Verify the token with Supabase
-  const { error, data: verifyOtpData } = await client.auth.verifyOtp({
+  const { error } = await client.auth.verifyOtp({
     ...validData,
   });
 
@@ -93,15 +112,16 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // Special handling for email change confirmations
   if (validData.type === "email_change") {
+    const destination = new URL(nextPath, request.url);
+    destination.searchParams.set("message", "이메일이 변경되었습니다.");
     return redirect(
-      // @ts-ignore - Supabase returns a message in the user object for email changes
-      `${validData.next}?message=${encodeURIComponent(verifyOtpData.user.msg ?? "Your email has been updated")}`,
+      `${destination.pathname}${destination.search}${destination.hash}`,
       { headers },
     );
   }
 
   // Redirect to the next URL with auth cookies in headers
-  return redirect(validData.next, { headers });
+  return redirect(nextPath, { headers });
 }
 
 /**
