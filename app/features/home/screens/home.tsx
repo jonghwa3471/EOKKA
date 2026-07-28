@@ -6,13 +6,14 @@ import {
   CheckIcon,
   ChevronDownIcon,
   CircleDollarSignIcon,
+  LoaderCircleIcon,
   LockKeyholeIcon,
   PlusIcon,
   SparklesIcon,
   Trash2Icon,
   TrendingUpIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
@@ -20,6 +21,8 @@ import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
 import i18next from "~/core/lib/i18next.server";
 import { cn } from "~/core/lib/utils";
+import type { AnalysisResult } from "~/features/stocks/analysis.types";
+import { AnalysisResultView } from "~/features/stocks/components/analysis-result";
 import { StockAutocomplete } from "~/features/stocks/components/stock-autocomplete";
 import type { StockSearchResult } from "~/features/stocks/types";
 
@@ -45,6 +48,28 @@ type Holding = {
   selectedStock: StockSearchResult | null;
 };
 
+const HOLDINGS_STORAGE_KEY = "eokka:portfolio-draft:v1";
+const ANALYSIS_STORAGE_KEY = "eokka:portfolio-analysis:v1";
+
+function isStoredAnalysis(value: unknown): value is AnalysisResult {
+  if (!value || typeof value !== "object") return false;
+  const result = value as Partial<AnalysisResult>;
+  return (
+    typeof result.asOf === "string" &&
+    typeof result.totalCost === "number" &&
+    typeof result.currentValue === "number" &&
+    typeof result.profit === "number" &&
+    typeof result.returnRate === "number" &&
+    Array.isArray(result.scenarios) &&
+    result.scenarios.length === 3 &&
+    Array.isArray(result.chart) &&
+    Array.isArray(result.summary) &&
+    result.summary.every((item) => typeof item === "string") &&
+    Boolean(result.cagr) &&
+    Boolean(result.probability)
+  );
+}
+
 const emptyHolding = (id: number): Holding => ({
   id,
   symbol: "",
@@ -59,6 +84,73 @@ export default function Home() {
   const [holdings, setHoldings] = useState<Holding[]>([emptyHolding(1)]);
   const [showMonthlyInvestment, setShowMonthlyInvestment] = useState(false);
   const [monthlyInvestment, setMonthlyInvestment] = useState("");
+  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [analysisError, setAnalysisError] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [draftLoaded, setDraftLoaded] = useState(false);
+
+  useEffect(() => {
+    try {
+      const storedDraft = window.localStorage.getItem(HOLDINGS_STORAGE_KEY);
+      if (storedDraft) {
+        const draft = JSON.parse(storedDraft) as {
+          holdings?: Holding[];
+          showMonthlyInvestment?: boolean;
+          monthlyInvestment?: string;
+        };
+
+        if (
+          Array.isArray(draft.holdings) &&
+          draft.holdings.length > 0 &&
+          draft.holdings.length <= 5 &&
+          draft.holdings.every(
+            (holding) =>
+              Number.isInteger(holding.id) &&
+              typeof holding.symbol === "string" &&
+              typeof holding.averagePrice === "string" &&
+              typeof holding.quantity === "string" &&
+              (holding.currency === "KRW" || holding.currency === "USD"),
+          )
+        ) {
+          setHoldings(draft.holdings);
+        }
+        setShowMonthlyInvestment(Boolean(draft.showMonthlyInvestment));
+        if (typeof draft.monthlyInvestment === "string")
+          setMonthlyInvestment(draft.monthlyInvestment);
+      }
+    } catch {
+      window.localStorage.removeItem(HOLDINGS_STORAGE_KEY);
+    }
+
+    try {
+      const storedAnalysis = window.localStorage.getItem(ANALYSIS_STORAGE_KEY);
+      if (storedAnalysis) {
+        const parsedAnalysis: unknown = JSON.parse(storedAnalysis);
+        if (isStoredAnalysis(parsedAnalysis)) setAnalysis(parsedAnalysis);
+        else window.localStorage.removeItem(ANALYSIS_STORAGE_KEY);
+      }
+    } catch {
+      window.localStorage.removeItem(ANALYSIS_STORAGE_KEY);
+    }
+
+    setDraftLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!draftLoaded) return;
+    window.localStorage.setItem(
+      HOLDINGS_STORAGE_KEY,
+      JSON.stringify({ holdings, showMonthlyInvestment, monthlyInvestment }),
+    );
+  }, [draftLoaded, holdings, monthlyInvestment, showMonthlyInvestment]);
+
+  useEffect(() => {
+    if (!draftLoaded || !analysis) return;
+    window.localStorage.setItem(
+      ANALYSIS_STORAGE_KEY,
+      JSON.stringify(analysis),
+    );
+  }, [analysis, draftLoaded]);
 
   const updateHolding = (
     id: number,
@@ -106,10 +198,44 @@ export default function Home() {
     setHoldings((items) => [...items, emptyHolding(nextId)]);
   };
 
-  const canAnalyze = holdings.some(
+  const canAnalyze = holdings.every(
     ({ selectedStock, averagePrice, quantity }) =>
       selectedStock && Number(averagePrice) > 0 && Number(quantity) > 0,
   );
+
+  const analyze = async () => {
+    if (!canAnalyze) return;
+    setIsAnalyzing(true);
+    setAnalysisError("");
+    try {
+      const response = await fetch("/api/stocks/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          holdings: holdings.map((holding) => ({
+            stockId: holding.selectedStock!.stockId,
+            averagePrice: Number(holding.averagePrice),
+            quantity: Number(holding.quantity),
+          })),
+          monthlyInvestment: showMonthlyInvestment
+            ? Number(monthlyInvestment) || 0
+            : 0,
+        }),
+      });
+      const body = (await response.json()) as
+        | AnalysisResult
+        | { error: string };
+      if (!response.ok || "error" in body)
+        throw new Error("error" in body ? body.error : "분석에 실패했습니다.");
+      setAnalysis(body);
+    } catch (error) {
+      setAnalysisError(
+        error instanceof Error ? error.message : "분석에 실패했습니다.",
+      );
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   return (
     <main className="-my-16 overflow-hidden md:-my-32">
@@ -180,8 +306,9 @@ export default function Home() {
                         보유 주식을 알려주세요
                       </h2>
                       <p className="text-muted-foreground mt-1 text-sm">
-                        국내 주식과 미국 주식을 모두 입력할 수 있어요. 로그인
-                        전에는 입력 정보가 저장되지 않아요.
+                        국내 주식과 미국 주식을 모두 입력할 수 있어요.
+                        로그인하면 분석 결과를 저장하고, 추가 매수 후에도 이어서
+                        분석할 수 있어요.
                       </p>
                     </div>
                   </div>
@@ -189,7 +316,10 @@ export default function Home() {
 
                 <form
                   className="space-y-7 px-5 py-6 sm:px-8 sm:py-8"
-                  onSubmit={(event) => event.preventDefault()}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void analyze();
+                  }}
                 >
                   <div className="space-y-4">
                     {holdings.map((holding, index) => (
@@ -410,17 +540,34 @@ export default function Home() {
                     <Button
                       type="submit"
                       size="lg"
-                      disabled={!canAnalyze}
+                      disabled={!canAnalyze || isAnalyzing}
                       className="h-12 w-full bg-emerald-500 text-base text-white shadow-lg shadow-emerald-500/20 hover:bg-emerald-600"
                     >
-                      내 주식 1억까지 분석하기
-                      <ArrowRightIcon />
+                      {isAnalyzing ? (
+                        <>
+                          <LoaderCircleIcon className="animate-spin" />
+                          시세와 목표 달성 시점 계산 중...
+                        </>
+                      ) : (
+                        <>
+                          내 주식 1억까지 분석하기
+                          <ArrowRightIcon />
+                        </>
+                      )}
                     </Button>
                     <p className="text-muted-foreground mt-3 flex items-center justify-center gap-1.5 text-xs">
                       <LockKeyholeIcon className="size-3.5" />
-                      입력한 정보는 분석 목적으로만 사용돼요
+                      로그인하지 않아도 입력 정보는 이 브라우저에만 저장돼요
                     </p>
                   </div>
+                  {analysisError && (
+                    <p
+                      role="alert"
+                      className="text-destructive text-center text-sm"
+                    >
+                      {analysisError}
+                    </p>
+                  )}
                 </form>
               </div>
             ) : (
@@ -446,6 +593,12 @@ export default function Home() {
               </div>
             )}
           </div>
+
+          {tab === "quick" && analysis && (
+            <div className="mx-auto max-w-4xl">
+              <AnalysisResultView result={analysis} />
+            </div>
+          )}
 
           <div className="mx-auto mt-8 grid max-w-4xl gap-3 sm:grid-cols-3">
             {[
