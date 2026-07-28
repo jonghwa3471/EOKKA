@@ -29,6 +29,7 @@ export async function searchStocks(query: string) {
     .where(
       sql`
       ${stocks.is_active} = true
+      and ${stocks.country} = 'KR'
       and (
         position(${searchTerm} in lower(${stocks.ticker})) > 0
         or position(${searchTerm} in lower(${stocks.name})) > 0

@@ -153,7 +153,7 @@ export function StockAutocomplete({
             if (results.length > 0) setIsOpen(true);
           }}
           onKeyDown={handleKeyDown}
-          placeholder="예: 삼성전자, AAPL"
+          placeholder="예: 삼성전자"
           autoComplete="off"
           className={cn(
             "bg-background h-11 pl-9",

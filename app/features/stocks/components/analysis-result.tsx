@@ -2,7 +2,6 @@ import type { AnalysisResult } from "../analysis.types";
 
 import { useState } from "react";
 
-const GOAL = 100_000_000;
 const colors = {
   conservative: "#f59e0b",
   base: "#10b981",
@@ -22,6 +21,8 @@ const compactWon = (value: number) => {
 };
 const percent = (value: number | null) =>
   value === null ? "데이터 부족" : `${value.toFixed(1)}%`;
+const goalLabel = (value: number) =>
+  `${(value / 100_000_000).toLocaleString("ko-KR")}억`;
 
 function remainingPeriodLabel(month: number | null) {
   if (month === null) return "30년 내 도달이 어려워요";
@@ -52,6 +53,7 @@ function goalDurationLabel(month: number | null) {
 }
 
 function ScenarioChart({ result }: { result: AnalysisResult }) {
+  const goal = result.goalAmount;
   const [hoverMonth, setHoverMonth] = useState<number | null>(null);
   const width = 900,
     height = 320,
@@ -67,7 +69,7 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
     finiteGoalMonths.length > 0 ? Math.max(...finiteGoalMonths) + 12 : 360,
   );
   const visibleChart = result.chart.filter((point) => point.month <= endMonth);
-  const max = GOAL * 1.2;
+  const max = goal * 1.2;
   const x = (month: number) =>
     left + (month / endMonth) * (width - left - right);
   const y = (value: number) =>
@@ -81,7 +83,7 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
       .filter((point) => goalMonth == null || point.month < goalMonth)
       .map((point) => ({ month: point.month, value: point[key] }));
     if (typeof goalMonth === "number")
-      points.push({ month: goalMonth, value: GOAL });
+      points.push({ month: goalMonth, value: goal });
     return points.sort((a, b) => a.month - b.month);
   };
   const valueAtMonth = (key: ScenarioKey, month: number) => {
@@ -115,7 +117,7 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
         viewBox={`0 0 ${width} ${height}`}
         className="h-auto w-full min-w-[700px]"
         role="img"
-        aria-label="1억 도달 미래 자산 시나리오 차트"
+        aria-label={`${goalLabel(goal)} 도달 미래 자산 시나리오 차트`}
       >
         {[0, 0.5, 1].map((ratio) => {
           const value = max * ratio;
@@ -143,20 +145,20 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
         <line
           x1={left}
           x2={width - right}
-          y1={y(GOAL)}
-          y2={y(GOAL)}
+          y1={y(goal)}
+          y2={y(goal)}
           stroke="#ef4444"
           strokeDasharray="7 5"
           opacity=".8"
         />
         <text
           x={width - right}
-          y={y(GOAL) - 8}
+          y={y(goal) - 8}
           textAnchor="end"
           fill="#ef4444"
           className="text-[12px] font-bold"
         >
-          1억 목표
+          {goalLabel(goal)} 목표
         </text>
         {(["conservative", "base", "optimistic"] as const).map((key) => (
           <polyline
@@ -177,7 +179,7 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
               <g key={`${scenario.key}-goal`}>
                 <circle
                   cx={x(scenario.goalMonth)}
-                  cy={y(GOAL)}
+                  cy={y(goal)}
                   r="6"
                   fill={colors[scenario.key]}
                   stroke="white"
@@ -185,7 +187,7 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
                 />
                 <text
                   x={x(scenario.goalMonth)}
-                  y={y(GOAL) - 12}
+                  y={y(goal) - 12}
                   textAnchor="middle"
                   fill={colors[scenario.key]}
                   className="text-[11px] font-bold"
@@ -287,7 +289,8 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
 }
 
 export function AnalysisResultView({ result }: { result: AnalysisResult }) {
-  const remainingToGoal = Math.max(0, GOAL - result.currentValue);
+  const remainingToGoal = Math.max(0, result.goalAmount - result.currentValue);
+  const targetLabel = goalLabel(result.goalAmount);
 
   return (
     <section
@@ -298,12 +301,16 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
         <div>
           <p className="text-sm font-semibold text-emerald-500">분석 완료</p>
           <h2 id="analysis-title" className="mt-1 text-2xl font-black">
-            내 주식의 1억 도달 시나리오
+            내 주식의 {targetLabel} 도달 시나리오
           </h2>
         </div>
-        <p className="text-muted-foreground text-xs">
-          과거 수정주가 기반 확률 시뮬레이션 · 투자 조언이 아닙니다
-        </p>
+        <div className="text-muted-foreground text-xs sm:text-right">
+          <p className="font-semibold">
+            {new Date(`${result.asOf}T00:00:00`).toLocaleDateString("ko-KR")} 전
+            거래일 종가 기준
+          </p>
+          <p className="mt-1">매일 오후 2시 이후 갱신 · 투자 조언이 아닙니다</p>
+        </div>
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-4">
@@ -340,7 +347,7 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
 
       <div className="mt-5 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-6 text-center sm:py-8">
         <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-          평균 시나리오 기준 1억까지
+          평균 시나리오 기준 {targetLabel}까지
         </p>
         <strong className="mt-2 block text-3xl font-black tracking-tight sm:text-4xl">
           {remainingToGoal === 0
@@ -371,7 +378,7 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
 
       <div className="mt-5 rounded-2xl border p-5">
         <div>
-          <h3 className="text-lg font-black">1억 도달 예상 기간</h3>
+          <h3 className="text-lg font-black">{targetLabel} 도달 예상 기간</h3>
           <p className="text-muted-foreground mt-1 text-xs">
             시나리오별로 목표 금액에 도달하기까지 걸리는 예상 기간이에요.
           </p>
@@ -402,8 +409,8 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
         <div>
           <h3 className="text-lg font-black">10년 뒤엔 얼마가 되어 있을까?</h3>
           <p className="text-muted-foreground mt-1 text-xs">
-            현재 보유 자산과 월 투자금을 유지했을 때의 시나리오별 예상
-            금액이에요.
+            추가 매수 없이 현재 보유 주식만 유지했을 때의 시나리오별 예상
+            금액이에요. 추가 매수 후 정보를 수정하면 다시 분석할 수 있어요.
           </p>
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -449,7 +456,7 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
           </dl>
         </div>
         <div className="rounded-2xl border p-5">
-          <h3 className="font-bold">기간 내 1억 도달 확률</h3>
+          <h3 className="font-bold">기간 내 {targetLabel} 도달 확률</h3>
           <dl className="mt-4 space-y-3">
             {[
               [10, result.probability.tenYears],
@@ -468,6 +475,19 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
         </div>
       </div>
 
+      {result.riskWarnings.length > 0 && (
+        <div className="mt-5 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5">
+          <h3 className="font-bold text-amber-700 dark:text-amber-300">
+            레버리지·인버스 상품 유의사항
+          </h3>
+          <ul className="mt-3 space-y-2 text-sm leading-6">
+            {result.riskWarnings.map((warning) => (
+              <li key={warning}>• {warning}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="mt-5 rounded-2xl bg-emerald-500/10 p-5">
         <h3 className="font-bold text-emerald-600 dark:text-emerald-400">
           분석 요약
@@ -478,12 +498,10 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
           ))}
         </ul>
       </div>
-      {result.exchangeRate && (
-        <p className="text-muted-foreground mt-4 text-xs">
-          미국 주식은 조회 시점 환율 1달러 ={" "}
-          {result.exchangeRate.toLocaleString("ko-KR")}원으로 환산했습니다.
-        </p>
-      )}
+      <p className="text-muted-foreground mt-4 text-xs">
+        금융위원회 공공데이터의 종가를 사용합니다. 수정주가가 아니므로
+        액면분할·병합 등 기업행사가 과거 수익률에 영향을 줄 수 있습니다.
+      </p>
     </section>
   );
 }

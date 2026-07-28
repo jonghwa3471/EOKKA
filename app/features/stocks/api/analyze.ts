@@ -13,6 +13,7 @@ import { type AnalysisInput, analyzePortfolio } from "../analysis.server";
 const MAX_REQUEST_SIZE = 10_000;
 const inputSchema = z
   .object({
+    goalAmount: z.number().int().min(100_000_000).max(100_000_000_000),
     holdings: z
       .array(
         z
@@ -25,7 +26,6 @@ const inputSchema = z
       )
       .min(1)
       .max(5),
-    monthlyInvestment: z.number().finite().min(0).max(1_000_000_000),
   })
   .strict();
 

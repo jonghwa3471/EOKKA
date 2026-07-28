@@ -92,6 +92,53 @@ export type Database = {
         }
         Relationships: []
       }
+      stock_prices: {
+        Row: {
+          close: number
+          created_at: string
+          high: number | null
+          low: number | null
+          open: number | null
+          stock_id: number
+          stock_price_id: number
+          trading_date: string
+          updated_at: string
+          volume: number | null
+        }
+        Insert: {
+          close: number
+          created_at?: string
+          high?: number | null
+          low?: number | null
+          open?: number | null
+          stock_id: number
+          stock_price_id?: never
+          trading_date: string
+          updated_at?: string
+          volume?: number | null
+        }
+        Update: {
+          close?: number
+          created_at?: string
+          high?: number | null
+          low?: number | null
+          open?: number | null
+          stock_id?: number
+          stock_price_id?: never
+          trading_date?: string
+          updated_at?: string
+          volume?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_prices_stock_id_stocks_stock_id_fk"
+            columns: ["stock_id"]
+            isOneToOne: false
+            referencedRelation: "stocks"
+            referencedColumns: ["stock_id"]
+          },
+        ]
+      }
       stocks: {
         Row: {
           country: string

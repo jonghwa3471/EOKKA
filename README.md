@@ -1,12 +1,26 @@
-# Supaplate
+# EOKKA
 
 ## Overview
 
-Supaplate is a production-ready, full-stack web application template built with React Router, Supabase, and Drizzle ORM. It provides a solid foundation for building modern web applications with authentication, payments, internationalization, and more.
+국내 보유 주식의 현재 수익률과 1억 도달 시나리오를 분석하는 서비스입니다.
 
 ## Getting Started
 
-For detailed documentation and setup instructions, visit [supaplate.com/docs](https://supaplate.com/docs).
+금융위원회 주식 시세 공공데이터 API의 일반 인증키를 발급받은 뒤 `.env`에 다음 값을 추가합니다. 인코딩 또는 디코딩 인증키를 모두 사용할 수 있습니다.
+
+일반 주식과 ETF·ETN을 모두 사용하려면 공공데이터포털에서 `금융위원회_주식시세정보`와 `금융위원회_증권상품시세정보` 두 API를 각각 활용신청해야 합니다.
+
+```dotenv
+FSC_STOCK_API_KEY=발급받은_일반_인증키
+```
+
+종목 목록은 다음 명령으로 최신 거래일 기준 동기화합니다.
+
+```bash
+npm run stocks:sync
+```
+
+시세 이력은 사용자가 분석할 때 최근 10년 데이터를 처음 한 번 가져와 Supabase의 `stock_prices` 테이블에 캐시합니다. 이후에는 한국시간 오후 2시를 기준으로 하루 한 번 최근 시세만 확인하고, 새 거래일 데이터가 있으면 캐시에 추가합니다. 주말·공휴일과 같은 날의 반복 분석에는 기존 캐시를 재사용합니다. 금융위원회 데이터는 수정주가가 아니므로 액면분할·병합 같은 기업행사가 과거 수익률에 영향을 줄 수 있습니다.
 
 ## License
 

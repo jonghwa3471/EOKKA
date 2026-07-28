@@ -1,225 +1,169 @@
-import AdmZip from "adm-zip";
 import "dotenv/config";
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import path from "node:path";
 import postgres from "postgres";
 
-type Country = "KR" | "US";
-type Currency = "KRW" | "USD";
-type Exchange = "KOSPI" | "KOSDAQ" | "NASDAQ" | "NYSE" | "AMEX";
+type Exchange = "KOSPI" | "KOSDAQ";
 type SecurityType = "STOCK" | "ETF" | "ETN";
+
+interface FscStockItem {
+  basDt?: string;
+  srtnCd?: string;
+  itmsNm?: string;
+  mrktCtg?: string;
+}
+
+interface FscResponse {
+  response?: {
+    header?: { resultCode?: string; resultMsg?: string };
+    body?: {
+      totalCount?: number;
+      items?: { item?: FscStockItem | FscStockItem[] };
+    };
+  };
+}
 
 interface StockRecord {
   name: string;
-  name_en: string | null;
+  name_en: null;
   ticker: string;
-  country: Country;
+  country: "KR";
   exchange: Exchange;
-  currency: Currency;
+  currency: "KRW";
   security_type: SecurityType;
-  is_active: boolean;
+  is_active: true;
 }
 
-interface DomesticSource {
-  kind: "domestic";
-  exchange: Extract<Exchange, "KOSPI" | "KOSDAQ">;
-  url: string;
-  archiveName: string;
-  dataFileName: string;
-  trailingFieldLength: number;
-}
-
-interface OverseasSource {
-  kind: "overseas";
-  exchange: Extract<Exchange, "NASDAQ" | "NYSE" | "AMEX">;
-  url: string;
-  archiveName: string;
-  dataFileName: string;
-}
-
-type MasterSource = DomesticSource | OverseasSource;
-
-const MASTER_DIRECTORY = path.resolve("data/stock-master");
+const SOURCES = [
+  {
+    securityType: "STOCK",
+    url: "https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo",
+  },
+  {
+    securityType: "ETF",
+    url: "https://apis.data.go.kr/1160100/service/GetSecuritiesProductInfoService/getETFPriceInfo",
+  },
+  {
+    securityType: "ETN",
+    url: "https://apis.data.go.kr/1160100/service/GetSecuritiesProductInfoService/getETNPriceInfo",
+  },
+] as const;
+type Source = (typeof SOURCES)[number];
+const PAGE_SIZE = 1_000;
 const BATCH_SIZE = 500;
-const KEEP_MASTER_FILES = process.env.KEEP_STOCK_MASTER_FILES === "1";
 const DRY_RUN = process.argv.includes("--dry-run");
 
-const SOURCES: MasterSource[] = [
-  {
-    kind: "domestic",
-    exchange: "KOSPI",
-    url: "https://new.real.download.dws.co.kr/common/master/kospi_code.mst.zip",
-    archiveName: "kospi_code.mst.zip",
-    dataFileName: "kospi_code.mst",
-    // KIS documents 228 characters including the trailing newline.
-    trailingFieldLength: 227,
-  },
-  {
-    kind: "domestic",
-    exchange: "KOSDAQ",
-    url: "https://new.real.download.dws.co.kr/common/master/kosdaq_code.mst.zip",
-    archiveName: "kosdaq_code.mst.zip",
-    dataFileName: "kosdaq_code.mst",
-    // KIS documents 222 characters including the trailing newline.
-    trailingFieldLength: 221,
-  },
-  {
-    kind: "overseas",
-    exchange: "NASDAQ",
-    url: "https://new.real.download.dws.co.kr/common/master/nasmst.cod.zip",
-    archiveName: "nasmst.cod.zip",
-    dataFileName: "nasmst.cod",
-  },
-  {
-    kind: "overseas",
-    exchange: "NYSE",
-    url: "https://new.real.download.dws.co.kr/common/master/nysmst.cod.zip",
-    archiveName: "nysmst.cod.zip",
-    dataFileName: "nysmst.cod",
-  },
-  {
-    kind: "overseas",
-    exchange: "AMEX",
-    url: "https://new.real.download.dws.co.kr/common/master/amsmst.cod.zip",
-    archiveName: "amsmst.cod.zip",
-    dataFileName: "amsmst.cod",
-  },
-];
-
-const decoder = new TextDecoder("euc-kr");
-
-function normalize(value: string) {
-  return value.replaceAll("\u0000", "").trim();
-}
-
-function parseDomestic(data: Buffer, source: DomesticSource): StockRecord[] {
-  const rows = decoder.decode(data).split(/\r?\n/);
-  const records: StockRecord[] = [];
-
-  for (const row of rows) {
-    if (row.length <= source.trailingFieldLength + 21) continue;
-
-    const header = row.slice(0, -source.trailingFieldLength);
-    const detail = row.slice(-source.trailingFieldLength);
-    const ticker = normalize(header.slice(0, 9));
-    const name = normalize(header.slice(21));
-    const groupCode = detail.slice(0, 2);
-
-    if (!/^[0-9A-Z]{6}$/.test(ticker) || !name) continue;
-
-    const securityType =
-      groupCode === "ST"
-        ? "STOCK"
-        : groupCode === "EF"
-          ? "ETF"
-          : groupCode === "EN"
-            ? "ETN"
-            : null;
-
-    if (!securityType) continue;
-
-    records.push({
-      name,
-      name_en: null,
-      ticker,
-      country: "KR",
-      exchange: source.exchange,
-      currency: "KRW",
-      security_type: securityType,
-      is_active: true,
-    });
+function apiKey() {
+  const value = process.env.FSC_STOCK_API_KEY;
+  if (!value) throw new Error(".env에 FSC_STOCK_API_KEY가 필요합니다.");
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
   }
-
-  return records;
 }
 
-function parseOverseas(data: Buffer, source: OverseasSource): StockRecord[] {
-  const rows = decoder.decode(data).split(/\r?\n/);
-  const records: StockRecord[] = [];
-
-  for (const row of rows) {
-    if (!row.trim()) continue;
-
-    const columns = row.split("\t");
-    const ticker = normalize(columns[4] ?? "").toUpperCase();
-    const nameKo = normalize(columns[6] ?? "");
-    const nameEn = normalize(columns[7] ?? "");
-    const sourceSecurityType = normalize(columns[8] ?? "");
-
-    if (!ticker || (!nameKo && !nameEn)) continue;
-    if (sourceSecurityType !== "2" && sourceSecurityType !== "3") continue;
-
-    records.push({
-      name: nameKo || nameEn,
-      name_en: nameEn || null,
-      ticker,
-      country: "US",
-      exchange: source.exchange,
-      currency: "USD",
-      security_type: sourceSecurityType === "3" ? "ETF" : "STOCK",
-      is_active: true,
-    });
-  }
-
-  return records;
+function yyyymmdd(date: Date) {
+  return date.toISOString().slice(0, 10).replaceAll("-", "");
 }
 
-async function downloadAndParse(source: MasterSource) {
-  console.log(`[${source.exchange}] 마스터 파일 다운로드 중...`);
+async function fetchPage(source: Source, baseDate: string, pageNo: number) {
+  const url = new URL(source.url);
+  url.search = new URLSearchParams({
+    serviceKey: apiKey(),
+    resultType: "json",
+    numOfRows: String(PAGE_SIZE),
+    pageNo: String(pageNo),
+    basDt: baseDate,
+  }).toString();
 
-  const response = await fetch(source.url);
-  if (!response.ok) {
+  const response = await fetch(url, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (response.status === 401)
     throw new Error(
-      `${source.exchange} 다운로드 실패: ${response.status} ${response.statusText}`,
+      "공공데이터 인증키가 유효하지 않습니다. 주식시세정보 활용신청 승인 상태와 일반 인증키를 확인해 주세요.",
     );
-  }
-
-  const archive = Buffer.from(await response.arrayBuffer());
-  await writeFile(path.join(MASTER_DIRECTORY, source.archiveName), archive);
-
-  const zip = new AdmZip(archive);
-  const entry = zip
-    .getEntries()
-    .find(
-      (item) =>
-        path.basename(item.entryName).toLowerCase() ===
-        source.dataFileName.toLowerCase(),
-    );
-
-  if (!entry) {
+  if (response.status === 403)
     throw new Error(
-      `${source.exchange} 압축 파일에서 ${source.dataFileName}을 찾지 못했습니다.`,
+      source.securityType === "STOCK"
+        ? "금융위원회 주식시세정보 API 활용신청 상태를 확인해 주세요."
+        : "금융위원회 증권상품시세정보 API 활용신청이 필요합니다.",
     );
-  }
+  if (!response.ok) throw new Error(`종목 목록 조회 실패 (${response.status})`);
 
-  const data = entry.getData();
-  await writeFile(path.join(MASTER_DIRECTORY, source.dataFileName), data);
+  const body = (await response.json()) as FscResponse;
+  const header = body.response?.header;
+  if (header?.resultCode && header.resultCode !== "00")
+    throw new Error(header.resultMsg || "종목 목록 조회에 실패했습니다.");
 
-  const records =
-    source.kind === "domestic"
-      ? parseDomestic(data, source)
-      : parseOverseas(data, source);
-
-  console.log(`[${source.exchange}] ${records.length.toLocaleString()}개 확인`);
-  return records;
+  const rawItems = body.response?.body?.items?.item;
+  const items = rawItems
+    ? Array.isArray(rawItems)
+      ? rawItems
+      : [rawItems]
+    : [];
+  return { items, totalCount: body.response?.body?.totalCount ?? items.length };
 }
 
-function deduplicate(records: StockRecord[]) {
-  const uniqueRecords = new Map<string, StockRecord>();
-
-  for (const record of records) {
-    uniqueRecords.set(`${record.exchange}:${record.ticker}`, record);
+async function latestTradingDay(source: Source) {
+  for (let offset = 0; offset < 14; offset++) {
+    const date = new Date();
+    date.setUTCDate(date.getUTCDate() - offset);
+    const baseDate = yyyymmdd(date);
+    const page = await fetchPage(source, baseDate, 1);
+    if (page.totalCount > 0) return { baseDate, firstPage: page };
   }
+  throw new Error("최근 거래일의 종목 목록을 찾지 못했습니다.");
+}
 
-  return [...uniqueRecords.values()];
+function toRecord(item: FscStockItem, source: Source): StockRecord | null {
+  const ticker = item.srtnCd?.trim();
+  const name = item.itmsNm?.trim();
+  const exchange =
+    source.securityType === "STOCK" ? item.mrktCtg?.trim() : "KOSPI";
+  if (!ticker || !name || !/^\d{6}$/.test(ticker)) return null;
+  if (exchange !== "KOSPI" && exchange !== "KOSDAQ") return null;
+  return {
+    name,
+    name_en: null,
+    ticker,
+    country: "KR",
+    exchange,
+    currency: "KRW",
+    security_type: source.securityType,
+    is_active: true,
+  };
+}
+
+async function fetchStocks() {
+  const unique = new Map<string, StockRecord>();
+  for (const source of SOURCES) {
+    const { baseDate, firstPage } = await latestTradingDay(source);
+    console.log(`${baseDate} 기준 ${source.securityType} 종목을 불러옵니다.`);
+    const items = [...firstPage.items];
+    const pageCount = Math.ceil(firstPage.totalCount / PAGE_SIZE);
+    for (let pageNo = 2; pageNo <= pageCount; pageNo++) {
+      const page = await fetchPage(source, baseDate, pageNo);
+      items.push(...page.items);
+    }
+
+    let sourceCount = 0;
+    for (const item of items) {
+      const record = toRecord(item, source);
+      if (!record) continue;
+      unique.set(`${record.exchange}:${record.ticker}`, record);
+      sourceCount++;
+    }
+    console.log(
+      `${source.securityType} ${sourceCount.toLocaleString()}개 확인`,
+    );
+  }
+  return [...unique.values()];
 }
 
 async function saveToDatabase(records: StockRecord[]) {
   const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    throw new Error(".env에 DATABASE_URL이 필요합니다.");
-  }
-
+  if (!databaseUrl) throw new Error(".env에 DATABASE_URL이 필요합니다.");
   const sql = postgres(databaseUrl, { max: 1, prepare: false });
 
   try {
@@ -232,7 +176,6 @@ async function saveToDatabase(records: StockRecord[]) {
 
       for (let offset = 0; offset < records.length; offset += BATCH_SIZE) {
         const batch = records.slice(offset, offset + BATCH_SIZE);
-
         await transaction`
           insert into stocks ${transaction(
             batch,
@@ -254,7 +197,6 @@ async function saveToDatabase(records: StockRecord[]) {
             is_active = true,
             updated_at = now()
         `;
-
         console.log(
           `Supabase 저장: ${Math.min(offset + batch.length, records.length).toLocaleString()} / ${records.length.toLocaleString()}`,
         );
@@ -266,29 +208,18 @@ async function saveToDatabase(records: StockRecord[]) {
 }
 
 async function main() {
-  await mkdir(MASTER_DIRECTORY, { recursive: true });
-
-  try {
-    const records = deduplicate(
-      (await Promise.all(SOURCES.map(downloadAndParse))).flat(),
-    );
-
-    console.log(
-      `전체 ${records.length.toLocaleString()}개 종목을 준비했습니다.`,
-    );
-
-    if (DRY_RUN) {
-      console.log("--dry-run: 데이터베이스에는 저장하지 않았습니다.");
-      return;
-    }
-
-    await saveToDatabase(records);
-    console.log("KIS 종목 동기화가 완료되었습니다.");
-  } finally {
-    if (!KEEP_MASTER_FILES) {
-      await rm(MASTER_DIRECTORY, { recursive: true, force: true });
-    }
+  const records = await fetchStocks();
+  console.log(
+    `국내 주식·ETF·ETN ${records.length.toLocaleString()}개 종목 확인`,
+  );
+  if (records.length < 1_000)
+    throw new Error("종목 수가 비정상적으로 적어 동기화를 중단했습니다.");
+  if (DRY_RUN) {
+    console.log("--dry-run: 데이터베이스에는 저장하지 않았습니다.");
+    return;
   }
+  await saveToDatabase(records);
+  console.log("금융위원회 공공데이터 종목 동기화가 완료되었습니다.");
 }
 
 main().catch((error: unknown) => {

@@ -3,8 +3,8 @@ export interface StockSearchResult {
   name: string;
   nameEn: string | null;
   ticker: string;
-  country: "KR" | "US";
-  exchange: "KOSPI" | "KOSDAQ" | "NASDAQ" | "NYSE" | "AMEX";
-  currency: "KRW" | "USD";
+  country: "KR";
+  exchange: "KOSPI" | "KOSDAQ";
+  currency: "KRW";
   securityType: "STOCK" | "ETF" | "ETN";
 }

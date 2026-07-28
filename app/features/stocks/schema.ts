@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
+  date,
   index,
   pgPolicy,
   pgTable,
@@ -13,9 +14,9 @@ import { anonRole, authenticatedRole } from "drizzle-orm/supabase";
 import { timestamps } from "~/core/db/helpers.server";
 
 /**
- * Searchable reference data for domestic and US-listed securities.
+ * Searchable reference data for Korean-listed securities.
  *
- * The records are refreshed from Korea Investment & Securities master files.
+ * The records are refreshed from the Financial Services Commission public API.
  * Anyone may search this public reference data, while writes are performed only
  * by the server-side synchronization script through DATABASE_URL.
  */
@@ -51,3 +52,33 @@ export const stocks = pgTable(
     }),
   ],
 );
+
+/**
+ * Daily closing prices cached from the Financial Services Commission public API.
+ * This table is server-only: no public RLS policy is intentionally defined.
+ */
+export const stockPrices = pgTable(
+  "stock_prices",
+  {
+    stock_price_id: bigint({ mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    stock_id: bigint({ mode: "number" })
+      .notNull()
+      .references(() => stocks.stock_id, { onDelete: "cascade" }),
+    trading_date: date().notNull(),
+    open: bigint({ mode: "number" }),
+    high: bigint({ mode: "number" }),
+    low: bigint({ mode: "number" }),
+    close: bigint({ mode: "number" }).notNull(),
+    volume: bigint({ mode: "number" }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("stock_prices_stock_date_unique").on(
+      table.stock_id,
+      table.trading_date,
+    ),
+    index("stock_prices_stock_date_idx").on(table.stock_id, table.trading_date),
+  ],
+).enableRLS();

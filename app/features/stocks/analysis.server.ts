@@ -4,16 +4,30 @@ import { inArray } from "drizzle-orm";
 
 import db from "~/core/db/drizzle-client.server";
 
-import { getDomesticMarketData, getUsMarketData } from "./kis-client.server";
+import { getDomesticMarketData } from "./fsc-client.server";
 import { stocks } from "./schema";
 
-const GOAL = 100_000_000;
 const PATHS = 5_000;
 const MONTHS = 360;
 
 export interface AnalysisInput {
+  goalAmount: number;
   holdings: Array<{ stockId: number; averagePrice: number; quantity: number }>;
-  monthlyInvestment: number;
+}
+
+function goalLabel(amount: number) {
+  return `${(amount / 100_000_000).toLocaleString("ko-KR")}억`;
+}
+
+function periodLabel(months: number) {
+  const years = Math.floor(months / 12);
+  const remainingMonths = months % 12;
+  return [
+    years > 0 ? `${years}년` : "",
+    remainingMonths > 0 ? `${remainingMonths}개월` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function quantile(values: Float64Array, percentile: number) {
@@ -39,17 +53,21 @@ function seededRandom(seed: number) {
 export async function analyzePortfolio(
   input: AnalysisInput,
 ): Promise<AnalysisResult> {
+  if (
+    !Number.isInteger(input.goalAmount) ||
+    input.goalAmount < 100_000_000 ||
+    input.goalAmount > 100_000_000_000
+  )
+    throw new Error("목표 금액은 1억 이상 1,000억 이하로 입력해 주세요.");
   if (!input.holdings.length || input.holdings.length > 5)
     throw new Error("분석할 종목은 1개 이상 5개 이하로 입력해 주세요.");
   if (
     input.holdings.some(
       ({ stockId, averagePrice, quantity }) =>
         !Number.isInteger(stockId) || averagePrice <= 0 || quantity <= 0,
-    ) ||
-    !Number.isFinite(input.monthlyInvestment) ||
-    input.monthlyInvestment < 0
+    )
   )
-    throw new Error("매수가, 보유 수량과 월 투자금을 올바르게 입력해 주세요.");
+    throw new Error("매수가와 보유 수량을 올바르게 입력해 주세요.");
 
   const ids = input.holdings.map((holding) => holding.stockId);
   const stockRows = await db
@@ -58,29 +76,34 @@ export async function analyzePortfolio(
     .where(inArray(stocks.stock_id, ids));
   if (stockRows.length !== new Set(ids).size)
     throw new Error("유효하지 않은 종목이 포함되어 있습니다.");
+  if (stockRows.some((stock) => stock.country !== "KR"))
+    throw new Error("현재는 국내 주식만 분석할 수 있습니다.");
+  if (
+    stockRows.some(
+      (stock) => !["STOCK", "ETF", "ETN"].includes(stock.security_type),
+    )
+  )
+    throw new Error("지원하지 않는 상품 유형이 포함되어 있습니다.");
 
   const marketData = [];
   for (const holding of input.holdings) {
     const stock = stockRows.find((row) => row.stock_id === holding.stockId)!;
-    const data =
-      stock.country === "KR"
-        ? await getDomesticMarketData(stock.ticker)
-        : await getUsMarketData(
-            stock.ticker,
-            stock.exchange as "NASDAQ" | "NYSE" | "AMEX",
-          );
+    const data = await getDomesticMarketData(
+      stock.stock_id,
+      stock.ticker,
+      stock.security_type as "STOCK" | "ETF" | "ETN",
+    );
     marketData.push({ holding, stock, data });
   }
 
   const holdingResults = marketData.map(({ holding, stock, data }) => {
-    const rate = data.exchangeRate;
-    const cost = holding.averagePrice * holding.quantity * rate;
-    const value = data.currentPrice * holding.quantity * rate;
+    const cost = holding.averagePrice * holding.quantity;
+    const value = data.currentPrice * holding.quantity;
     return {
       name: stock.name,
       ticker: stock.ticker,
       currentPrice: data.currentPrice,
-      currency: stock.currency as "KRW" | "USD",
+      currency: "KRW" as const,
       valueKrw: value,
       returnRate: ((value - cost) / cost) * 100,
       cost,
@@ -130,13 +153,14 @@ export async function analyzePortfolio(
     let blockStart = 0;
     for (let month = 0; month <= MONTHS; month++) {
       valuesByMonth[month][path] = value;
-      if (value >= GOAL && goalMonths[path] === -1) goalMonths[path] = month;
+      if (value >= input.goalAmount && goalMonths[path] === -1)
+        goalMonths[path] = month;
       if (month === MONTHS) break;
       if (month % 6 === 0)
         blockStart = Math.floor(random() * portfolioReturns.length);
       const rate =
         portfolioReturns[(blockStart + (month % 6)) % portfolioReturns.length];
-      value = Math.max(0, value * (1 + rate) + input.monthlyInvestment);
+      value = Math.max(0, value * (1 + rate));
     }
   }
 
@@ -158,7 +182,7 @@ export async function analyzePortfolio(
   const scenarios = scenarioConfig.map(([key, label, percentile]) => {
     let goalMonth: number | null = null;
     for (let month = 0; month <= MONTHS; month++) {
-      if (quantile(valuesByMonth[month], percentile) >= GOAL) {
+      if (quantile(valuesByMonth[month], percentile) >= input.goalAmount) {
         goalMonth = month;
         break;
       }
@@ -180,16 +204,23 @@ export async function analyzePortfolio(
   const profit = currentValue - totalCost;
   const returnRate = (profit / totalCost) * 100;
   const baseGoal = scenarios[1].goalMonth;
+  const leveragedProducts = stockRows.filter(
+    (stock) =>
+      stock.security_type === "ETF" &&
+      /(레버리지|인버스|2X|곱버스)/i.test(stock.name),
+  );
 
   return {
-    asOf: new Date().toISOString(),
+    asOf: marketData
+      .map(({ data }) => data.asOf)
+      .sort()
+      .at(0)!,
+    goalAmount: input.goalAmount,
     totalCost,
     currentValue,
     profit,
     returnRate,
-    exchangeRate:
-      marketData.find(({ stock }) => stock.country === "US")?.data
-        .exchangeRate ?? null,
+    priceBasis: "raw_close",
     holdings: holdingResults.map(({ cost: _cost, ...item }) => item),
     cagr: {
       oneYear: cagr(portfolioReturns, 12),
@@ -204,12 +235,19 @@ export async function analyzePortfolio(
       twentyYears: probabilityAt(240),
       thirtyYears: probabilityAt(360),
     },
+    riskWarnings:
+      leveragedProducts.length > 0
+        ? [
+            `${leveragedProducts.map((stock) => stock.name).join(", ")}: 레버리지·인버스 상품은 일일 수익률을 추종하므로 장기 성과가 기초지수 수익률의 단순 배수와 다를 수 있고 변동성 손실이 커질 수 있습니다.`,
+          ]
+        : [],
     summary: [
       `현재 평가금액은 약 ${Math.round(currentValue).toLocaleString("ko-KR")}원이며, 매수 원금 대비 수익률은 ${returnRate.toFixed(1)}%입니다.`,
       baseGoal === null
-        ? "평균 시나리오에서는 30년 안에 1억 도달이 확인되지 않습니다."
-        : `평균 시나리오에서는 약 ${Math.floor(baseGoal / 12)}년 ${baseGoal % 12}개월 후 1억 도달이 예상됩니다.`,
-      `20년 안에 1억을 넘은 시뮬레이션 비율은 ${probabilityAt(240).toFixed(1)}%입니다.`,
+        ? `평균 시나리오에서는 30년 안에 ${goalLabel(input.goalAmount)} 도달이 확인되지 않습니다.`
+        : `평균 시나리오에서는 약 ${periodLabel(baseGoal)} 후 ${goalLabel(input.goalAmount)} 도달이 예상됩니다.`,
+      `20년 안에 ${goalLabel(input.goalAmount)}을 넘은 시뮬레이션 비율은 ${probabilityAt(240).toFixed(1)}%입니다.`,
+      "금융위원회 공공데이터의 종가를 사용하므로 액면분할·병합 같은 기업행사가 과거 수익률에 영향을 줄 수 있습니다.",
     ],
   };
 }

@@ -1,15 +1,16 @@
 export interface AnalysisResult {
   asOf: string;
+  goalAmount: number;
   totalCost: number;
   currentValue: number;
   profit: number;
   returnRate: number;
-  exchangeRate: number | null;
+  priceBasis: "raw_close";
   holdings: Array<{
     name: string;
     ticker: string;
     currentPrice: number;
-    currency: "KRW" | "USD";
+    currency: "KRW";
     valueKrw: number;
     returnRate: number;
   }>;
@@ -33,5 +34,6 @@ export interface AnalysisResult {
     optimistic: number;
   }>;
   probability: { tenYears: number; twentyYears: number; thirtyYears: number };
+  riskWarnings: string[];
   summary: string[];
 }
