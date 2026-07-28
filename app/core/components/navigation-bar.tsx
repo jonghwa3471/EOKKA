@@ -237,7 +237,7 @@ export function NavigationBar({
   return (
     <nav
       className={
-        "mx-auto flex h-16 w-full items-center justify-between border-b px-5 shadow-xs backdrop-blur-lg transition-opacity md:px-10"
+        "bg-background/80 fixed inset-x-0 top-0 z-50 mx-auto flex h-16 w-full items-center justify-between border-b px-5 shadow-xs backdrop-blur-lg transition-opacity md:px-10"
       }
     >
       <div className="mx-auto flex h-full w-full max-w-screen-2xl items-center justify-between py-3">

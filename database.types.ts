@@ -92,6 +92,48 @@ export type Database = {
         }
         Relationships: []
       }
+      stocks: {
+        Row: {
+          country: string
+          created_at: string
+          currency: string
+          exchange: string
+          is_active: boolean
+          name: string
+          name_en: string | null
+          security_type: string
+          stock_id: number
+          ticker: string
+          updated_at: string
+        }
+        Insert: {
+          country: string
+          created_at?: string
+          currency: string
+          exchange: string
+          is_active?: boolean
+          name: string
+          name_en?: string | null
+          security_type: string
+          stock_id?: never
+          ticker: string
+          updated_at?: string
+        }
+        Update: {
+          country?: string
+          created_at?: string
+          currency?: string
+          exchange?: string
+          is_active?: boolean
+          name?: string
+          name_en?: string | null
+          security_type?: string
+          stock_id?: never
+          ticker?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

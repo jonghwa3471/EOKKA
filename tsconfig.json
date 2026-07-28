@@ -13,10 +13,12 @@
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "rootDirs": [".", "./.react-router/types"],
-    "baseUrl": ".",
     "paths": {
       "~/*": ["./app/*"],
-      "@rr/*": ["./.react-router/types/*"]
+      "@rr/*": ["./.react-router/types/*"],
+      "database.types": ["./database.types.ts"],
+      "transactional-emails/*": ["./transactional-emails/*"],
+      "e2e/*": ["./e2e/*"]
     },
     "esModuleInterop": true,
     "verbatimModuleSyntax": true,
