@@ -8,7 +8,6 @@ import {
   CircleDollarSignIcon,
   LockKeyholeIcon,
   PlusIcon,
-  SearchIcon,
   SparklesIcon,
   Trash2Icon,
   TrendingUpIcon,
@@ -21,6 +20,8 @@ import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
 import i18next from "~/core/lib/i18next.server";
 import { cn } from "~/core/lib/utils";
+import { StockAutocomplete } from "~/features/stocks/components/stock-autocomplete";
+import type { StockSearchResult } from "~/features/stocks/types";
 
 export const meta: Route.MetaFunction = ({ data }) => [
   { title: data?.title ?? "억까 — 내 주식, 1억까지" },
@@ -41,6 +42,7 @@ type Holding = {
   averagePrice: string;
   currency: "KRW" | "USD";
   quantity: string;
+  selectedStock: StockSearchResult | null;
 };
 
 const emptyHolding = (id: number): Holding => ({
@@ -49,6 +51,7 @@ const emptyHolding = (id: number): Holding => ({
   averagePrice: "",
   currency: "KRW",
   quantity: "",
+  selectedStock: null,
 });
 
 export default function Home() {
@@ -75,14 +78,37 @@ export default function Home() {
     );
   };
 
+  const updateHoldingSymbol = (id: number, symbol: string) => {
+    setHoldings((items) =>
+      items.map((item) =>
+        item.id === id ? { ...item, symbol, selectedStock: null } : item,
+      ),
+    );
+  };
+
+  const selectStock = (id: number, stock: StockSearchResult) => {
+    setHoldings((items) =>
+      items.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              symbol: stock.name,
+              selectedStock: stock,
+              currency: stock.currency,
+            }
+          : item,
+      ),
+    );
+  };
+
   const addHolding = () => {
     const nextId = Math.max(...holdings.map(({ id }) => id), 0) + 1;
     setHoldings((items) => [...items, emptyHolding(nextId)]);
   };
 
   const canAnalyze = holdings.some(
-    ({ symbol, averagePrice, quantity }) =>
-      symbol.trim() && Number(averagePrice) > 0 && Number(quantity) > 0,
+    ({ selectedStock, averagePrice, quantity }) =>
+      selectedStock && Number(averagePrice) > 0 && Number(quantity) > 0,
   );
 
   return (
@@ -201,23 +227,17 @@ export default function Home() {
                             label="종목명 또는 티커"
                             id={`symbol-${holding.id}`}
                           >
-                            <div className="relative">
-                              <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-                              <Input
-                                id={`symbol-${holding.id}`}
-                                value={holding.symbol}
-                                onChange={(event) =>
-                                  updateHolding(
-                                    holding.id,
-                                    "symbol",
-                                    event.target.value.toUpperCase(),
-                                  )
-                                }
-                                placeholder="예: 삼성전자, AAPL"
-                                autoComplete="off"
-                                className="bg-background h-11 pl-9"
-                              />
-                            </div>
+                            <StockAutocomplete
+                              id={`symbol-${holding.id}`}
+                              value={holding.symbol}
+                              selectedStock={holding.selectedStock}
+                              onValueChange={(value) =>
+                                updateHoldingSymbol(holding.id, value)
+                              }
+                              onSelect={(stock) =>
+                                selectStock(holding.id, stock)
+                              }
+                            />
                           </Field>
 
                           <Field

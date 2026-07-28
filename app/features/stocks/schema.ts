@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   index,
   pgPolicy,
@@ -9,7 +10,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { anonRole, authenticatedRole } from "drizzle-orm/supabase";
 
-import { makeIdentityColumn, timestamps } from "~/core/db/helpers.server";
+import { timestamps } from "~/core/db/helpers.server";
 
 /**
  * Searchable reference data for domestic and US-listed securities.
@@ -21,7 +22,9 @@ import { makeIdentityColumn, timestamps } from "~/core/db/helpers.server";
 export const stocks = pgTable(
   "stocks",
   {
-    ...makeIdentityColumn("stock_id"),
+    stock_id: bigint({ mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
     name: text().notNull(),
     name_en: text(),
     ticker: text().notNull(),
