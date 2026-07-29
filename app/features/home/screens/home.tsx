@@ -12,7 +12,7 @@ import {
   TrendingUpIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link, useLoaderData } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
 import { Input } from "~/core/components/ui/input";
@@ -22,6 +22,7 @@ import { cn } from "~/core/lib/utils";
 import type { AnalysisResult } from "~/features/stocks/analysis.types";
 import { AnalysisResultView } from "~/features/stocks/components/analysis-result";
 import { StockAutocomplete } from "~/features/stocks/components/stock-autocomplete";
+import { getStockMarketMode } from "~/features/stocks/market-mode.server";
 import type { StockSearchResult } from "~/features/stocks/types";
 
 export const meta: Route.MetaFunction = ({ data }) => [
@@ -34,6 +35,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     title: "억까 — 내 주식, 목표까지",
     subtitle: "보유 주식을 입력하고 목표까지 얼마나 남았는지 확인해보세요.",
+    marketMode: getStockMarketMode(),
   };
 }
 
@@ -41,6 +43,7 @@ type Holding = {
   id: number;
   symbol: string;
   averagePrice: string;
+  currency: "KRW" | "USD";
   quantity: string;
   selectedStock: StockSearchResult | null;
 };
@@ -53,6 +56,7 @@ const emptyHolding = (id: number): Holding => ({
   id,
   symbol: "",
   averagePrice: "",
+  currency: "KRW",
   quantity: "",
   selectedStock: null,
 });
@@ -109,6 +113,8 @@ function JackpotGoal() {
 }
 
 export default function Home() {
+  const { marketMode } = useLoaderData<typeof loader>();
+  const isGlobalTest = marketMode === "global-test";
   const [tab, setTab] = useState<"quick" | "saved">("quick");
   const [holdings, setHoldings] = useState<Holding[]>([emptyHolding(1)]);
   const [targetEok, setTargetEok] = useState("1");
@@ -116,11 +122,14 @@ export default function Home() {
   const [analysisError, setAnalysisError] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [draftLoaded, setDraftLoaded] = useState(false);
-  const [draftPersistenceEnabled, setDraftPersistenceEnabled] = useState(true);
 
   useEffect(() => {
+    // 이전 버전에서 장기 저장한 입력값은 남기지 않습니다.
+    window.localStorage.removeItem(HOLDINGS_STORAGE_KEY);
+    window.localStorage.removeItem(LEGACY_ANALYSIS_STORAGE_KEY);
+
     try {
-      const storedDraft = window.localStorage.getItem(HOLDINGS_STORAGE_KEY);
+      const storedDraft = window.sessionStorage.getItem(HOLDINGS_STORAGE_KEY);
       if (storedDraft) {
         const draft = JSON.parse(storedDraft) as {
           holdings?: Holding[];
@@ -138,10 +147,17 @@ export default function Home() {
               typeof holding.averagePrice === "string" &&
               typeof holding.quantity === "string" &&
               (!holding.selectedStock ||
+                isGlobalTest ||
                 holding.selectedStock.country === "KR"),
           )
         ) {
-          setHoldings(draft.holdings);
+          setHoldings(
+            draft.holdings.map((holding) => ({
+              ...holding,
+              currency:
+                holding.currency === "USD" && isGlobalTest ? "USD" : "KRW",
+            })),
+          );
         }
         if (
           typeof draft.targetEok === "string" &&
@@ -152,21 +168,21 @@ export default function Home() {
           setTargetEok(draft.targetEok);
       }
     } catch {
-      window.localStorage.removeItem(HOLDINGS_STORAGE_KEY);
+      window.sessionStorage.removeItem(HOLDINGS_STORAGE_KEY);
     }
 
-    window.localStorage.removeItem(LEGACY_ANALYSIS_STORAGE_KEY);
+    window.sessionStorage.removeItem(LEGACY_ANALYSIS_STORAGE_KEY);
 
     setDraftLoaded(true);
-  }, []);
+  }, [isGlobalTest]);
 
   useEffect(() => {
-    if (!draftLoaded || !draftPersistenceEnabled) return;
-    window.localStorage.setItem(
+    if (!draftLoaded) return;
+    window.sessionStorage.setItem(
       HOLDINGS_STORAGE_KEY,
       JSON.stringify({ holdings, targetEok }),
     );
-  }, [draftLoaded, draftPersistenceEnabled, holdings, targetEok]);
+  }, [draftLoaded, holdings, targetEok]);
 
   const updateHolding = (
     id: number,
@@ -188,6 +204,12 @@ export default function Home() {
     );
   };
 
+  const updateCurrency = (id: number, currency: Holding["currency"]) => {
+    setHoldings((items) =>
+      items.map((item) => (item.id === id ? { ...item, currency } : item)),
+    );
+  };
+
   const selectStock = (id: number, stock: StockSearchResult) => {
     setHoldings((items) =>
       items.map((item) =>
@@ -196,6 +218,7 @@ export default function Home() {
               ...item,
               symbol: stock.name,
               selectedStock: stock,
+              currency: stock.currency,
             }
           : item,
       ),
@@ -208,8 +231,12 @@ export default function Home() {
   };
 
   const clearStoredPortfolio = () => {
-    window.localStorage.removeItem(HOLDINGS_STORAGE_KEY);
-    window.localStorage.removeItem(LEGACY_ANALYSIS_STORAGE_KEY);
+    const shouldClear = window.confirm(
+      "현재 탭에 저장된 종목과 입력 정보를 모두 삭제할까요?",
+    );
+    if (!shouldClear) return;
+    window.sessionStorage.removeItem(HOLDINGS_STORAGE_KEY);
+    window.sessionStorage.removeItem(LEGACY_ANALYSIS_STORAGE_KEY);
     setHoldings([emptyHolding(1)]);
     setTargetEok("1");
     setAnalysis(null);
@@ -240,6 +267,7 @@ export default function Home() {
             stockId: holding.selectedStock!.stockId,
             averagePrice: Number(holding.averagePrice),
             quantity: Number(holding.quantity),
+            currency: holding.currency,
           })),
         }),
       });
@@ -249,9 +277,6 @@ export default function Home() {
       if (!response.ok || "error" in body)
         throw new Error("error" in body ? body.error : "분석에 실패했습니다.");
       setAnalysis(body);
-      setDraftPersistenceEnabled(false);
-      window.localStorage.removeItem(HOLDINGS_STORAGE_KEY);
-      window.localStorage.removeItem(LEGACY_ANALYSIS_STORAGE_KEY);
     } catch (error) {
       setAnalysisError(
         error instanceof Error ? error.message : "분석에 실패했습니다.",
@@ -289,7 +314,9 @@ export default function Home() {
             </p>
             <div className="mx-auto mt-5 flex w-fit items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-700 dark:text-amber-300">
               <span className="size-2 rounded-full bg-amber-500" />
-              베타 서비스 기간에는 국내 주식·ETF·ETN만 지원합니다
+              {isGlobalTest
+                ? "로컬 KIS 테스트 모드 · 국내·미국 주식 지원"
+                : "베타 서비스 기간에는 국내 주식·ETF·ETN만 지원합니다"}
             </div>
           </header>
 
@@ -325,20 +352,32 @@ export default function Home() {
             {tab === "quick" ? (
               <div className="bg-card/90 rounded-3xl border shadow-2xl shadow-black/5 backdrop-blur dark:shadow-black/20">
                 <div className="border-b px-5 py-5 sm:px-8">
-                  <div className="flex items-start gap-3">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
-                      <TrendingUpIcon className="size-5" />
+                  <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+                    <div className="flex items-start gap-3">
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
+                        <TrendingUpIcon className="size-5" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-bold">
+                          보유 주식을 알려주세요
+                        </h2>
+                        <p className="text-muted-foreground mt-1 text-sm">
+                          {isGlobalTest
+                            ? "국내 주식과 미국 주식을 KIS 시세로 테스트할 수 있어요."
+                            : "국내 주식과 ETF·ETN을 입력할 수 있어요. 로그인하면 분석 결과를 저장하고, 추가 매수 후에도 이어서 분석할 수 있어요."}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="text-lg font-bold">
-                        보유 주식을 알려주세요
-                      </h2>
-                      <p className="text-muted-foreground mt-1 text-sm">
-                        국내 주식과 ETF·ETN을 입력할 수 있어요. 로그인하면 분석
-                        결과를 저장하고, 추가 매수 후에도 이어서 분석할 수
-                        있어요.
-                      </p>
-                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={clearStoredPortfolio}
+                      className="border-red-500/40 text-red-500 hover:border-red-500 hover:bg-red-500/10 hover:text-red-500"
+                    >
+                      <Trash2Icon className="size-4" />
+                      현재 탭의 정보 삭제
+                    </Button>
                   </div>
                 </div>
 
@@ -398,27 +437,72 @@ export default function Home() {
                             />
                           </Field>
 
-                          <Field label="평균 매수가" id={`price-${holding.id}`}>
-                            <div className="relative">
-                              <span className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm">
-                                ₩
-                              </span>
-                              <Input
-                                id={`price-${holding.id}`}
-                                type="text"
-                                inputMode="numeric"
-                                pattern="[0-9]*"
-                                value={holding.averagePrice}
-                                onChange={(event) =>
-                                  updateHolding(
-                                    holding.id,
-                                    "averagePrice",
-                                    event.target.value.replace(/\D/g, ""),
-                                  )
-                                }
-                                placeholder="예: 70000"
-                                className="bg-background h-11 pl-7"
-                              />
+                          <Field
+                            label={
+                              <>
+                                평균 매수가
+                                {isGlobalTest && holding.currency === "USD" && (
+                                  <span className="text-muted-foreground ml-1 text-[11px] font-normal">
+                                    (달러는 소수점 없이 입력)
+                                  </span>
+                                )}
+                              </>
+                            }
+                            id={`price-${holding.id}`}
+                          >
+                            <div className="flex gap-2">
+                              {isGlobalTest && (
+                                <div
+                                  className="bg-muted flex h-11 shrink-0 rounded-md p-1"
+                                  aria-label="매수 통화"
+                                >
+                                  {(["KRW", "USD"] as const).map((currency) => (
+                                    <button
+                                      key={currency}
+                                      type="button"
+                                      aria-pressed={
+                                        holding.currency === currency
+                                      }
+                                      onClick={() =>
+                                        updateCurrency(holding.id, currency)
+                                      }
+                                      className={cn(
+                                        "min-w-9 rounded-sm px-2 text-sm font-bold transition-all",
+                                        holding.currency === currency
+                                          ? "bg-background text-foreground shadow-sm"
+                                          : "text-muted-foreground hover:text-foreground",
+                                      )}
+                                    >
+                                      {currency === "KRW" ? "₩" : "$"}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="relative min-w-0 flex-1">
+                                <span className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm">
+                                  {holding.currency === "KRW" ? "₩" : "$"}
+                                </span>
+                                <Input
+                                  id={`price-${holding.id}`}
+                                  type="text"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  value={holding.averagePrice}
+                                  onChange={(event) =>
+                                    updateHolding(
+                                      holding.id,
+                                      "averagePrice",
+                                      event.target.value.replace(/\D/g, ""),
+                                    )
+                                  }
+                                  placeholder={
+                                    holding.currency === "KRW"
+                                      ? "예: 70000"
+                                      : "예: 180"
+                                  }
+                                  className="bg-background h-11 pl-7"
+                                />
+                              </div>
                             </div>
                           </Field>
 
@@ -535,15 +619,9 @@ export default function Home() {
                     </Button>
                     <p className="text-muted-foreground mt-3 flex items-center justify-center gap-1.5 text-xs">
                       <LockKeyholeIcon className="size-3.5" />
-                      입력 정보는 분석 전까지만 이 브라우저에 임시 저장돼요
+                      입력 정보는 현재 탭에서만 유지되며, 탭을 닫으면 자동
+                      삭제돼요
                     </p>
-                    <button
-                      type="button"
-                      onClick={clearStoredPortfolio}
-                      className="text-muted-foreground hover:text-foreground mx-auto mt-2 block text-xs underline-offset-4 hover:underline"
-                    >
-                      브라우저에 저장된 정보 삭제
-                    </button>
                   </div>
                   {analysisError && (
                     <p

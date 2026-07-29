@@ -171,7 +171,7 @@ async function saveToDatabase(records: StockRecord[]) {
       await transaction`
         update stocks
         set is_active = false, updated_at = now()
-        where country in ('KR', 'US')
+        where country = 'KR'
       `;
 
       for (let offset = 0; offset < records.length; offset += BATCH_SIZE) {

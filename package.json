@@ -16,7 +16,9 @@
     "stocks:sync:dry": "tsx scripts/sync-stocks.ts --dry-run",
     "test:e2e": "npx playwright test",
     "test:e2e:ui": "npx playwright test --ui",
-    "format": "prettier --write \"app/**/*.{ts,tsx,js,jsx,json,css,md,mdx}\""
+    "format": "prettier --write \"app/**/*.{ts,tsx,js,jsx,json,css,md,mdx}\"",
+    "stocks:sync:kis": "tsx scripts/sync-kis-us-stocks.ts",
+    "stocks:sync:kis:dry": "tsx scripts/sync-kis-us-stocks.ts --dry-run"
   },
   "dependencies": {
     "@hcaptcha/react-hcaptcha": "^1.12.0",
@@ -41,6 +43,7 @@
     "@tosspayments/tosspayments-sdk": "^2.3.4",
     "@vercel/og": "^0.6.5",
     "@vercel/react-router": "^1.1.0",
+    "adm-zip": "^0.6.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dotenv": "^16.4.7",
@@ -78,6 +81,7 @@
     "@react-router/dev": "^7.5.1",
     "@tailwindcss/vite": "^4.0.0",
     "@trivago/prettier-plugin-sort-imports": "^5.2.2",
+    "@types/adm-zip": "^0.5.8",
     "@types/node": "^20",
     "@types/nprogress": "^0.2.3",
     "@types/pg": "^8.11.11",

@@ -4,7 +4,8 @@ import { inArray } from "drizzle-orm";
 
 import db from "~/core/db/drizzle-client.server";
 
-import { getDomesticMarketData } from "./fsc-client.server";
+import { getMarketData } from "./market-data.server";
+import { getStockMarketMode } from "./market-mode.server";
 import { stocks } from "./schema";
 
 const PATHS = 5_000;
@@ -12,7 +13,12 @@ const MONTHS = 360;
 
 export interface AnalysisInput {
   goalAmount: number;
-  holdings: Array<{ stockId: number; averagePrice: number; quantity: number }>;
+  holdings: Array<{
+    stockId: number;
+    averagePrice: number;
+    quantity: number;
+    currency: "KRW" | "USD";
+  }>;
 }
 
 function goalLabel(amount: number) {
@@ -63,8 +69,11 @@ export async function analyzePortfolio(
     throw new Error("분석할 종목은 1개 이상 5개 이하로 입력해 주세요.");
   if (
     input.holdings.some(
-      ({ stockId, averagePrice, quantity }) =>
-        !Number.isInteger(stockId) || averagePrice <= 0 || quantity <= 0,
+      ({ stockId, averagePrice, quantity, currency }) =>
+        !Number.isInteger(stockId) ||
+        averagePrice <= 0 ||
+        quantity <= 0 ||
+        !["KRW", "USD"].includes(currency),
     )
   )
     throw new Error("매수가와 보유 수량을 올바르게 입력해 주세요.");
@@ -76,8 +85,17 @@ export async function analyzePortfolio(
     .where(inArray(stocks.stock_id, ids));
   if (stockRows.length !== new Set(ids).size)
     throw new Error("유효하지 않은 종목이 포함되어 있습니다.");
-  if (stockRows.some((stock) => stock.country !== "KR"))
+  const marketMode = getStockMarketMode();
+  if (
+    marketMode === "domestic" &&
+    stockRows.some((stock) => stock.country !== "KR")
+  )
     throw new Error("현재는 국내 주식만 분석할 수 있습니다.");
+  if (
+    marketMode === "domestic" &&
+    input.holdings.some((holding) => holding.currency !== "KRW")
+  )
+    throw new Error("국내 모드에서는 원화 매수가만 입력할 수 있습니다.");
   if (
     stockRows.some(
       (stock) => !["STOCK", "ETF", "ETN"].includes(stock.security_type),
@@ -88,23 +106,23 @@ export async function analyzePortfolio(
   const marketData = [];
   for (const holding of input.holdings) {
     const stock = stockRows.find((row) => row.stock_id === holding.stockId)!;
-    const data = await getDomesticMarketData(
-      stock.stock_id,
-      stock.ticker,
-      stock.security_type as "STOCK" | "ETF" | "ETN",
-    );
+    const data = await getMarketData(stock);
     marketData.push({ holding, stock, data });
   }
 
   const holdingResults = marketData.map(({ holding, stock, data }) => {
-    const cost = holding.averagePrice * holding.quantity;
-    const value = data.currentPrice * holding.quantity;
+    const costRate = holding.currency === "USD" ? data.exchangeRate : 1;
+    const valueRate = stock.currency === "USD" ? data.exchangeRate : 1;
+    const cost = holding.averagePrice * holding.quantity * costRate;
+    const value = data.currentPrice * holding.quantity * valueRate;
     return {
       name: stock.name,
       ticker: stock.ticker,
       currentPrice: data.currentPrice,
-      currency: "KRW" as const,
+      currency: stock.currency as "KRW" | "USD",
+      costKrw: cost,
       valueKrw: value,
+      profitKrw: value - cost,
       returnRate: ((value - cost) / cost) * 100,
       cost,
     };
@@ -215,12 +233,16 @@ export async function analyzePortfolio(
       .map(({ data }) => data.asOf)
       .sort()
       .at(0)!,
+    marketMode,
     goalAmount: input.goalAmount,
     totalCost,
     currentValue,
     profit,
     returnRate,
-    priceBasis: "raw_close",
+    priceBasis: marketData[0].data.priceBasis,
+    exchangeRate:
+      marketData.find(({ stock }) => stock.country === "US")?.data
+        .exchangeRate ?? null,
     holdings: holdingResults.map(({ cost: _cost, ...item }) => item),
     cagr: {
       oneYear: cagr(portfolioReturns, 12),
@@ -247,7 +269,9 @@ export async function analyzePortfolio(
         ? `평균 시나리오에서는 30년 안에 ${goalLabel(input.goalAmount)} 도달이 확인되지 않습니다.`
         : `평균 시나리오에서는 약 ${periodLabel(baseGoal)} 후 ${goalLabel(input.goalAmount)} 도달이 예상됩니다.`,
       `20년 안에 ${goalLabel(input.goalAmount)}을 넘은 시뮬레이션 비율은 ${probabilityAt(240).toFixed(1)}%입니다.`,
-      "금융위원회 공공데이터의 종가를 사용하므로 액면분할·병합 같은 기업행사가 과거 수익률에 영향을 줄 수 있습니다.",
+      marketMode === "domestic"
+        ? "금융위원회 공공데이터의 종가를 사용하므로 액면분할·병합 같은 기업행사가 과거 수익률에 영향을 줄 수 있습니다."
+        : "로컬 테스트 모드에서는 KIS 수정주가와 조회 시점 환율을 사용합니다.",
     ],
   };
 }

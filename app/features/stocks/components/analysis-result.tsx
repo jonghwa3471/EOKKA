@@ -1,6 +1,9 @@
 import type { AnalysisResult } from "../analysis.types";
 
 import { useState } from "react";
+import { Link } from "react-router";
+
+import { Button } from "~/core/components/ui/button";
 
 const colors = {
   conservative: "#f59e0b",
@@ -8,6 +11,10 @@ const colors = {
   optimistic: "#0ea5e9",
 };
 const won = (value: number) => `${Math.round(value).toLocaleString("ko-KR")}원`;
+const price = (value: number, currency: "KRW" | "USD") =>
+  currency === "USD"
+    ? `$${value.toLocaleString("en-US", { maximumFractionDigits: 2 })}`
+    : won(value);
 const compactWon = (value: number) => {
   const rounded = Math.round(value);
   const eok = Math.floor(rounded / 100_000_000);
@@ -306,10 +313,17 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
         </div>
         <div className="text-muted-foreground text-xs sm:text-right">
           <p className="font-semibold">
-            {new Date(`${result.asOf}T00:00:00`).toLocaleDateString("ko-KR")} 전
-            거래일 종가 기준
+            {new Date(`${result.asOf}T00:00:00`).toLocaleDateString("ko-KR")}{" "}
+            {result.marketMode === "domestic"
+              ? "전 거래일 종가 기준"
+              : "KIS 시세 기준"}
           </p>
-          <p className="mt-1">매일 오후 2시 이후 갱신 · 투자 조언이 아닙니다</p>
+          <p className="mt-1">
+            {result.marketMode === "domestic"
+              ? "매일 오후 2시 이후 갱신"
+              : "로컬 테스트 모드"}{" "}
+            · 투자 조언이 아닙니다
+          </p>
         </div>
       </div>
 
@@ -343,6 +357,60 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
             </strong>
           </div>
         ))}
+      </div>
+
+      <div className="mt-5 rounded-2xl border p-5">
+        <div>
+          <h3 className="text-lg font-black">종목별 수익률</h3>
+          <p className="text-muted-foreground mt-1 text-xs">
+            입력한 평균 매수가와 현재가를 기준으로 계산했어요.
+          </p>
+        </div>
+        <div className="mt-4 divide-y">
+          {result.holdings.map((holding) => {
+            const isProfit = holding.profitKrw >= 0;
+            return (
+              <div
+                key={`${holding.ticker}-${holding.name}`}
+                className="grid gap-3 py-4 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))] sm:items-center"
+              >
+                <div className="min-w-0">
+                  <strong className="block truncate">{holding.name}</strong>
+                  <span className="text-muted-foreground text-xs">
+                    {holding.ticker} · 현재가{" "}
+                    {price(holding.currentPrice, holding.currency)}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">매수 원금</p>
+                  <p className="mt-0.5 font-bold">{won(holding.costKrw)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">평가손익</p>
+                  <p
+                    className={`mt-0.5 font-bold ${
+                      isProfit ? "text-red-500" : "text-blue-500"
+                    }`}
+                  >
+                    {isProfit ? "+" : ""}
+                    {won(holding.profitKrw)}
+                  </p>
+                </div>
+                <div className="sm:text-right">
+                  <p className="text-muted-foreground text-xs">수익률</p>
+                  <p
+                    className={`mt-0.5 text-lg font-black ${
+                      isProfit ? "text-red-500" : "text-blue-500"
+                    }`}
+                  >
+                    {holding.returnRate >= 0 ? "+" : ""}
+                    {holding.returnRate.toFixed(1)}%
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <div className="mt-5 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-6 text-center sm:py-8">
@@ -498,10 +566,51 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
           ))}
         </ul>
       </div>
-      <p className="text-muted-foreground mt-4 text-xs">
-        금융위원회 공공데이터의 종가를 사용합니다. 수정주가가 아니므로
-        액면분할·병합 등 기업행사가 과거 수익률에 영향을 줄 수 있습니다.
-      </p>
+
+      <div className="mt-5 rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 to-teal-500/5 p-5 sm:flex sm:items-center sm:justify-between sm:gap-6 sm:p-6">
+        <div>
+          <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+            분석 결과를 계속 관리하고 싶다면
+          </p>
+          <h3 className="mt-1 text-lg font-black">
+            로그인하고 이 분석 정보를 저장하세요
+          </h3>
+          <p className="text-muted-foreground mt-2 max-w-xl text-sm leading-6">
+            빠른 분석의 입력 정보는 현재 탭에서만 유지되며, 탭을 닫으면 자동
+            삭제됩니다. 가입하면 보유 종목과 분석 결과를 저장하고 다음 방문에도
+            이어서 확인할 수 있어요.
+          </p>
+        </div>
+        <div className="mt-5 flex shrink-0 gap-2 sm:mt-0">
+          <Button asChild variant="outline">
+            <Link to="/login">로그인</Link>
+          </Button>
+          <Button
+            asChild
+            className="bg-emerald-500 text-white hover:bg-emerald-600"
+          >
+            <Link to="/join">무료 회원가입</Link>
+          </Button>
+        </div>
+      </div>
+
+      {result.marketMode === "domestic" ? (
+        <p className="text-muted-foreground mt-4 text-xs">
+          금융위원회 공공데이터의 종가를 사용합니다. 수정주가가 아니므로
+          액면분할·병합 등 기업행사가 과거 수익률에 영향을 줄 수 있습니다.
+        </p>
+      ) : (
+        <p className="text-muted-foreground mt-4 text-xs">
+          KIS 수정주가를 사용하는 로컬 테스트 결과입니다.
+          {result.exchangeRate && (
+            <>
+              {" "}
+              미국 주식은 조회 시점 환율 1달러 ={" "}
+              {result.exchangeRate.toLocaleString("ko-KR")}원으로 환산했습니다.
+            </>
+          )}
+        </p>
+      )}
     </section>
   );
 }

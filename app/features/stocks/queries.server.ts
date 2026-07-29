@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 
 import db from "~/core/db/drizzle-client.server";
 
+import { getStockMarketMode } from "./market-mode.server";
 import { stocks } from "./schema";
 
 const SEARCH_RESULT_LIMIT = 8;
@@ -13,6 +14,7 @@ export async function searchStocks(query: string) {
   if (!normalizedQuery) return [];
 
   const searchTerm = normalizedQuery.toLocaleLowerCase("en-US");
+  const marketMode = getStockMarketMode();
 
   const results = await db
     .select({
@@ -29,7 +31,7 @@ export async function searchStocks(query: string) {
     .where(
       sql`
       ${stocks.is_active} = true
-      and ${stocks.country} = 'KR'
+      and (${marketMode === "global-test"} or ${stocks.country} = 'KR')
       and (
         position(${searchTerm} in lower(${stocks.ticker})) > 0
         or position(${searchTerm} in lower(${stocks.name})) > 0

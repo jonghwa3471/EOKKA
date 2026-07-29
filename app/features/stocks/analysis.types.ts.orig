@@ -13,9 +13,7 @@ export interface AnalysisResult {
     ticker: string;
     currentPrice: number;
     currency: "KRW" | "USD";
-    costKrw: number;
     valueKrw: number;
-    profitKrw: number;
     returnRate: number;
   }>;
   cagr: {
