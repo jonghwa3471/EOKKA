@@ -18,13 +18,23 @@ const rateLimits =
   (globalRateLimitState.__eokkaRateLimits = new Map());
 
 function clientIdentifier(request: Request) {
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  return (
-    request.headers.get("cf-connecting-ip")?.trim() ||
-    request.headers.get("x-real-ip")?.trim() ||
-    forwardedFor?.split(",")[0]?.trim() ||
-    "unknown"
-  );
+  const trustedHeader = process.env.RATE_LIMIT_IP_HEADER?.toLowerCase();
+  const allowedHeaders = new Set([
+    "cf-connecting-ip",
+    "x-real-ip",
+    "x-forwarded-for",
+  ]);
+  if (!trustedHeader || !allowedHeaders.has(trustedHeader))
+    return process.env.NODE_ENV === "production"
+      ? "untrusted-client"
+      : "local-development";
+
+  const value = request.headers.get(trustedHeader);
+  const identifier =
+    trustedHeader === "x-forwarded-for"
+      ? value?.split(",")[0]?.trim()
+      : value?.trim();
+  return identifier || "missing-client-ip";
 }
 
 function removeExpiredEntries(now: number) {

@@ -47,6 +47,17 @@ npm run dev
 
 `global-test`에서는 국내주식과 미국주식을 검색할 수 있고 평균 매수가 입력란에 원화/달러 토글이 나타납니다. 다시 금융위원회 방식으로 돌아갈 때는 `STOCK_MARKET_MODE=domestic`으로 바꾸고 개발 서버를 재시작하면 됩니다. KIS 개인용 시세의 제3자 제공 제한 때문에 `global-test`는 프로덕션 환경에서 실행되지 않도록 막혀 있습니다.
 
+## Rate limiting
+
+배포 환경에서는 애플리케이션이 직접 인터넷에 노출되지 않고 신뢰할 수 있는 프록시 뒤에 있을 때만 실제 클라이언트 IP 헤더를 설정합니다.
+
+```dotenv
+# Cloudflare를 사용하는 경우
+RATE_LIMIT_IP_HEADER=cf-connecting-ip
+```
+
+프록시가 해당 헤더를 덮어쓴다는 보장 없이 `x-forwarded-for` 또는 `x-real-ip`를 신뢰하면 사용자가 요청 제한을 우회할 수 있습니다. 운영 환경에서는 Cloudflare 등의 외부 Rate Limiting도 함께 사용합니다.
+
 ## License
 
 See [LICENSE.md](./LICENSE.md) for details.

@@ -13,7 +13,6 @@
  * - Database recording of verified payments
  * - Detailed success page with payment information
  */
-
 import type { Route } from "./+types/success";
 
 import { redirect } from "react-router";
@@ -102,29 +101,29 @@ const paymentResponseSchema = z.object({
 export async function loader({ request }: Route.LoaderArgs) {
   // Create a server-side Supabase client with the user's session
   const [client] = makeServerClient(request);
-  
+
   // Verify the user is authenticated, redirects to login if not
   await requireAuthentication(client);
-  
+
   // Get the authenticated user's information
   const {
     data: { user },
   } = await client.auth.getUser();
-  
+
   // Redirect to checkout if user is not found
   if (!user) {
     throw redirect("/payments/checkout");
   }
-  
+
   // Extract and validate payment parameters from URL
   const url = new URL(request.url);
   const result = paramsSchema.safeParse(Object.fromEntries(url.searchParams));
-  
+
   // Redirect to failure page if parameters are invalid
   if (!result.success) {
     return redirect(`/payments/failure?`);
   }
-  
+
   // Prepare authorization header for Toss Payments API
   const encryptedSecretKey =
     "Basic " +
@@ -146,17 +145,17 @@ export async function loader({ request }: Route.LoaderArgs) {
       },
     },
   );
-  
+
   // Parse API response
   const data = await response.json();
-  
+
   // Handle API errors by redirecting to failure page with error details
   if (response.status !== 200 && data.code && data.message) {
     throw redirect(
       `/payments/failure?code=${encodeURIComponent(data.code)}&message=${encodeURIComponent(data.message)}`,
     );
   }
-  
+
   // Validate API response structure
   const paymentResponse = paymentResponseSchema.safeParse(data);
   if (!paymentResponse.success) {
@@ -164,7 +163,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       `/payments/failure?code=${encodeURIComponent("validation-error")}&message=${encodeURIComponent("Invalid response from Toss")}`,
     );
   }
-  
+
   // CRITICAL SECURITY CHECK: Validate payment amount
   // This prevents attackers from manipulating the payment amount
   // 🚨⚠️ In a production app, you would compare against the expected amount from your database
@@ -173,22 +172,34 @@ export async function loader({ request }: Route.LoaderArgs) {
       `/payments/failure?code=${encodeURIComponent("validation-error")}&message=${encodeURIComponent("Invalid amount")}`,
     );
   }
-  
+
   // Record the verified payment in the database
-  await adminClient.from("payments").insert({
-    payment_key: paymentResponse.data.paymentKey,
-    order_id: paymentResponse.data.orderId,
-    order_name: paymentResponse.data.orderName,
-    total_amount: paymentResponse.data.totalAmount,
-    receipt_url: paymentResponse.data.receipt.url,
-    status: paymentResponse.data.status,
-    approved_at: paymentResponse.data.approvedAt,
-    requested_at: paymentResponse.data.requestedAt,
-    metadata: paymentResponse.data.metadata,
-    raw_data: data,
-    user_id: user!.id,
-  });
-  
+  const { error: paymentInsertError } = await adminClient
+    .from("payments")
+    .insert({
+      payment_key: paymentResponse.data.paymentKey,
+      order_id: paymentResponse.data.orderId,
+      order_name: paymentResponse.data.orderName,
+      total_amount: paymentResponse.data.totalAmount,
+      receipt_url: paymentResponse.data.receipt.url,
+      status: paymentResponse.data.status,
+      approved_at: paymentResponse.data.approvedAt,
+      requested_at: paymentResponse.data.requestedAt,
+      metadata: paymentResponse.data.metadata,
+      raw_data: data,
+      user_id: user!.id,
+    });
+
+  if (paymentInsertError) {
+    const message =
+      paymentInsertError.code === "23505"
+        ? "이미 처리된 결제입니다."
+        : "결제 기록을 저장하지 못했습니다.";
+    throw redirect(
+      `/payments/failure?code=${encodeURIComponent("payment-record-error")}&message=${encodeURIComponent(message)}`,
+    );
+  }
+
   // Return payment data for the success page
   return { data };
 }
@@ -221,14 +232,14 @@ export default function Success({ loaderData }: Route.ComponentProps) {
             className="w-full rounded-2xl object-cover"
           />
         </div>
-        
+
         {/* Payment confirmation section */}
         <div className="flex flex-col items-start gap-10 overflow-x-scroll">
           {/* Success message */}
           <h1 className="text-center text-4xl font-semibold tracking-tight lg:text-5xl">
             Payment Complete
           </h1>
-          
+
           {/* Explanation text */}
           <p className="text-muted-foreground text-lg font-medium">
             We have verified the payment with the Toss API.
@@ -236,7 +247,7 @@ export default function Success({ loaderData }: Route.ComponentProps) {
             <br />
             Here is the data we got from Toss.
           </p>
-          
+
           {/* Raw payment data (for demonstration purposes) */}
           <pre className="break-all">
             {JSON.stringify(loaderData.data, null, 2)}

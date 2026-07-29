@@ -46,6 +46,10 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.handle_sign_up() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.handle_sign_up() FROM anon;
+REVOKE ALL ON FUNCTION public.handle_sign_up() FROM authenticated;
+
 /**
  * Database Trigger: handle_sign_up
  * 
@@ -59,5 +63,4 @@ CREATE TRIGGER handle_sign_up
 AFTER INSERT ON auth.users
 FOR EACH ROW
 EXECUTE FUNCTION handle_sign_up();
-
 

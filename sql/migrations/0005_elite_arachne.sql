@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX "payments_payment_key_unique" ON "payments" USING btree ("payment_key");--> statement-breakpoint
+CREATE UNIQUE INDEX "payments_order_id_unique" ON "payments" USING btree ("order_id");

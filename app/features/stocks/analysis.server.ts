@@ -65,8 +65,8 @@ export async function analyzePortfolio(
     input.goalAmount > 100_000_000_000
   )
     throw new Error("목표 금액은 1억 이상 1,000억 이하로 입력해 주세요.");
-  if (!input.holdings.length || input.holdings.length > 5)
-    throw new Error("분석할 종목은 1개 이상 5개 이하로 입력해 주세요.");
+  if (!input.holdings.length || input.holdings.length > 10)
+    throw new Error("분석할 종목은 1개 이상 10개 이하로 입력해 주세요.");
   if (
     input.holdings.some(
       ({ stockId, averagePrice, quantity, currency }) =>

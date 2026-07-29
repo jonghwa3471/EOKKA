@@ -26,11 +26,16 @@ const inputSchema = z
           .strict(),
       )
       .min(1)
-      .max(5),
+      .max(10),
   })
   .strict();
 
 export async function action({ request }: Route.ActionArgs) {
+  if (request.method !== "POST")
+    return data({ error: "허용되지 않은 요청 방식입니다." }, { status: 405 });
+  if (!request.headers.get("content-type")?.includes("application/json"))
+    return data({ error: "JSON 요청만 허용됩니다." }, { status: 415 });
+
   const rateLimit = checkRateLimit(request, {
     key: "stocks:analyze",
     limit: 3,
@@ -58,11 +63,15 @@ export async function action({ request }: Route.ActionArgs) {
     const input: AnalysisInput = validation.data;
     return data(await analyzePortfolio(input));
   } catch (error) {
+    console.error("Stock analysis failed", error);
     return data(
       {
-        error: error instanceof Error ? error.message : "분석에 실패했습니다.",
+        error:
+          process.env.NODE_ENV === "development" && error instanceof Error
+            ? error.message
+            : "분석 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
       },
-      { status: 400 },
+      { status: 500 },
     );
   }
 }

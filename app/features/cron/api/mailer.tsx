@@ -13,6 +13,8 @@
  * - Integrates with Sentry for error tracking
  * - Uses Resend for email delivery
  */
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import type { Route } from "./+types/mailer";
 
 import * as Sentry from "@sentry/node";
@@ -65,8 +67,8 @@ export async function action({ request }: Route.LoaderArgs) {
 
   // Pop a message from the Postgres message queue (PGMQ)
   // Note: Using admin client is necessary to access the queue
-  const { data: message, error } = await adminClient
-    // @ts-expect-error - PGMQ types are not fully defined in the Supabase client
+  const queueClient = adminClient as unknown as SupabaseClient;
+  const { data: message, error } = await queueClient
     .schema("pgmq_public")
     .rpc("pop", {
       queue_name: "mailer", // Queue name in Postgres

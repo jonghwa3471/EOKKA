@@ -1,6 +1,6 @@
 /**
  * Payment System Schema
- * 
+ *
  * This file defines the database schema for payment records and sets up
  * Supabase Row Level Security (RLS) policies to control data access.
  * The schema is designed to work with payment processors like Toss Payments
@@ -14,6 +14,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { authUid, authUsers, authenticatedRole } from "drizzle-orm/supabase";
@@ -22,10 +23,10 @@ import { makeIdentityColumn, timestamps } from "~/core/db/helpers.server";
 
 /**
  * Payments Table
- * 
+ *
  * Stores payment transaction records with details from the payment processor.
  * Links to Supabase auth.users table via user_id foreign key.
- * 
+ *
  * Includes Row Level Security (RLS) policy to ensure users can only
  * view their own payment records.
  */
@@ -63,6 +64,8 @@ export const payments = pgTable(
     ...timestamps,
   },
   (table) => [
+    uniqueIndex("payments_payment_key_unique").on(table.payment_key),
+    uniqueIndex("payments_order_id_unique").on(table.order_id),
     // RLS Policy: Users can only view their own payment records
     pgPolicy("select-payment-policy", {
       for: "select",

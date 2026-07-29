@@ -49,7 +49,7 @@ type Holding = {
 };
 
 const HOLDINGS_STORAGE_KEY = "eokka:portfolio-draft:v1";
-const LEGACY_ANALYSIS_STORAGE_KEY = "eokka:portfolio-analysis:v1";
+const ANALYSIS_STORAGE_KEY = "eokka:portfolio-analysis:v1";
 const GOAL_PRESETS = [1, 10, 100];
 
 const emptyHolding = (id: number): Holding => ({
@@ -126,7 +126,7 @@ export default function Home() {
   useEffect(() => {
     // 이전 버전에서 장기 저장한 입력값은 남기지 않습니다.
     window.localStorage.removeItem(HOLDINGS_STORAGE_KEY);
-    window.localStorage.removeItem(LEGACY_ANALYSIS_STORAGE_KEY);
+    window.localStorage.removeItem(ANALYSIS_STORAGE_KEY);
 
     try {
       const storedDraft = window.sessionStorage.getItem(HOLDINGS_STORAGE_KEY);
@@ -139,7 +139,7 @@ export default function Home() {
         if (
           Array.isArray(draft.holdings) &&
           draft.holdings.length > 0 &&
-          draft.holdings.length <= 5 &&
+          draft.holdings.length <= 10 &&
           draft.holdings.every(
             (holding) =>
               Number.isInteger(holding.id) &&
@@ -171,10 +171,29 @@ export default function Home() {
       window.sessionStorage.removeItem(HOLDINGS_STORAGE_KEY);
     }
 
-    window.sessionStorage.removeItem(LEGACY_ANALYSIS_STORAGE_KEY);
+    try {
+      const storedAnalysis =
+        window.sessionStorage.getItem(ANALYSIS_STORAGE_KEY);
+      if (storedAnalysis) {
+        const parsed = JSON.parse(storedAnalysis) as Partial<AnalysisResult>;
+        if (
+          parsed.marketMode === marketMode &&
+          typeof parsed.asOf === "string" &&
+          typeof parsed.goalAmount === "number" &&
+          Array.isArray(parsed.holdings) &&
+          Array.isArray(parsed.scenarios) &&
+          Array.isArray(parsed.chart) &&
+          Array.isArray(parsed.summary)
+        )
+          setAnalysis(parsed as AnalysisResult);
+        else window.sessionStorage.removeItem(ANALYSIS_STORAGE_KEY);
+      }
+    } catch {
+      window.sessionStorage.removeItem(ANALYSIS_STORAGE_KEY);
+    }
 
     setDraftLoaded(true);
-  }, [isGlobalTest]);
+  }, [isGlobalTest, marketMode]);
 
   useEffect(() => {
     if (!draftLoaded) return;
@@ -226,6 +245,7 @@ export default function Home() {
   };
 
   const addHolding = () => {
+    if (holdings.length >= 10) return;
     const nextId = Math.max(...holdings.map(({ id }) => id), 0) + 1;
     setHoldings((items) => [...items, emptyHolding(nextId)]);
   };
@@ -236,7 +256,7 @@ export default function Home() {
     );
     if (!shouldClear) return;
     window.sessionStorage.removeItem(HOLDINGS_STORAGE_KEY);
-    window.sessionStorage.removeItem(LEGACY_ANALYSIS_STORAGE_KEY);
+    window.sessionStorage.removeItem(ANALYSIS_STORAGE_KEY);
     setHoldings([emptyHolding(1)]);
     setTargetEok("1");
     setAnalysis(null);
@@ -277,6 +297,7 @@ export default function Home() {
       if (!response.ok || "error" in body)
         throw new Error("error" in body ? body.error : "분석에 실패했습니다.");
       setAnalysis(body);
+      window.sessionStorage.setItem(ANALYSIS_STORAGE_KEY, JSON.stringify(body));
     } catch (error) {
       setAnalysisError(
         error instanceof Error ? error.message : "분석에 실패했습니다.",
@@ -541,10 +562,13 @@ export default function Home() {
                       type="button"
                       variant="outline"
                       onClick={addHolding}
+                      disabled={holdings.length >= 10}
                       className="h-11 w-full border-dashed"
                     >
                       <PlusIcon />
-                      종목 추가하기
+                      {holdings.length >= 10
+                        ? "최대 10개까지 추가할 수 있어요"
+                        : `종목 추가하기 (${holdings.length}/10)`}
                     </Button>
                   </div>
 

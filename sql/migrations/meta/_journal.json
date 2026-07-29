@@ -36,6 +36,20 @@
       "when": 1785236955968,
       "tag": "0004_tiresome_layla_miller",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785309903936,
+      "tag": "0005_elite_arachne",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785309916128,
+      "tag": "0006_harden_function_permissions",
+      "breakpoints": true
     }
   ]
 }

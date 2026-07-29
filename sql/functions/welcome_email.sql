@@ -28,21 +28,33 @@ SECURITY DEFINER
 SET SEARCH_PATH = ''
 AS $$
 BEGIN
-    -- Send a message to the 'mailer' queue using pgmq
-    -- This will be processed asynchronously by a worker process
+    -- Only enqueue fields required by the template. The complete auth.users
+    -- record contains sensitive authentication fields and must not be copied.
     PERFORM pgmq.send(
-            queue_name => 'mailer'::text,  -- Target the 'mailer' queue
-            msg => (json_build_object(
-                'template', 'welcome'::text,  -- Use the 'welcome' email template
-                'to', new.raw_user_meta_data ->> 'email',  -- Recipient's email address
-                'data', row_to_json(new.*)  -- Include all user data for template rendering
-            ))::jsonb
+            queue_name => 'mailer'::text,
+            msg => jsonb_build_object(
+                'template', 'welcome'::text,
+                'to', new.email,
+                'data', jsonb_build_object(
+                    'user_id', new.id,
+                    'email', new.email,
+                    'name', COALESCE(
+                        new.raw_user_meta_data ->> 'name',
+                        new.raw_user_meta_data ->> 'full_name',
+                        '사용자'
+                    )
+                )
+            )
         );
     
     -- Return the user record that triggered this function
     RETURN NEW;
 END;
 $$;
+
+REVOKE ALL ON FUNCTION public.welcome_email() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.welcome_email() FROM anon;
+REVOKE ALL ON FUNCTION public.welcome_email() FROM authenticated;
 
 /**
  * Database Trigger: welcome_email
