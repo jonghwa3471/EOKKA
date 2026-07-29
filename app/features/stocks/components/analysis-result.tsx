@@ -5,6 +5,8 @@ import { Link } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
 
+import { InvestmentCharacterCard } from "./investment-character-card";
+
 const colors = {
   conservative: "#f59e0b",
   base: "#10b981",
@@ -426,6 +428,8 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
           현재 평가금액 기준 {won(remainingToGoal)} 남았어요
         </p>
       </div>
+
+      <InvestmentCharacterCard result={result} />
 
       <div className="mt-7 rounded-2xl border p-3 sm:p-5">
         <div className="mb-3 flex flex-wrap gap-4 text-xs font-semibold">
