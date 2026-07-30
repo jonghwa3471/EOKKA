@@ -29,8 +29,9 @@ const tiers = [
   {
     maxMonth: 18,
     tier: "챌린저",
-    image: "/images/speed-tiers/challenger.webp",
-    name: "빛보다 앞선 우주선",
+    speed: "28,000km",
+    image: "/images/speed-tiers/challenger-fantasy-v2.webp",
+    name: "궤도를 돌파하는 로켓",
     rank: 9,
     frame:
       "from-cyan-200 via-fuchsia-400 to-amber-200 shadow-[0_0_55px_rgba(103,232,249,0.5)]",
@@ -45,8 +46,9 @@ const tiers = [
   {
     maxMonth: 36,
     tier: "그랜드 마스터",
-    image: "/images/speed-tiers/grand-master.webp",
-    name: "궤도를 돌파하는 로켓",
+    speed: "2,400km",
+    image: "/images/speed-tiers/grand-master-fantasy-v2.webp",
+    name: "음속을 가르는 전투기",
     rank: 8,
     frame:
       "from-red-300 via-amber-300 to-fuchsia-400 shadow-[0_0_45px_rgba(251,113,133,0.45)]",
@@ -61,8 +63,9 @@ const tiers = [
   {
     maxMonth: 60,
     tier: "마스터",
-    image: "/images/speed-tiers/master.webp",
-    name: "대기를 가르는 제트기",
+    speed: "900km",
+    image: "/images/speed-tiers/master-fantasy-v2.webp",
+    name: "구름 위를 나는 여객기",
     rank: 7,
     frame:
       "from-violet-300 via-indigo-500 to-sky-300 shadow-[0_0_38px_rgba(139,92,246,0.4)]",
@@ -77,8 +80,9 @@ const tiers = [
   {
     maxMonth: 84,
     tier: "다이아",
-    image: "/images/speed-tiers/diamond.webp",
-    name: "구름을 넘는 초음속 비행기",
+    speed: "300km",
+    image: "/images/speed-tiers/diamond-fantasy-v2.webp",
+    name: "한계를 질주하는 슈퍼카",
     rank: 6,
     frame:
       "from-white via-sky-300 to-violet-200 shadow-[0_0_32px_rgba(186,230,253,0.38)]",
@@ -93,8 +97,9 @@ const tiers = [
   {
     maxMonth: 108,
     tier: "에메랄드",
-    image: "/images/speed-tiers/emerald.webp",
-    name: "초록빛 하이퍼카",
+    speed: "110km",
+    image: "/images/speed-tiers/emerald-fantasy-v2.webp",
+    name: "초원을 가르는 치타",
     rank: 5,
     frame:
       "from-emerald-200 via-emerald-500 to-teal-200 shadow-[0_0_27px_rgba(16,185,129,0.35)]",
@@ -109,8 +114,9 @@ const tiers = [
   {
     maxMonth: 144,
     tier: "플래티넘",
-    image: "/images/speed-tiers/platinum.webp",
-    name: "도시를 가르는 자동차",
+    speed: "70km",
+    image: "/images/speed-tiers/platinum-fantasy-v2.webp",
+    name: "전속력으로 달리는 경주마",
     rank: 4,
     frame:
       "from-slate-100 via-cyan-300 to-slate-300 shadow-[0_0_22px_rgba(148,163,184,0.3)]",
@@ -125,7 +131,8 @@ const tiers = [
   {
     maxMonth: 216,
     tier: "골드",
-    image: "/images/speed-tiers/gold.webp",
+    speed: "50km",
+    image: "/images/speed-tiers/gold-fantasy-v2.webp",
     name: "황금 궤도의 증기기관차",
     rank: 3,
     frame: "from-yellow-200 via-amber-500 to-yellow-700 shadow-xl",
@@ -140,8 +147,9 @@ const tiers = [
   {
     maxMonth: 288,
     tier: "실버",
-    image: "/images/speed-tiers/silver.webp",
-    name: "왕도를 달리는 중세 마차",
+    speed: "20km",
+    image: "/images/speed-tiers/silver-fantasy-v2.webp",
+    name: "바람을 타는 자전거",
     rank: 2,
     frame: "from-slate-200 via-slate-400 to-slate-600 shadow-lg",
     surface: "from-zinc-950 via-slate-800 to-zinc-950",
@@ -155,8 +163,9 @@ const tiers = [
   {
     maxMonth: 360,
     tier: "브론즈",
-    image: "/images/speed-tiers/bronze.webp",
-    name: "문명의 첫 수레",
+    speed: "6km",
+    image: "/images/speed-tiers/bronze-fantasy-v2.webp",
+    name: "소가 끄는 나무 수레",
     rank: 1,
     frame: "from-amber-900 via-orange-400 to-stone-700 shadow-md",
     surface: "from-stone-950 via-stone-900 to-zinc-950",
@@ -170,7 +179,8 @@ const tiers = [
   {
     maxMonth: Number.POSITIVE_INFINITY,
     tier: "아이언",
-    image: "/images/speed-tiers/iron.webp",
+    speed: "4km",
+    image: "/images/speed-tiers/iron-fantasy-v2.webp",
     name: "맨발의 개척자",
     rank: 0,
     frame: "from-zinc-700 via-zinc-500 to-stone-800 shadow-sm",
@@ -186,42 +196,6 @@ const tiers = [
 
 type Tier = (typeof tiers)[number];
 
-function stableNumber(result: AnalysisResult, scenario: Scenario) {
-  const value = `${result.holdings.map((holding) => holding.ticker).join("-")}:${result.goalAmount}:${scenario.key}`;
-  return [...value].reduce(
-    (sum, character) => sum + character.charCodeAt(0),
-    0,
-  );
-}
-
-function duration(month: number | null) {
-  if (month === null) return "30년 내 미도달";
-  if (month === 0) return "현재 목표 달성";
-  const years = Math.floor(month / 12);
-  const months = month % 12;
-  return [years > 0 ? `${years}년` : "", months > 0 ? `${months}개월` : ""]
-    .filter(Boolean)
-    .join(" ");
-}
-
-function eventCount(count: number) {
-  if (count === 1) return "한 번";
-  if (count === 2) return "두 번";
-  if (count === 3) return "세 번";
-  return `${count}번`;
-}
-
-function timeMetaphor(month: number | null, goal: string) {
-  if (month === null)
-    return `아직 ${goal}까지는 긴 여행이에요. 경로를 다시 설계해 볼까요?`;
-  if (month === 0)
-    return `이미 ${goal}에 도착했어요. 다음 목적지를 골라보세요!`;
-  if (month <= 12) return `사계절을 한 번 지나면 ${goal}에 도착해요`;
-  if (month <= 30)
-    return `봄을 ${eventCount(Math.max(2, Math.round(month / 12)))} 더 맞이할 때쯤 ${goal}에 도착해요`;
-  return `올림픽을 ${eventCount(Math.max(1, Math.round(month / 48)))} 더 볼 때쯤 ${goal}에 도착해요`;
-}
-
 const goalLabel = (value: number) =>
   `${(value / 100_000_000).toLocaleString("ko-KR")}억`;
 
@@ -230,11 +204,54 @@ function tierFor(month: number | null) {
   return tiers.find((tier) => comparableMonth <= tier.maxMonth)!;
 }
 
+function arrivalHeadline({
+  asOf,
+  goalMonth,
+  target,
+}: {
+  asOf: string;
+  goalMonth: number | null;
+  target: string;
+}) {
+  if (goalMonth === null || !Number.isFinite(goalMonth))
+    return `현재 흐름으로는 ${target} 도착 시점을 잡기 어려워요`;
+  if (goalMonth <= 0) return `이미 ${target}에 도착했어요`;
+
+  const roundedMonth = Math.max(1, Math.ceil(goalMonth));
+  const years = Math.floor(roundedMonth / 12);
+  const months = roundedMonth % 12;
+  const duration = [
+    years > 0 ? `${years}년` : "",
+    months > 0 ? `${months}개월` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const [baseYear, baseMonth] = asOf.split("-").map(Number);
+  const safeYear = Number.isFinite(baseYear)
+    ? baseYear
+    : new Date().getFullYear();
+  const safeMonth = Number.isFinite(baseMonth)
+    ? Math.min(12, Math.max(1, baseMonth))
+    : 1;
+  const arrivalMonthIndex = safeYear * 12 + (safeMonth - 1) + roundedMonth;
+  const arrivalYear = Math.floor(arrivalMonthIndex / 12);
+  const arrivalMonth = (arrivalMonthIndex % 12) + 1;
+  const season =
+    arrivalMonth >= 3 && arrivalMonth <= 5
+      ? "봄"
+      : arrivalMonth >= 6 && arrivalMonth <= 8
+        ? "여름"
+        : arrivalMonth >= 9 && arrivalMonth <= 11
+          ? "가을"
+          : "겨울";
+
+  return `약 ${duration} 뒤, ${arrivalYear}년 ${season}쯤 ${target}에 도착해요`;
+}
+
 function TierCard({
   tier,
   scenario,
   headline,
-  metaphor,
   progress,
   target,
   expanded = false,
@@ -242,7 +259,6 @@ function TierCard({
   tier: Tier;
   scenario: Scenario;
   headline: string;
-  metaphor: string;
   progress: number;
   target: string;
   expanded?: boolean;
@@ -329,7 +345,14 @@ function TierCard({
             className="aspect-square w-full object-cover"
           />
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent px-4 pt-16 pb-4">
-            <p className="text-sm leading-5 font-bold">{headline}</p>
+            <p className="text-[11px] leading-4 font-medium text-white/55">
+              당신의 자산 증가 속도를
+              <br />
+              이동 수단에 비유하자면...
+            </p>
+            <strong className="mt-1 block text-2xl font-black tracking-tight text-white">
+              시속 {tier.speed}
+            </strong>
           </div>
           {tier.rank >= 6 && (
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_25%_20%,white_0_1px,transparent_2px),radial-gradient(circle_at_75%_35%,white_0_1px,transparent_2px),radial-gradient(circle_at_55%_72%,white_0_1px,transparent_2px)] bg-[length:70px_70px,95px_95px,120px_120px] opacity-60" />
@@ -344,11 +367,8 @@ function TierCard({
               TIME TO GOAL
             </p>
             <strong className="mt-1 block text-lg leading-snug font-black sm:text-xl">
-              {metaphor}
+              {headline}
             </strong>
-            <p className="mt-2 text-xs font-semibold text-white/55">
-              {scenario.label} 시나리오 · {duration(scenario.goalMonth)}
-            </p>
           </div>
 
           <div className="mt-4">
@@ -395,14 +415,11 @@ export function InvestmentCharacterCard({
     result.scenarios.find((item) => item.key === selectedKey) ??
     result.scenarios[1];
   const tier = tierFor(scenario.goalMonth);
-  const headline =
-    tier.headlines[stableNumber(result, scenario) % tier.headlines.length];
   const target = goalLabel(result.goalAmount);
   const progress = Math.min(
     100,
     Math.max(0, (result.currentValue / result.goalAmount) * 100),
   );
-  const metaphor = timeMetaphor(scenario.goalMonth, target);
   const scenarioLabels = useMemo(
     () =>
       Object.fromEntries(
@@ -425,7 +442,17 @@ export function InvestmentCharacterCard({
     };
   }, [detailOpen]);
 
-  const cardProps = { tier, scenario, headline, metaphor, progress, target };
+  const cardProps = {
+    tier,
+    scenario,
+    headline: arrivalHeadline({
+      asOf: result.asOf,
+      goalMonth: scenario.goalMonth,
+      target,
+    }),
+    progress,
+    target,
+  };
 
   return (
     <div className="mt-5 overflow-hidden rounded-3xl border">
