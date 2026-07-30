@@ -1,5 +1,6 @@
-import type { AnalysisResult } from "../analysis.types";
 import type { MouseEvent as ReactMouseEvent } from "react";
+
+import type { AnalysisResult } from "../analysis.types";
 
 import { useEffect, useMemo, useState } from "react";
 
@@ -21,9 +22,12 @@ const scenarioTone: Record<ScenarioKey, { active: string; accent: string }> = {
   },
 };
 
+// Fixed launch thresholds intentionally keep the broad 12–30 year range in
+// Bronze/Silver/Gold and narrow each higher tier. Replace these with observed
+// user percentiles once the service has enough anonymized analysis data.
 const tiers = [
   {
-    maxMonth: 24,
+    maxMonth: 18,
     tier: "챌린저",
     image: "/images/speed-tiers/challenger.webp",
     name: "빛보다 앞선 우주선",
@@ -39,7 +43,7 @@ const tiers = [
     ],
   },
   {
-    maxMonth: 48,
+    maxMonth: 36,
     tier: "그랜드 마스터",
     image: "/images/speed-tiers/grand-master.webp",
     name: "궤도를 돌파하는 로켓",
@@ -55,7 +59,7 @@ const tiers = [
     ],
   },
   {
-    maxMonth: 72,
+    maxMonth: 60,
     tier: "마스터",
     image: "/images/speed-tiers/master.webp",
     name: "대기를 가르는 제트기",
@@ -71,7 +75,7 @@ const tiers = [
     ],
   },
   {
-    maxMonth: 108,
+    maxMonth: 84,
     tier: "다이아",
     image: "/images/speed-tiers/diamond.webp",
     name: "구름을 넘는 초음속 비행기",
@@ -87,7 +91,7 @@ const tiers = [
     ],
   },
   {
-    maxMonth: 144,
+    maxMonth: 108,
     tier: "에메랄드",
     image: "/images/speed-tiers/emerald.webp",
     name: "초록빛 하이퍼카",
@@ -103,7 +107,7 @@ const tiers = [
     ],
   },
   {
-    maxMonth: 180,
+    maxMonth: 144,
     tier: "플래티넘",
     image: "/images/speed-tiers/platinum.webp",
     name: "도시를 가르는 자동차",
@@ -119,7 +123,7 @@ const tiers = [
     ],
   },
   {
-    maxMonth: 240,
+    maxMonth: 216,
     tier: "골드",
     image: "/images/speed-tiers/gold.webp",
     name: "황금 궤도의 증기기관차",
@@ -134,7 +138,7 @@ const tiers = [
     ],
   },
   {
-    maxMonth: 300,
+    maxMonth: 288,
     tier: "실버",
     image: "/images/speed-tiers/silver.webp",
     name: "왕도를 달리는 중세 마차",
@@ -184,7 +188,10 @@ type Tier = (typeof tiers)[number];
 
 function stableNumber(result: AnalysisResult, scenario: Scenario) {
   const value = `${result.holdings.map((holding) => holding.ticker).join("-")}:${result.goalAmount}:${scenario.key}`;
-  return [...value].reduce((sum, character) => sum + character.charCodeAt(0), 0);
+  return [...value].reduce(
+    (sum, character) => sum + character.charCodeAt(0),
+    0,
+  );
 }
 
 function duration(month: number | null) {
@@ -192,10 +199,7 @@ function duration(month: number | null) {
   if (month === 0) return "현재 목표 달성";
   const years = Math.floor(month / 12);
   const months = month % 12;
-  return [
-    years > 0 ? `${years}년` : "",
-    months > 0 ? `${months}개월` : "",
-  ]
+  return [years > 0 ? `${years}년` : "", months > 0 ? `${months}개월` : ""]
     .filter(Boolean)
     .join(" ");
 }
@@ -210,7 +214,8 @@ function eventCount(count: number) {
 function timeMetaphor(month: number | null, goal: string) {
   if (month === null)
     return `아직 ${goal}까지는 긴 여행이에요. 경로를 다시 설계해 볼까요?`;
-  if (month === 0) return `이미 ${goal}에 도착했어요. 다음 목적지를 골라보세요!`;
+  if (month === 0)
+    return `이미 ${goal}에 도착했어요. 다음 목적지를 골라보세요!`;
   if (month <= 12) return `사계절을 한 번 지나면 ${goal}에 도착해요`;
   if (month <= 30)
     return `봄을 ${eventCount(Math.max(2, Math.round(month / 12)))} 더 맞이할 때쯤 ${goal}에 도착해요`;
@@ -283,7 +288,7 @@ function TierCard({
         )}
         {tier.rank >= 7 && (
           <>
-            <div className="pointer-events-none absolute -left-20 top-1/4 z-20 size-48 animate-pulse rounded-full bg-cyan-300/20 blur-3xl" />
+            <div className="pointer-events-none absolute top-1/4 -left-20 z-20 size-48 animate-pulse rounded-full bg-cyan-300/20 blur-3xl" />
             <div className="pointer-events-none absolute -right-20 bottom-1/4 z-20 size-48 animate-pulse rounded-full bg-fuchsia-300/20 blur-3xl" />
           </>
         )}
@@ -297,7 +302,7 @@ function TierCard({
           />
         )}
 
-        <header className="relative z-10 flex items-start justify-between gap-3 px-2 pb-3 pt-1">
+        <header className="relative z-10 flex items-start justify-between gap-3 px-2 pt-1 pb-3">
           <div>
             <p
               className={`text-[10px] font-black tracking-[0.22em] ${scenarioTone[scenario.key].accent}`}
@@ -323,15 +328,15 @@ function TierCard({
             height={900}
             className="aspect-square w-full object-cover"
           />
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent px-4 pb-4 pt-16">
-            <p className="text-sm font-bold leading-5">{headline}</p>
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent px-4 pt-16 pb-4">
+            <p className="text-sm leading-5 font-bold">{headline}</p>
           </div>
           {tier.rank >= 6 && (
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_25%_20%,white_0_1px,transparent_2px),radial-gradient(circle_at_75%_35%,white_0_1px,transparent_2px),radial-gradient(circle_at_55%_72%,white_0_1px,transparent_2px)] bg-[length:70px_70px,95px_95px,120px_120px] opacity-60" />
           )}
         </div>
 
-        <div className="relative z-10 px-2 pb-2 pt-4">
+        <div className="relative z-10 px-2 pt-4 pb-2">
           <div
             className={`rounded-xl border px-4 py-4 ${tier.rank <= 1 ? "border-white/10 bg-black/20" : "border-white/15 bg-white/[0.07] backdrop-blur-sm"}`}
           >
@@ -479,7 +484,7 @@ export function InvestmentCharacterCard({
             <button
               type="button"
               onClick={() => setDetailOpen(false)}
-              className="absolute right-0 top-0 z-50 rounded-full border border-white/20 bg-black/60 px-4 py-2 text-sm font-bold text-white backdrop-blur hover:bg-white/15"
+              className="absolute top-0 right-0 z-50 rounded-full border border-white/20 bg-black/60 px-4 py-2 text-sm font-bold text-white backdrop-blur hover:bg-white/15"
             >
               닫기
             </button>
