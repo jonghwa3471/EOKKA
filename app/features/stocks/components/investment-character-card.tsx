@@ -1,8 +1,17 @@
-import type { MouseEvent as ReactMouseEvent } from "react";
+import type { MouseEvent as ReactMouseEvent, Ref } from "react";
 
 import type { AnalysisResult } from "../analysis.types";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  CheckIcon,
+  DownloadIcon,
+  LinkIcon,
+  LoaderCircleIcon,
+  Share2Icon,
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+import { Button } from "~/core/components/ui/button";
 
 type Scenario = AnalysisResult["scenarios"][number];
 type ScenarioKey = Scenario["key"];
@@ -255,13 +264,15 @@ function TierCard({
   progress,
   target,
   expanded = false,
+  cardRef,
 }: {
   tier: Tier;
-  scenario: Scenario;
+  scenario: Pick<Scenario, "key" | "label">;
   headline: string;
   progress: number;
   target: string;
   expanded?: boolean;
+  cardRef?: Ref<HTMLElement>;
 }) {
   const [tilt, setTilt] = useState({ x: 0, y: 0, glareX: 50, glareY: 50 });
 
@@ -280,11 +291,12 @@ function TierCard({
 
   return (
     <article
+      ref={cardRef}
       onMouseMove={moveCard}
       onMouseLeave={() =>
         expanded && setTilt({ x: 0, y: 0, glareX: 50, glareY: 50 })
       }
-      className={`group relative mx-auto w-full rounded-[28px] bg-gradient-to-br p-[5px] transition-transform duration-200 ${expanded ? "max-w-[510px]" : "max-w-[420px]"} ${tier.frame}`}
+      className={`group relative mx-auto w-full rounded-[28px] bg-gradient-to-br p-[5px] text-left transition-transform duration-200 ${expanded ? "max-w-[510px]" : "max-w-[420px]"} ${tier.frame}`}
       style={{
         transform: expanded
           ? `perspective(1100px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg) scale(0.96)`
@@ -372,11 +384,13 @@ function TierCard({
           </div>
 
           <div className="mt-4">
-            <div className="flex items-center justify-between text-[11px] font-bold text-white/70">
-              <span>목표 달성률 {progress.toFixed(1)}%</span>
-              <span>{target}</span>
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 text-[11px] leading-none font-bold text-white/70">
+              <span className="whitespace-nowrap">
+                목표 달성률 {progress.toFixed(1)}%
+              </span>
+              <span className="shrink-0 whitespace-nowrap">{target}</span>
             </div>
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
               <div
                 className={`h-full rounded-full transition-[width] duration-500 ${
                   tier.rank >= 7
@@ -404,6 +418,35 @@ function TierCard({
   );
 }
 
+export type SharedInvestmentCardPayload = {
+  tier: Tier["tier"];
+  scenarioKey: ScenarioKey;
+  scenarioLabel: string;
+  headline: string;
+  progress: number;
+  target: string;
+};
+
+export function SharedInvestmentCard({
+  payload,
+}: {
+  payload: SharedInvestmentCardPayload;
+}) {
+  const tier =
+    tiers.find((item) => item.tier === payload.tier) ?? tiers.at(-1)!;
+
+  return (
+    <TierCard
+      tier={tier}
+      scenario={{ key: payload.scenarioKey, label: payload.scenarioLabel }}
+      headline={payload.headline}
+      progress={Math.min(100, Math.max(0, payload.progress))}
+      target={payload.target}
+      expanded
+    />
+  );
+}
+
 export function InvestmentCharacterCard({
   result,
 }: {
@@ -411,6 +454,9 @@ export function InvestmentCharacterCard({
 }) {
   const [selectedKey, setSelectedKey] = useState<ScenarioKey>("base");
   const [detailOpen, setDetailOpen] = useState(false);
+  const [busy, setBusy] = useState<"download" | "share" | null>(null);
+  const [feedback, setFeedback] = useState("");
+  const shareCardRef = useRef<HTMLElement>(null);
   const scenario =
     result.scenarios.find((item) => item.key === selectedKey) ??
     result.scenarios[1];
@@ -454,6 +500,113 @@ export function InvestmentCharacterCard({
     target,
   };
 
+  function shareUrl() {
+    const url = new URL("/share/card", window.location.origin);
+    url.searchParams.set("tier", tier.tier);
+    url.searchParams.set("scenario", scenario.key);
+    url.searchParams.set("label", scenario.label);
+    url.searchParams.set("headline", cardProps.headline);
+    url.searchParams.set("progress", progress.toFixed(1));
+    url.searchParams.set("target", target);
+    url.searchParams.set("utm_source", "share_card");
+    url.searchParams.set("utm_medium", "referral");
+    return url.toString();
+  }
+
+  async function renderCard() {
+    const card = shareCardRef.current;
+    if (!card) throw new Error("공유할 카드를 찾을 수 없습니다.");
+
+    await document.fonts.ready;
+    await Promise.all(
+      Array.from(card.querySelectorAll("img")).map(async (image) => {
+        if (image.complete) {
+          await image.decode().catch(() => undefined);
+          return;
+        }
+        await new Promise<void>((resolve) => {
+          image.addEventListener("load", () => resolve(), { once: true });
+          image.addEventListener("error", () => resolve(), { once: true });
+        });
+      }),
+    );
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+
+    const rect = card.getBoundingClientRect();
+    const width = Math.ceil(Math.max(card.scrollWidth, rect.width));
+    const height = Math.ceil(Math.max(card.scrollHeight, rect.height));
+    const { toPng } = await import("html-to-image");
+    return toPng(card, {
+      cacheBust: true,
+      width,
+      height,
+      canvasWidth: width * 2,
+      canvasHeight: height * 2,
+      pixelRatio: 1,
+      backgroundColor: "#020617",
+      style: {
+        width: `${width}px`,
+        maxWidth: "none",
+        margin: "0",
+        transform: "none",
+        transformOrigin: "top left",
+      },
+    });
+  }
+
+  function saveImage(dataUrl: string) {
+    const link = document.createElement("a");
+    link.download = `eokka-${tier.tier}-${Date.now()}.png`;
+    link.href = dataUrl;
+    link.click();
+  }
+
+  async function downloadCard() {
+    setBusy("download");
+    setFeedback("");
+    try {
+      saveImage(await renderCard());
+      setFeedback("현재 티어 카드를 이미지로 저장했어요.");
+    } catch {
+      setFeedback("이미지 생성에 실패했어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function copyTestLink() {
+    try {
+      await navigator.clipboard.writeText(shareUrl());
+      setFeedback("테스트 링크를 복사했어요.");
+    } catch {
+      setFeedback("링크를 복사하지 못했어요.");
+    }
+  }
+
+  async function shareCard() {
+    setBusy("share");
+    setFeedback("");
+    try {
+      const url = shareUrl();
+      const text = `내 목표 도달 속도는 ${tier.tier} 티어예요. 카드를 직접 움직여 보고 나의 속도도 테스트해 보세요.`;
+
+      if (navigator.share) {
+        await navigator.share({ title: "EOKKA 목표 도달 속도", text, url });
+        setFeedback("움직이는 카드 링크를 공유했어요.");
+      } else {
+        await navigator.clipboard.writeText(`${text}\n${url}`);
+        setFeedback("공유 문구와 카드 링크를 복사했어요.");
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setFeedback("공유하지 못했어요. 링크 복사를 이용해 주세요.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div className="mt-5 overflow-hidden rounded-3xl border">
       <div className="border-b px-5 py-5 sm:px-7">
@@ -486,7 +639,7 @@ export function InvestmentCharacterCard({
           className="mx-auto block w-full rounded-[28px] text-left outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-4"
           aria-label={`${tier.tier} 티어 카드 자세히 보기`}
         >
-          <TierCard {...cardProps} />
+          <TierCard {...cardProps} cardRef={shareCardRef} />
         </button>
         <p className="text-muted-foreground mt-4 text-center text-xs font-semibold">
           카드를 클릭하면 크게 볼 수 있어요
@@ -495,6 +648,42 @@ export function InvestmentCharacterCard({
           티어는 투자 실력이 아니라 {scenarioLabels[selectedKey]} 시나리오의
           목표 도달 예상 속도를 표현해요.
         </p>
+        <div className="mx-auto mt-5 grid max-w-[420px] gap-2 sm:grid-cols-3">
+          <Button type="button" variant="outline" onClick={copyTestLink}>
+            <LinkIcon /> 링크 복사
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={downloadCard}
+            disabled={busy !== null}
+          >
+            {busy === "download" ? (
+              <LoaderCircleIcon className="animate-spin" />
+            ) : (
+              <DownloadIcon />
+            )}
+            이미지 저장
+          </Button>
+          <Button
+            type="button"
+            onClick={shareCard}
+            disabled={busy !== null}
+            className="bg-emerald-500 text-white hover:bg-emerald-600"
+          >
+            {busy === "share" ? (
+              <LoaderCircleIcon className="animate-spin" />
+            ) : (
+              <Share2Icon />
+            )}
+            공유하기
+          </Button>
+        </div>
+        {feedback && (
+          <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+            <CheckIcon className="size-3.5" /> {feedback}
+          </p>
+        )}
       </div>
 
       {detailOpen && (
@@ -502,23 +691,30 @@ export function InvestmentCharacterCard({
           role="dialog"
           aria-modal="true"
           aria-label={`${tier.tier} 티어 카드 상세 보기`}
-          className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/85 px-4 py-8 backdrop-blur-md"
+          className="fixed inset-0 z-[100] overflow-y-auto bg-black/85 px-4 backdrop-blur-md"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) setDetailOpen(false);
           }}
         >
-          <div className="relative w-full max-w-[560px] py-10">
-            <button
-              type="button"
-              onClick={() => setDetailOpen(false)}
-              className="absolute top-0 right-0 z-50 rounded-full border border-white/20 bg-black/60 px-4 py-2 text-sm font-bold text-white backdrop-blur hover:bg-white/15"
-            >
-              닫기
-            </button>
-            <p className="mb-4 text-center text-xs font-bold text-white/60">
-              마우스를 움직여 카드의 홀로그램 효과를 확인해 보세요
-            </p>
-            <TierCard {...cardProps} expanded />
+          <div
+            className="flex min-h-full items-center justify-center py-16"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setDetailOpen(false);
+            }}
+          >
+            <div className="relative w-full max-w-[560px]">
+              <button
+                type="button"
+                onClick={() => setDetailOpen(false)}
+                className="absolute -top-12 right-0 z-[110] rounded-full border border-white/25 bg-black/80 px-4 py-2 text-sm font-bold text-white shadow-lg backdrop-blur hover:bg-white/15 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
+              >
+                닫기
+              </button>
+              <p className="absolute -top-9 right-20 left-20 hidden text-center text-xs font-bold whitespace-nowrap text-white/60 sm:block">
+                마우스를 움직여 카드의 홀로그램 효과를 확인해 보세요
+              </p>
+              <TierCard {...cardProps} expanded />
+            </div>
           </div>
         </div>
       )}

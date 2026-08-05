@@ -30,13 +30,23 @@ export interface AnalysisResult {
     percentile: number;
     goalMonth: number | null;
     valueAt10Years: number;
+    valueAt30Years: number;
+    valueAt50Years: number;
   }>;
   chart: Array<{
     month: number;
     conservative: number;
     base: number;
     optimistic: number;
+    market: number | null;
   }>;
+  benchmark: {
+    label: string;
+    components: string[];
+    goalMonth: number | null;
+    valueAt10Years: number;
+    cagr: number | null;
+  } | null;
   probability: { tenYears: number; twentyYears: number; thirtyYears: number };
   riskWarnings: string[];
   summary: string[];

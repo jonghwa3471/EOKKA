@@ -20,6 +20,7 @@ const colors = {
   conservative: "#f59e0b",
   base: "#10b981",
   optimistic: "#0ea5e9",
+  market: "#a78bfa",
 };
 const won = (value: number) => `${Math.round(value).toLocaleString("ko-KR")}원`;
 const price = (value: number, currency: "KRW" | "USD") =>
@@ -39,6 +40,14 @@ const compactWon = (value: number) => {
 };
 const percent = (value: number | null) =>
   value === null ? "데이터 부족" : `${value.toFixed(1)}%`;
+const projectionAnnualRate = (
+  futureValue: number,
+  currentValue: number,
+  years: number,
+) =>
+  currentValue > 0 && futureValue > 0
+    ? ((futureValue / currentValue) ** (1 / years) - 1) * 100
+    : -100;
 const goalLabel = (value: number) =>
   `${(value / 100_000_000).toLocaleString("ko-KR")}억`;
 
@@ -68,6 +77,65 @@ function goalDurationLabel(month: number | null) {
     .filter(Boolean)
     .join(" ");
   return `약 ${period}`;
+}
+
+type MarketComparisonResult = {
+  message: string;
+  tone: string;
+  period?: string;
+  direction?: "빠르게" | "느리게";
+};
+
+function marketComparison(
+  baseMonth: number | null,
+  marketMonth: number | null,
+  marketLabel: string,
+): MarketComparisonResult {
+  if (baseMonth === null && marketMonth === null)
+    return {
+      message: `내 평균 시나리오와 ${marketLabel} 기준 모두 30년 안에 목표 도달이 어려워요.`,
+      tone: "text-muted-foreground",
+    };
+  if (baseMonth !== null && marketMonth === null)
+    return {
+      message: `내 평균 시나리오는 목표에 도달하지만 ${marketLabel} 기준은 30년 안에 도달하지 못해요.`,
+      tone: "text-emerald-600 dark:text-emerald-400",
+    };
+  if (baseMonth === null && marketMonth !== null)
+    return {
+      message: `${marketLabel} 기준은 목표에 도달하지만 내 평균 시나리오는 30년 안에 도달하지 못해요.`,
+      tone: "text-amber-600 dark:text-amber-400",
+    };
+
+  const difference = marketMonth! - baseMonth!;
+  if (Math.abs(difference) <= 1)
+    return {
+      message: `내 평균 시나리오와 ${marketLabel} 기준의 목표 도달 속도가 비슷해요.`,
+      tone: "text-muted-foreground",
+    };
+
+  const months = Math.abs(difference);
+  const years = Math.floor(months / 12);
+  const remainingMonths = months % 12;
+  const period = [
+    years > 0 ? `${years}년` : "",
+    remainingMonths > 0 ? `${remainingMonths}개월` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return difference > 0
+    ? {
+        message: `내 평균 시나리오가 ${marketLabel} 기준보다 약 ${period} 빠르게 목표에 도착해요.`,
+        tone: "text-emerald-600 dark:text-emerald-400",
+        period,
+        direction: "빠르게",
+      }
+    : {
+        message: `내 평균 시나리오가 ${marketLabel} 기준보다 약 ${period} 늦게 목표에 도착해요.`,
+        tone: "text-amber-600 dark:text-amber-400",
+        period,
+        direction: "느리게",
+      };
 }
 
 function AnalysisMethodDialog({ result }: { result: AnalysisResult }) {
@@ -114,14 +182,24 @@ function AnalysisMethodDialog({ result }: { result: AnalysisResult }) {
           <section className="rounded-xl border p-4">
             <h3 className="font-bold">3. 미래 경로 5,000개 생성</h3>
             <p className="text-muted-foreground mt-1">
-              과거 월별 흐름을 6개월 단위 블록으로 다시 조합해 최대 30년까지
+              과거 월별 흐름을 6개월 단위 블록으로 다시 조합해 최대 50년까지
               5,000개의 미래 자산 경로를 만듭니다. 월 추가 투자금은 포함하지
               않으며, 현재 보유 주식을 그대로 유지한다고 가정합니다.
             </p>
           </section>
 
           <section className="rounded-xl border p-4">
-            <h3 className="font-bold">4. 세 가지 시나리오와 도달 시점</h3>
+            <h3 className="font-bold">4. 30·50년 장기 금액 안정화</h3>
+            <p className="text-muted-foreground mt-1">
+              10·30·50년 금액은 모두 현재 평가금액에서 출발한 같은 5,000개
+              경로의 해당 시점 값입니다. 과거 월별 변동성은 유지하되 평균
+              수익률의 영향은 시간이 갈수록 낮추고, 국내·미국 시장의 장기 기대
+              수준으로 점차 수렴시켜 과도한 복리 확대를 완화합니다.
+            </p>
+          </section>
+
+          <section className="rounded-xl border p-4">
+            <h3 className="font-bold">5. 세 가지 시나리오와 도달 시점</h3>
             <dl className="mt-3 grid gap-2 sm:grid-cols-3">
               {[
                 ["보수적", "P20", "경로 중 하위 20% 지점"],
@@ -146,12 +224,23 @@ function AnalysisMethodDialog({ result }: { result: AnalysisResult }) {
           </section>
 
           <section className="rounded-xl border p-4">
-            <h3 className="font-bold">5. 목표 달성 확률</h3>
+            <h3 className="font-bold">6. 목표 달성 확률</h3>
             <p className="text-muted-foreground mt-1">
               5,000개 경로 중 {goalLabel(result.goalAmount)}을 10년·20년·30년
               안에 한 번이라도 넘은 경로의 비율입니다.
             </p>
           </section>
+
+          {result.benchmark && (
+            <section className="rounded-xl border p-4">
+              <h3 className="font-bold">7. 시장 기준선</h3>
+              <p className="text-muted-foreground mt-1">
+                현재 평가금액에서 출발해 {result.benchmark.label}의 과거 월별
+                흐름을 같은 방식으로 시뮬레이션한 중앙값입니다. 내 평균
+                시나리오와 시장 기준의 목표 도달 속도를 비교할 수 있어요.
+              </p>
+            </section>
+          )}
 
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
             <h3 className="font-bold text-amber-700 dark:text-amber-300">
@@ -185,6 +274,11 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
   const finiteGoalMonths = result.scenarios.flatMap((scenario) =>
     scenario.goalMonth === null ? [] : [scenario.goalMonth],
   );
+  if (
+    result.benchmark?.goalMonth !== null &&
+    result.benchmark?.goalMonth !== undefined
+  )
+    finiteGoalMonths.push(result.benchmark.goalMonth);
   const endMonth = Math.min(
     360,
     finiteGoalMonths.length > 0 ? Math.max(...finiteGoalMonths) + 12 : 360,
@@ -207,8 +301,32 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
       points.push({ month: goalMonth, value: goal });
     return points.sort((a, b) => a.month - b.month);
   };
+  const marketPoints = () => {
+    if (!result.benchmark) return [];
+    const points = visibleChart
+      .filter(
+        (point) =>
+          point.market !== null &&
+          (result.benchmark!.goalMonth === null ||
+            point.month < result.benchmark!.goalMonth),
+      )
+      .map((point) => ({ month: point.month, value: point.market! }));
+    if (result.benchmark.goalMonth !== null)
+      points.push({ month: result.benchmark.goalMonth, value: goal });
+    return points.sort((a, b) => a.month - b.month);
+  };
   const valueAtMonth = (key: ScenarioKey, month: number) => {
     const points = scenarioPoints(key);
+    if (points.length === 0 || month > points.at(-1)!.month) return null;
+    const nextIndex = points.findIndex((point) => point.month >= month);
+    if (nextIndex <= 0) return points[0].value;
+    const previous = points[nextIndex - 1];
+    const next = points[nextIndex];
+    const ratio = (month - previous.month) / (next.month - previous.month);
+    return previous.value + (next.value - previous.value) * ratio;
+  };
+  const marketValueAtMonth = (month: number) => {
+    const points = marketPoints();
     if (points.length === 0 || month > points.at(-1)!.month) return null;
     const nextIndex = points.findIndex((point) => point.month >= month);
     if (nextIndex <= 0) return points[0].value;
@@ -231,6 +349,8 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
           const value = valueAtMonth(scenario.key, hoverMonth);
           return value === null ? [] : [{ scenario, value }];
         });
+  const marketTooltipValue =
+    hoverMonth === null ? null : marketValueAtMonth(hoverMonth);
 
   return (
     <div className="overflow-x-auto">
@@ -294,6 +414,19 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
             strokeLinejoin="round"
           />
         ))}
+        {result.benchmark && (
+          <polyline
+            points={marketPoints()
+              .map((point) => `${x(point.month)},${y(point.value)}`)
+              .join(" ")}
+            fill="none"
+            stroke={colors.market}
+            strokeWidth="3"
+            strokeDasharray="8 6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
         {result.scenarios.map(
           (scenario) =>
             scenario.goalMonth !== null && (
@@ -318,6 +451,28 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
               </g>
             ),
         )}
+        {result.benchmark?.goalMonth !== null &&
+          result.benchmark?.goalMonth !== undefined && (
+            <g>
+              <circle
+                cx={x(result.benchmark.goalMonth)}
+                cy={y(goal)}
+                r="6"
+                fill={colors.market}
+                stroke="white"
+                strokeWidth="2"
+              />
+              <text
+                x={x(result.benchmark.goalMonth)}
+                y={y(goal) - 12}
+                textAnchor="middle"
+                fill={colors.market}
+                className="text-[11px] font-bold"
+              >
+                시장
+              </text>
+            </g>
+          )}
         {Array.from(
           { length: Math.floor(endMonth / 60) + 1 },
           (_, index) => index * 5,
@@ -351,67 +506,327 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
           }}
           onMouseLeave={() => setHoverMonth(null)}
         />
-        {hoverMonth !== null && hoverX !== null && tooltipItems.length > 0 && (
-          <g pointerEvents="none">
-            <line
-              x1={hoverX}
-              x2={hoverX}
-              y1={top}
-              y2={height - bottom}
-              className="stroke-muted-foreground"
-              strokeDasharray="3 4"
-              opacity=".6"
-            />
-            {tooltipItems.map(({ scenario, value }) => (
-              <circle
-                key={scenario.key}
-                cx={hoverX}
-                cy={y(value)}
-                r="4"
-                fill={colors[scenario.key]}
-                stroke="white"
-                strokeWidth="1.5"
+        {hoverMonth !== null &&
+          hoverX !== null &&
+          (tooltipItems.length > 0 || marketTooltipValue !== null) && (
+            <g pointerEvents="none">
+              <line
+                x1={hoverX}
+                x2={hoverX}
+                y1={top}
+                y2={height - bottom}
+                className="stroke-muted-foreground"
+                strokeDasharray="3 4"
+                opacity=".6"
               />
-            ))}
-            <g
-              transform={`translate(${hoverX > width - 210 ? hoverX - 188 : hoverX + 12}, ${top + 8})`}
-            >
-              <rect
-                width="176"
-                height={34 + tooltipItems.length * 21}
-                rx="10"
-                className="fill-background stroke-border"
-                strokeWidth="1"
-              />
-              <text
-                x="12"
-                y="20"
-                className="fill-foreground text-[11px] font-bold"
-              >
-                {periodAt(hoverMonth)}
-              </text>
-              {tooltipItems.map(({ scenario, value }, index) => (
-                <text
+              {tooltipItems.map(({ scenario, value }) => (
+                <circle
                   key={scenario.key}
-                  x="12"
-                  y={42 + index * 21}
+                  cx={hoverX}
+                  cy={y(value)}
+                  r="4"
                   fill={colors[scenario.key]}
-                  className="text-[11px] font-semibold"
-                >
-                  {scenario.label} · {won(value)}
-                </text>
+                  stroke="white"
+                  strokeWidth="1.5"
+                />
               ))}
+              {marketTooltipValue !== null && (
+                <circle
+                  cx={hoverX}
+                  cy={y(marketTooltipValue)}
+                  r="4"
+                  fill={colors.market}
+                  stroke="white"
+                  strokeWidth="1.5"
+                />
+              )}
+              <g
+                transform={`translate(${hoverX > width - 210 ? hoverX - 188 : hoverX + 12}, ${top + 8})`}
+              >
+                <rect
+                  width="176"
+                  height={
+                    34 +
+                    (tooltipItems.length +
+                      (marketTooltipValue === null ? 0 : 1)) *
+                      21
+                  }
+                  rx="10"
+                  className="fill-background stroke-border"
+                  strokeWidth="1"
+                />
+                <text
+                  x="12"
+                  y="20"
+                  className="fill-foreground text-[11px] font-bold"
+                >
+                  {periodAt(hoverMonth)}
+                </text>
+                {tooltipItems.map(({ scenario, value }, index) => (
+                  <text
+                    key={scenario.key}
+                    x="12"
+                    y={42 + index * 21}
+                    fill={colors[scenario.key]}
+                    className="text-[11px] font-semibold"
+                  >
+                    {scenario.label} · {won(value)}
+                  </text>
+                ))}
+                {marketTooltipValue !== null && result.benchmark && (
+                  <text
+                    x="12"
+                    y={42 + tooltipItems.length * 21}
+                    fill={colors.market}
+                    className="text-[11px] font-semibold"
+                  >
+                    시장 기준 · {won(marketTooltipValue)}
+                  </text>
+                )}
+              </g>
             </g>
-          </g>
-        )}
+          )}
       </svg>
     </div>
+  );
+}
+
+function GoalMomentumCard({ result }: { result: AnalysisResult }) {
+  const baseGoalMonth = result.scenarios[1].goalMonth;
+  const marketGoalMonth = result.benchmark?.goalMonth ?? null;
+  const hasComparableGoals =
+    result.benchmark !== null &&
+    result.benchmark !== undefined &&
+    baseGoalMonth !== null &&
+    marketGoalMonth !== null;
+  const speedRatio = hasComparableGoals
+    ? baseGoalMonth === 0
+      ? Number.POSITIVE_INFINITY
+      : marketGoalMonth / baseGoalMonth
+    : null;
+  const speedScore =
+    speedRatio === null
+      ? null
+      : speedRatio === Number.POSITIVE_INFINITY
+        ? 100
+        : Math.round(Math.min(100, Math.max(0, (speedRatio - 0.5) * 100)));
+  const speedLabel =
+    speedScore === null
+      ? "비교 준비 중"
+      : speedScore >= 85
+        ? "매우 빠른 편"
+        : speedScore >= 60
+          ? "빠른 편"
+          : speedScore >= 40
+            ? "시장과 비슷한 편"
+            : speedScore >= 15
+              ? "느린 편"
+              : "매우 느린 편";
+  const isFaster = speedRatio !== null && speedRatio > 1.01;
+  const isSlower = speedRatio !== null && speedRatio < 0.99;
+  const lineColor = isFaster ? "#ef4444" : isSlower ? "#3b82f6" : "#10b981";
+  const endCandidates = [baseGoalMonth, marketGoalMonth].filter(
+    (month): month is number => month !== null,
+  );
+  const endMonth = Math.max(
+    12,
+    Math.min(
+      360,
+      endCandidates.length > 0 ? Math.max(...endCandidates) + 12 : 120,
+    ),
+  );
+  const width = 720;
+  const height = 210;
+  const left = 18;
+  const right = 18;
+  const top = 18;
+  const bottom = 28;
+  const x = (month: number) =>
+    left + (month / endMonth) * (width - left - right);
+  const y = (value: number) =>
+    top +
+    (1 - Math.min(1, Math.max(0, value / result.goalAmount))) *
+      (height - top - bottom);
+  const pathPoints = (key: "base" | "market", goalMonth: number | null) => {
+    const points = result.chart
+      .filter(
+        (point) =>
+          point.month <= endMonth &&
+          (goalMonth === null || point.month <= goalMonth) &&
+          (key === "base" || point.market !== null),
+      )
+      .map((point) => ({
+        month: point.month,
+        value: key === "base" ? point.base : point.market!,
+      }));
+    if (
+      goalMonth !== null &&
+      goalMonth <= endMonth &&
+      points.at(-1)?.month !== goalMonth
+    )
+      points.push({ month: goalMonth, value: result.goalAmount });
+    return points;
+  };
+  const basePoints = pathPoints("base", baseGoalMonth);
+  const marketPoints = result.benchmark
+    ? pathPoints("market", marketGoalMonth)
+    : [];
+  const polyline = (points: Array<{ month: number; value: number }>) =>
+    points.map((point) => `${x(point.month)},${y(point.value)}`).join(" ");
+  const baseArea =
+    basePoints.length > 0
+      ? `${x(basePoints[0].month)},${height - bottom} ${polyline(basePoints)} ${x(basePoints.at(-1)!.month)},${height - bottom}`
+      : "";
+  const comparisonText =
+    speedRatio === null
+      ? "시장 기준 데이터가 확보되면 상대 속도를 함께 보여드려요."
+      : speedRatio === Number.POSITIVE_INFINITY
+        ? "평균 시나리오 기준으로 이미 목표에 도착했어요."
+        : isFaster
+          ? `시장보다 약 ${speedRatio.toFixed(2)}배 빠르게 목표에 접근하고 있어요.`
+          : isSlower
+            ? `현재 목표 접근 속도는 시장의 약 ${speedRatio.toFixed(2)}배예요.`
+            : "시장과 거의 같은 속도로 목표에 접근하고 있어요.";
+
+  return (
+    <section className="from-background via-background to-muted/40 mt-5 overflow-hidden rounded-2xl border bg-gradient-to-br p-5 sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-muted-foreground text-xs font-bold tracking-[0.16em]">
+            GOAL MOMENTUM
+          </p>
+          <h3 className="mt-1 text-xl font-black">목표 접근 속도</h3>
+          <p className="text-muted-foreground mt-1 text-xs">
+            평균 시나리오와 시장 기준의 목표 도달 속도를 비교했어요.
+          </p>
+        </div>
+        <div className="sm:text-right">
+          <strong className="text-2xl font-black" style={{ color: lineColor }}>
+            {speedLabel}
+          </strong>
+          {speedScore !== null && (
+            <p className="text-muted-foreground mt-1 text-xs">
+              속도 점수 {speedScore}/100
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-xl border bg-black/[0.03] p-2 dark:bg-black/20">
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          className="h-auto w-full"
+          role="img"
+          aria-label={`목표 접근 속도 ${speedLabel}`}
+        >
+          <defs>
+            <linearGradient id="goal-momentum-area" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={lineColor} stopOpacity="0.3" />
+              <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {[0.25, 0.5, 0.75, 1].map((ratio) => (
+            <line
+              key={ratio}
+              x1={left}
+              x2={width - right}
+              y1={y(result.goalAmount * ratio)}
+              y2={y(result.goalAmount * ratio)}
+              className="stroke-border"
+              strokeDasharray="4 7"
+            />
+          ))}
+          {baseArea && (
+            <polygon points={baseArea} fill="url(#goal-momentum-area)" />
+          )}
+          {marketPoints.length > 0 && (
+            <polyline
+              points={polyline(marketPoints)}
+              fill="none"
+              stroke={colors.market}
+              strokeWidth="3"
+              strokeDasharray="9 7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity="0.8"
+            />
+          )}
+          <polyline
+            points={polyline(basePoints)}
+            fill="none"
+            stroke={lineColor}
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          {basePoints.length > 0 && (
+            <circle
+              cx={x(basePoints.at(-1)!.month)}
+              cy={y(basePoints.at(-1)!.value)}
+              r="6"
+              fill={lineColor}
+              stroke="white"
+              strokeWidth="2"
+            />
+          )}
+          <text
+            x={left}
+            y={height - 8}
+            className="fill-muted-foreground text-[12px]"
+          >
+            현재
+          </text>
+          <text
+            x={width - right}
+            y={height - 8}
+            textAnchor="end"
+            className="fill-muted-foreground text-[12px]"
+          >
+            목표 {goalLabel(result.goalAmount)}
+          </text>
+        </svg>
+      </div>
+
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm font-bold">{comparisonText}</p>
+        <div className="flex flex-wrap gap-3 text-xs font-semibold">
+          <span className="flex items-center gap-1.5">
+            <i
+              className="h-0 w-4 border-t-2"
+              style={{ borderColor: lineColor }}
+            />
+            내 평균
+          </span>
+          {result.benchmark && (
+            <span className="flex items-center gap-1.5 text-violet-500">
+              <i className="h-0 w-4 border-t-2 border-dashed border-violet-500" />
+              시장 기준
+            </span>
+          )}
+        </div>
+      </div>
+      <p className="text-muted-foreground mt-3 text-[11px]">
+        실제 과거 자산 차트가 아니라 목표 도달 예상 경로를 요약한 그래프예요.
+      </p>
+    </section>
   );
 }
 
 export function AnalysisResultView({ result }: { result: AnalysisResult }) {
   const remainingToGoal = Math.max(0, result.goalAmount - result.currentValue);
   const targetLabel = goalLabel(result.goalAmount);
+  const benchmarkComparison = result.benchmark
+    ? marketComparison(
+        result.scenarios[1].goalMonth,
+        result.benchmark.goalMonth,
+        result.benchmark.label,
+      )
+    : null;
+  const projectionPeriods = [
+    { years: 10, valueKey: "valueAt10Years" },
+    { years: 30, valueKey: "valueAt30Years" },
+    { years: 50, valueKey: "valueAt50Years" },
+  ] as const;
 
   return (
     <section
@@ -559,8 +974,66 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
               </span>
             </span>
           ))}
+          {result.benchmark && (
+            <span className="flex items-center gap-1.5">
+              <i
+                className="h-0 w-4 border-t-2 border-dashed"
+                style={{ borderColor: colors.market }}
+              />
+              <span style={{ color: colors.market }}>시장 기준</span>
+            </span>
+          )}
         </div>
         <ScenarioChart result={result} />
+        {result.benchmark && (
+          <>
+            <div className="bg-muted/40 mt-3 flex flex-col gap-2 rounded-xl px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <strong style={{ color: colors.market }}>
+                  {result.benchmark.label} 기준
+                </strong>
+                <p className="text-muted-foreground mt-0.5 text-xs">
+                  현재 평가금액에서 출발한 시장 중앙값 경로예요.
+                </p>
+              </div>
+              <div className="sm:text-right">
+                <strong>{goalDurationLabel(result.benchmark.goalMonth)}</strong>
+                <p className="text-muted-foreground mt-0.5 text-xs">
+                  과거 연평균 {percent(result.benchmark.cagr)}
+                </p>
+              </div>
+            </div>
+            {benchmarkComparison && (
+              <div className="mt-3 rounded-xl border border-violet-500/20 bg-violet-500/[0.06] px-4 py-3 text-sm leading-relaxed">
+                <p className="text-foreground">
+                  {benchmarkComparison.period &&
+                  benchmarkComparison.direction ? (
+                    <>
+                      내 평균 시나리오가 {result.benchmark.label} 기준보다{" "}
+                      <strong className="text-base font-black text-red-600 underline decoration-2 underline-offset-2 dark:text-red-400">
+                        약 {benchmarkComparison.period}
+                      </strong>{" "}
+                      <strong
+                        className={`text-base font-black ${
+                          benchmarkComparison.direction === "빠르게"
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-amber-600 dark:text-amber-400"
+                        }`}
+                      >
+                        {benchmarkComparison.direction}
+                      </strong>{" "}
+                      목표에 도착해요.
+                    </>
+                  ) : (
+                    <strong className={`font-bold ${benchmarkComparison.tone}`}>
+                      {benchmarkComparison.message}
+                    </strong>
+                  )}
+                </p>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       <div className="mt-5 rounded-2xl border p-5">
@@ -573,7 +1046,9 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
             시나리오별로 목표 금액에 도달하기까지 걸리는 예상 기간이에요.
           </p>
         </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div
+          className={`mt-4 grid gap-3 ${result.benchmark ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3"}`}
+        >
           {result.scenarios.map((scenario) => (
             <div
               key={scenario.key}
@@ -592,40 +1067,83 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
               </p>
             </div>
           ))}
+          {result.benchmark && (
+            <div className="bg-muted/40 rounded-xl px-4 py-4">
+              <strong className="block" style={{ color: colors.market }}>
+                시장 기준
+              </strong>
+              <span className="text-muted-foreground mt-1 block text-xs leading-4 break-keep">
+                {result.benchmark.label}
+              </span>
+              <p className="mt-3 text-xl font-black">
+                {goalDurationLabel(result.benchmark.goalMonth)}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="mt-5 rounded-2xl border p-5">
-        <div>
-          <h3 className="text-lg font-black">10년 뒤엔 얼마가 되어 있을까?</h3>
-          <p className="text-muted-foreground mt-1 text-xs">
-            추가 매수 없이 현재 보유 주식만 유지했을 때의 시나리오별 예상
-            금액이에요. 추가 매수 후 정보를 수정하면 다시 분석할 수 있어요.
-          </p>
-        </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          {result.scenarios.map((scenario) => (
-            <div
-              key={`${scenario.key}-ten-years`}
-              className="bg-muted/40 rounded-xl px-4 py-4"
-            >
-              <p
-                className="text-xs font-bold"
-                style={{ color: colors[scenario.key] }}
-              >
-                {scenario.label}
-              </p>
-              <strong className="mt-1 block text-xl font-black">
-                {compactWon(scenario.valueAt10Years)}
-              </strong>
+        {projectionPeriods.map((period, index) => (
+          <section
+            key={period.years}
+            className={index === 0 ? "" : "mt-6 border-t pt-6"}
+          >
+            <div>
+              <h3 className="text-lg font-black">
+                {period.years}년 뒤엔 얼마가 되어 있을까?
+              </h3>
+              {index === 0 && (
+                <p className="text-muted-foreground mt-1 text-xs">
+                  추가 매수 없이 현재 보유 주식만 유지했을 때의 시나리오별 예상
+                  금액이에요. 추가 매수 후 정보를 수정하면 다시 분석할 수
+                  있어요.
+                </p>
+              )}
             </div>
-          ))}
-        </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              {result.scenarios.map((scenario) => (
+                <div
+                  key={`${scenario.key}-${period.years}-years`}
+                  className="bg-muted/40 rounded-xl px-4 py-4"
+                >
+                  <p
+                    className="text-xs font-bold"
+                    style={{ color: colors[scenario.key] }}
+                  >
+                    {scenario.label}
+                  </p>
+                  <strong className="mt-1 block text-xl font-black">
+                    {compactWon(scenario[period.valueKey])}
+                  </strong>
+                  <p className="text-muted-foreground mt-1 text-[11px]">
+                    현재 평가금액 기준 연환산{" "}
+                    {projectionAnnualRate(
+                      scenario[period.valueKey],
+                      result.currentValue,
+                      period.years,
+                    ).toFixed(1)}
+                    %
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
+        <p className="text-muted-foreground mt-5 text-[11px] leading-5">
+          기간이 길어질수록 작은 수익률 차이도 복리로 크게 확대되므로 30년·50년
+          수치는 장기 가능성을 살펴보는 참고값으로만 확인해 주세요.
+        </p>
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl border p-5">
           <h3 className="font-bold">과거 연평균 수익률</h3>
+          <p className="text-muted-foreground mt-1 text-xs leading-5">
+            내 실제 투자 수익률이 아니라, 현재 보유 종목들이 과거 각 기간 동안
+            매년 평균적으로 얼마나 상승하거나 하락했는지를 연복리로 환산한
+            참고값이에요. 여러 종목은 현재 평가금액 비중으로 합산해요.
+          </p>
           <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
             <div>
               <dt className="text-muted-foreground">최근 1년</dt>
@@ -677,6 +1195,8 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
           </ul>
         </div>
       )}
+
+      <GoalMomentumCard result={result} />
 
       <div className="mt-5 rounded-2xl bg-emerald-500/10 p-5">
         <h3 className="font-bold text-emerald-600 dark:text-emerald-400">

@@ -4,12 +4,18 @@ import { inArray } from "drizzle-orm";
 
 import db from "~/core/db/drizzle-client.server";
 
+import { getDomesticMarketData } from "./fsc-client.server";
+import {
+  type KisBenchmarkKind,
+  getKisBenchmarkHistory,
+} from "./kis-client.server";
 import { getMarketData } from "./market-data.server";
 import { getStockMarketMode } from "./market-mode.server";
 import { stocks } from "./schema";
 
 const PATHS = 5_000;
-const MONTHS = 360;
+const GOAL_MONTHS = 360;
+const SIMULATION_MONTHS = 600;
 
 export interface AnalysisInput {
   goalAmount: number;
@@ -54,6 +60,118 @@ function seededRandom(seed: number) {
     state = (state * 1_664_525 + 1_013_904_223) >>> 0;
     return state / 4_294_967_296;
   };
+}
+
+function historicalDriftWeight(month: number) {
+  if (month <= 120) return 0.6 - (month / 120) * 0.25;
+  if (month <= 360) return 0.35 - ((month - 120) / 240) * 0.25;
+  return 0.1 - ((month - 360) / 240) * 0.05;
+}
+
+function residualVolatilityWeight(month: number) {
+  if (month <= 120) return 1;
+  return 1 - ((month - 120) / 480) * 0.2;
+}
+
+function longTermAnnualReturn(
+  marketData: Array<{ stock: { country: string; exchange: string } }>,
+  weights: number[],
+) {
+  return marketData.reduce((sum, { stock }, index) => {
+    const expected =
+      stock.country === "KR"
+        ? stock.exchange === "KOSDAQ"
+          ? 0.075
+          : 0.07
+        : stock.exchange === "NASDAQ"
+          ? 0.08
+          : 0.07;
+    return sum + expected * weights[index];
+  }, 0);
+}
+
+type PriceHistory = Array<{ date: string; close: number }>;
+
+function monthlyReturnMap(history: PriceHistory) {
+  const map = new Map<string, number>();
+  for (let index = 1; index < history.length; index++) {
+    const previous = history[index - 1];
+    const current = history[index];
+    const rate = current.close / previous.close - 1;
+    if (Number.isFinite(rate))
+      map.set(current.date.slice(0, 6), Math.max(-0.8, Math.min(1, rate)));
+  }
+  return map;
+}
+
+function weightedMonthlyReturns(
+  components: Array<{ weight: number; history: PriceHistory }>,
+) {
+  if (!components.length) return [];
+  const maps = components.map(({ history }) => monthlyReturnMap(history));
+  const totalWeight = components.reduce((sum, item) => sum + item.weight, 0);
+  const commonMonths = [...maps[0].keys()]
+    .filter((month) => maps.every((map) => map.has(month)))
+    .sort();
+  return commonMonths.map((month) =>
+    maps.reduce(
+      (sum, map, index) =>
+        sum + map.get(month)! * (components[index].weight / totalWeight),
+      0,
+    ),
+  );
+}
+
+function simulatePaths(
+  returns: number[],
+  initialValue: number,
+  goalAmount: number,
+  seed: number,
+  longTermAnnualReturn: number,
+) {
+  const logReturns = returns.map((rate) => Math.log1p(rate));
+  const rawHistoricalMonthlyDrift =
+    logReturns.reduce((sum, rate) => sum + rate, 0) / logReturns.length;
+  const historicalMonthlyDrift = Math.min(
+    Math.log1p(0.2) / 12,
+    Math.max(Math.log1p(-0.1) / 12, rawHistoricalMonthlyDrift),
+  );
+  const longTermMonthlyDrift = Math.log1p(longTermAnnualReturn) / 12;
+  const valuesByMonth = Array.from(
+    { length: SIMULATION_MONTHS + 1 },
+    () => new Float64Array(PATHS),
+  );
+  const goalMonths = new Int16Array(PATHS).fill(-1);
+  const random = seededRandom(seed);
+
+  for (let path = 0; path < PATHS; path++) {
+    let value = initialValue;
+    let blockStart = 0;
+    for (let month = 0; month <= SIMULATION_MONTHS; month++) {
+      valuesByMonth[month][path] = value;
+      if (
+        month <= GOAL_MONTHS &&
+        value >= goalAmount &&
+        goalMonths[path] === -1
+      )
+        goalMonths[path] = month;
+      if (month === SIMULATION_MONTHS) break;
+      if (month % 6 === 0)
+        blockStart = Math.floor(random() * logReturns.length);
+      const sampledLogReturn =
+        logReturns[(blockStart + (month % 6)) % logReturns.length];
+      const residual = sampledLogReturn - rawHistoricalMonthlyDrift;
+      const driftWeight = historicalDriftWeight(month);
+      const monthlyDrift =
+        historicalMonthlyDrift * driftWeight +
+        longTermMonthlyDrift * (1 - driftWeight);
+      const projectedLogReturn =
+        monthlyDrift + residual * residualVolatilityWeight(month);
+      value = Math.max(0, value * Math.exp(projectedLogReturn));
+    }
+  }
+
+  return { valuesByMonth, goalMonths };
 }
 
 export async function analyzePortfolio(
@@ -134,61 +252,130 @@ export async function analyzePortfolio(
     0,
   );
   const weights = holdingResults.map((item) => item.valueKrw / currentValue);
+  const expectedLongTermReturn = longTermAnnualReturn(marketData, weights);
 
-  const returnMaps = marketData.map(({ data }) => {
-    const map = new Map<string, number>();
-    for (let i = 1; i < data.history.length; i++) {
-      const previous = data.history[i - 1];
-      const current = data.history[i];
-      const rate = current.close / previous.close - 1;
-      if (Number.isFinite(rate))
-        map.set(current.date.slice(0, 6), Math.max(-0.8, Math.min(1, rate)));
-    }
-    return map;
-  });
-
-  const commonMonths = [...returnMaps[0].keys()]
-    .filter((month) => returnMaps.every((map) => map.has(month)))
-    .sort();
-  const portfolioReturns = commonMonths.map((month) =>
-    returnMaps.reduce(
-      (sum, map, index) => sum + map.get(month)! * weights[index],
-      0,
-    ),
+  const portfolioReturns = weightedMonthlyReturns(
+    marketData.map(({ data }, index) => ({
+      weight: weights[index],
+      history: data.history,
+    })),
   );
   if (portfolioReturns.length < 24)
     throw new Error("시나리오 계산에 필요한 과거 데이터가 부족합니다.");
 
-  const valuesByMonth = Array.from(
-    { length: MONTHS + 1 },
-    () => new Float64Array(PATHS),
+  const { valuesByMonth, goalMonths } = simulatePaths(
+    portfolioReturns,
+    currentValue,
+    input.goalAmount,
+    ids.reduce((sum, id) => sum + id, 2_026),
+    expectedLongTermReturn,
   );
-  const goalMonths = new Int16Array(PATHS).fill(-1);
-  const random = seededRandom(ids.reduce((sum, id) => sum + id, 2_026));
 
-  for (let path = 0; path < PATHS; path++) {
-    let value = currentValue;
-    let blockStart = 0;
-    for (let month = 0; month <= MONTHS; month++) {
-      valuesByMonth[month][path] = value;
-      if (value >= input.goalAmount && goalMonths[path] === -1)
-        goalMonths[path] = month;
-      if (month === MONTHS) break;
-      if (month % 6 === 0)
-        blockStart = Math.floor(random() * portfolioReturns.length);
-      const rate =
-        portfolioReturns[(blockStart + (month % 6)) % portfolioReturns.length];
-      value = Math.max(0, value * (1 + rate));
+  const benchmarkWeights = new Map<KisBenchmarkKind, number>();
+  marketData.forEach(({ stock }, index) => {
+    const kind: KisBenchmarkKind =
+      stock.country === "KR"
+        ? stock.exchange === "KOSDAQ"
+          ? "KOSDAQ"
+          : "KOSPI"
+        : stock.exchange === "NASDAQ"
+          ? "NASDAQ"
+          : "S&P 500";
+    benchmarkWeights.set(
+      kind,
+      (benchmarkWeights.get(kind) ?? 0) + weights[index],
+    );
+  });
+
+  let benchmark: AnalysisResult["benchmark"] = null;
+  let benchmarkValues: Float64Array[] | null = null;
+  try {
+    const components: Array<{
+      name: string;
+      weight: number;
+      history: PriceHistory;
+    }> = [];
+    if (marketMode === "global-test") {
+      for (const [kind, weight] of benchmarkWeights) {
+        components.push({
+          name:
+            kind === "NASDAQ"
+              ? "NASDAQ 100 ETF"
+              : kind === "S&P 500"
+                ? "S&P 500 ETF"
+                : kind,
+          weight,
+          history: await getKisBenchmarkHistory(kind),
+        });
+      }
+    } else {
+      const proxyTickers = new Map<KisBenchmarkKind, string>([
+        ["KOSPI", "069500"],
+        ["KOSDAQ", "229200"],
+      ]);
+      const requestedTickers = [...benchmarkWeights.keys()].flatMap((kind) => {
+        const ticker = proxyTickers.get(kind);
+        return ticker ? [ticker] : [];
+      });
+      const proxyRows = requestedTickers.length
+        ? await db
+            .select()
+            .from(stocks)
+            .where(inArray(stocks.ticker, requestedTickers))
+        : [];
+      for (const [kind, weight] of benchmarkWeights) {
+        const ticker = proxyTickers.get(kind);
+        const proxy = proxyRows.find((row) => row.ticker === ticker);
+        if (!ticker || !proxy) continue;
+        const data = await getDomesticMarketData(proxy.stock_id, ticker, "ETF");
+        components.push({
+          name: `${kind} ETF`,
+          weight,
+          history: data.history,
+        });
+      }
     }
+
+    const benchmarkReturns = weightedMonthlyReturns(components);
+    if (benchmarkReturns.length >= 24) {
+      const simulated = simulatePaths(
+        benchmarkReturns,
+        currentValue,
+        input.goalAmount,
+        7_031,
+        expectedLongTermReturn,
+      );
+      benchmarkValues = simulated.valuesByMonth;
+      let benchmarkGoalMonth: number | null = null;
+      for (let month = 0; month <= GOAL_MONTHS; month++) {
+        if (quantile(benchmarkValues[month], 0.5) >= input.goalAmount) {
+          benchmarkGoalMonth = month;
+          break;
+        }
+      }
+      benchmark = {
+        label:
+          components.length === 1
+            ? components[0].name
+            : `${components.map(({ name }) => name).join("·")} 혼합`,
+        components: components.map(({ name }) => name),
+        goalMonth: benchmarkGoalMonth,
+        valueAt10Years: quantile(benchmarkValues[120], 0.5),
+        cagr: cagr(benchmarkReturns, benchmarkReturns.length),
+      };
+    }
+  } catch (error) {
+    console.warn("Market benchmark calculation skipped", error);
   }
 
   const chart = [];
-  for (let month = 0; month <= MONTHS; month += 6) {
+  for (let month = 0; month <= GOAL_MONTHS; month += 6) {
     chart.push({
       month,
       conservative: quantile(valuesByMonth[month], 0.2),
       base: quantile(valuesByMonth[month], 0.5),
       optimistic: quantile(valuesByMonth[month], 0.8),
+      market: benchmarkValues ? quantile(benchmarkValues[month], 0.5) : null,
     });
   }
 
@@ -199,18 +386,24 @@ export async function analyzePortfolio(
   ];
   const scenarios = scenarioConfig.map(([key, label, percentile]) => {
     let goalMonth: number | null = null;
-    for (let month = 0; month <= MONTHS; month++) {
+    for (let month = 0; month <= GOAL_MONTHS; month++) {
       if (quantile(valuesByMonth[month], percentile) >= input.goalAmount) {
         goalMonth = month;
         break;
       }
     }
+    const valueAt10Years = quantile(valuesByMonth[120], percentile);
+    const valueAt30Years = quantile(valuesByMonth[360], percentile);
+    const valueAt50Years = quantile(valuesByMonth[600], percentile);
+
     return {
       key,
       label,
       percentile,
       goalMonth,
-      valueAt10Years: quantile(valuesByMonth[120], percentile),
+      valueAt10Years,
+      valueAt30Years,
+      valueAt50Years,
     };
   });
 
@@ -222,6 +415,21 @@ export async function analyzePortfolio(
   const profit = currentValue - totalCost;
   const returnRate = (profit / totalCost) * 100;
   const baseGoal = scenarios[1].goalMonth;
+  const benchmarkComparison = (() => {
+    if (!benchmark) return null;
+    if (baseGoal === null && benchmark.goalMonth === null)
+      return `내 평균 시나리오와 ${benchmark.label} 기준 모두 30년 안에 목표 도달이 확인되지 않습니다.`;
+    if (baseGoal !== null && benchmark.goalMonth === null)
+      return `내 평균 시나리오는 목표에 도달하지만 ${benchmark.label} 기준은 30년 안에 도달하지 못합니다.`;
+    if (baseGoal === null && benchmark.goalMonth !== null)
+      return `${benchmark.label} 기준은 약 ${periodLabel(benchmark.goalMonth)} 후 목표에 도달하지만 내 평균 시나리오는 30년 안에 도달하지 못합니다.`;
+    const difference = benchmark.goalMonth! - baseGoal!;
+    if (difference === 0)
+      return `내 평균 시나리오와 ${benchmark.label} 기준의 목표 도달 시점이 비슷합니다.`;
+    return difference > 0
+      ? `내 평균 시나리오는 ${benchmark.label} 기준보다 약 ${periodLabel(difference)} 빠르게 목표에 도달합니다.`
+      : `내 평균 시나리오는 ${benchmark.label} 기준보다 약 ${periodLabel(Math.abs(difference))} 늦게 목표에 도달합니다.`;
+  })();
   const leveragedProducts = stockRows.filter(
     (stock) =>
       stock.security_type === "ETF" &&
@@ -251,6 +459,7 @@ export async function analyzePortfolio(
       available: cagr(portfolioReturns, portfolioReturns.length),
     },
     scenarios,
+    benchmark,
     chart,
     probability: {
       tenYears: probabilityAt(120),
@@ -268,6 +477,7 @@ export async function analyzePortfolio(
       baseGoal === null
         ? `평균 시나리오에서는 30년 안에 ${goalLabel(input.goalAmount)} 도달이 확인되지 않습니다.`
         : `평균 시나리오에서는 약 ${periodLabel(baseGoal)} 후 ${goalLabel(input.goalAmount)} 도달이 예상됩니다.`,
+      ...(benchmarkComparison ? [benchmarkComparison] : []),
       `20년 안에 ${goalLabel(input.goalAmount)}을 넘은 시뮬레이션 비율은 ${probabilityAt(240).toFixed(1)}%입니다.`,
       marketMode === "domestic"
         ? "금융위원회 공공데이터의 종가를 사용하므로 액면분할·병합 같은 기업행사가 과거 수익률에 영향을 줄 수 있습니다."

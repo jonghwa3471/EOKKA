@@ -49,7 +49,7 @@ type Holding = {
 };
 
 const HOLDINGS_STORAGE_KEY = "eokka:portfolio-draft:v1";
-const ANALYSIS_STORAGE_KEY = "eokka:portfolio-analysis:v1";
+const ANALYSIS_STORAGE_KEY = "eokka:portfolio-analysis:v6";
 const GOAL_PRESETS = [1, 10, 100];
 
 const emptyHolding = (id: number): Holding => ({

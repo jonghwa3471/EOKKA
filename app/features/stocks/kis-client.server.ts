@@ -5,6 +5,8 @@ interface PricePoint {
   close: number;
 }
 
+export type KisBenchmarkKind = "KOSPI" | "KOSDAQ" | "S&P 500" | "NASDAQ";
+
 export interface KisMarketData {
   currentPrice: number;
   exchangeRate: number;
@@ -210,4 +212,48 @@ export async function getKisUsMarketData(
     priceBasis: "adjusted_close",
     history,
   };
+}
+
+export async function getKisBenchmarkHistory(
+  kind: KisBenchmarkKind,
+): Promise<PricePoint[]> {
+  const end = new Date();
+  const start = new Date(end);
+  start.setFullYear(start.getFullYear() - 10);
+
+  if (kind === "KOSPI" || kind === "KOSDAQ") {
+    const chart = await kisGet<{
+      output2: Array<{ stck_bsop_date: string; bstp_nmix_prpr: string }>;
+    }>(
+      "/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice",
+      "FHKUP03500100",
+      new URLSearchParams({
+        FID_COND_MRKT_DIV_CODE: "U",
+        FID_INPUT_ISCD: kind === "KOSPI" ? "0001" : "1001",
+        FID_INPUT_DATE_1: yyyymmdd(start),
+        FID_INPUT_DATE_2: yyyymmdd(end),
+        FID_PERIOD_DIV_CODE: "M",
+      }),
+    );
+    const history = chart.output2
+      .map((point) => ({
+        date: point.stck_bsop_date,
+        close: Number(point.bstp_nmix_prpr),
+      }))
+      .filter((point) => point.close > 0)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (history.length < 24)
+      throw new Error(`${kind} 시장 기준 데이터가 부족합니다.`);
+    return history;
+  }
+
+  const proxy =
+    kind === "NASDAQ"
+      ? ({ ticker: "QQQ", exchange: "NASDAQ" } as const)
+      : ({ ticker: "SPY", exchange: "AMEX" } as const);
+  const history = (await getKisUsMarketData(proxy.ticker, proxy.exchange))
+    .history;
+  if (history.length < 24)
+    throw new Error(`${kind} ETF 시장 기준 데이터가 부족합니다.`);
+  return history;
 }

@@ -211,7 +211,7 @@ function Actions() {
  * Features:
  * - Responsive design with desktop navigation and mobile drawer
  * - Application branding with localized title
- * - Main navigation links (분석 피드, 문의하기, 이용권)
+ * - Service introduction and methodology links
  * - User authentication state handling (loading, authenticated, unauthenticated)
  * - User profile menu with avatar for authenticated users
  * - 로그인/sign up buttons for unauthenticated users
@@ -248,27 +248,19 @@ export function NavigationBar({
 
         {/* Desktop navigation menu (hidden on mobile) */}
         <div className="hidden h-full items-center gap-5 md:flex">
-          {/* Main navigation links */}
           <Link
-            to="/blog"
+            to="/about"
             viewTransition
             className="text-muted-foreground hover:text-foreground text-sm transition-colors"
           >
-            분석 피드
+            서비스 소개
           </Link>
           <Link
-            to="/contact"
+            to="/methodology"
             viewTransition
             className="text-muted-foreground hover:text-foreground text-sm transition-colors"
           >
-            문의하기
-          </Link>
-          <Link
-            to="/payments/checkout"
-            viewTransition
-            className="text-muted-foreground hover:text-foreground text-sm transition-colors"
-          >
-            이용권
+            분석 방법
           </Link>
 
           <Separator orientation="vertical" />
@@ -302,15 +294,22 @@ export function NavigationBar({
           <MenuIcon />
         </SheetTrigger>
         <SheetContent>
-          <SheetHeader>
+          <SheetHeader className="mt-8 gap-1 text-left">
             <SheetClose asChild>
-              <Link to="/blog">분석 피드</Link>
+              <Link
+                to="/about"
+                className="hover:bg-muted rounded-lg px-3 py-3 font-bold"
+              >
+                서비스 소개
+              </Link>
             </SheetClose>
             <SheetClose asChild>
-              <Link to="/contact">문의하기</Link>
-            </SheetClose>
-            <SheetClose asChild>
-              <Link to="/payments/checkout">이용권</Link>
+              <Link
+                to="/methodology"
+                className="hover:bg-muted rounded-lg px-3 py-3 font-bold"
+              >
+                분석 방법
+              </Link>
             </SheetClose>
           </SheetHeader>
           {loading ? (
