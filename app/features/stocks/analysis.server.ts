@@ -346,45 +346,46 @@ export async function analyzePortfolio(
         ? (cagr(benchmarkReturns, Math.min(60, benchmarkReturns.length)) ?? 0)
         : 0;
     const excessGrowth = historicalGrowth - benchmarkGrowth;
+    const riskLevel = clampStyleScore(
+      25 +
+        (relativeVolatility - 0.8) * 45 +
+        excessDrawdown * 0.8 +
+        leverageWeight * 60,
+    );
     const investmentStyleScores: AnalysisResult["investmentStyle"]["scores"] = [
       {
         key: "stability",
-        label: "안정 추구",
+        label: "변동 안정성",
         score: clampStyleScore(
           75 - (relativeVolatility - 0.7) * 50 - excessDrawdown * 0.6,
         ),
       },
       {
         key: "growth",
-        label: "성장 추구",
+        label: "성장 지속성",
         score: clampStyleScore(
           35 + historicalGrowth * 1.4 + upwardRatio * 30 + excessGrowth * 0.5,
         ),
       },
       {
         key: "concentration",
-        label: "집중 성향",
-        score: clampStyleScore(largestWeight),
+        label: "비중 균형",
+        score: clampStyleScore(100 - Math.max(0, largestWeight - 25) * 1.6),
       },
       {
         key: "diversification",
-        label: "분산 성향",
+        label: "분산 구성",
         score: clampStyleScore(20 + (effectiveHoldings - 1) * 20),
       },
       {
         key: "etf",
-        label: "ETF 활용",
-        score: clampStyleScore(etfWeight * 100),
+        label: "낙폭 방어",
+        score: clampStyleScore(70 + (benchmarkDrawdown - drawdown) * 1.5),
       },
       {
         key: "aggression",
-        label: "공격 성향",
-        score: clampStyleScore(
-          25 +
-            (relativeVolatility - 0.8) * 45 +
-            excessDrawdown * 0.8 +
-            leverageWeight * 60,
-        ),
+        label: "위험 관리",
+        score: 100 - riskLevel,
       },
     ];
     const style = Object.fromEntries(
@@ -402,7 +403,7 @@ export async function analyzePortfolio(
           reason: `현재 평가금액 중 레버리지·인버스 상품 비중이 ${Math.round(leverageWeight * 100)}%로 높게 나타났어요.`,
         };
       if (
-        style.aggression >= 75 &&
+        riskLevel >= 75 &&
         relativeVolatility >= 1.45 &&
         (excessDrawdown >= 8 || upwardRatio < 0.55)
       )
@@ -412,7 +413,7 @@ export async function analyzePortfolio(
             "시장보다 큰 등락과 낙폭을 감수하며 높은 성장 가능성을 추구하는 유형이에요.",
           reason: `과거 변동성이 시장 기준의 ${relativeVolatility.toFixed(2)}배이고 최대 낙폭은 ${drawdown.toFixed(1)}%로 나타났어요.`,
         };
-      if (style.etf >= 60)
+      if (etfWeight >= 0.6)
         return {
           title: "지수를 모으는 ETF 항해사",
           description:
@@ -431,7 +432,7 @@ export async function analyzePortfolio(
             "시장과 크게 다르지 않은 변동 범위에서 장기 상승 흐름을 이어온 종목을 모은 유형이에요.",
           reason: `최근 최대 5년 연평균 성장률은 ${historicalGrowth.toFixed(1)}%이고, 12개월 단위 관측 구간의 ${Math.round(upwardRatio * 100)}%에서 상승했어요. 변동성은 시장 기준의 ${relativeVolatility.toFixed(2)}배예요.`,
         };
-      if (style.concentration >= 60)
+      if (largestWeight >= 60)
         return {
           title: "한 종목을 믿는 집중 승부사",
           description:
@@ -443,7 +444,7 @@ export async function analyzePortfolio(
           title: "바구니를 나누는 분산 설계자",
           description:
             "여러 종목에 비중을 나눠 특정 종목의 영향을 줄이는 유형이에요.",
-          reason: `종목별 평가 비중을 반영한 유효 종목 수가 약 ${effectiveHoldings.toFixed(1)}개로 분산 성향이 ${style.diversification}점이에요.`,
+          reason: `종목별 평가 비중을 반영한 유효 종목 수가 약 ${effectiveHoldings.toFixed(1)}개로 분산 구성 점수가 ${style.diversification}점이에요.`,
         };
       if (style.stability >= 70)
         return {
@@ -463,7 +464,7 @@ export async function analyzePortfolio(
         title: "균형을 다듬는 포트폴리오 조율사",
         description:
           "안정과 성장, 집중과 분산 사이에서 균형점을 찾아가는 유형이에요.",
-        reason: `여섯 가지 성향 중 하나가 압도적으로 높지 않아 안정 ${style.stability}점·성장 ${style.growth}점·집중 ${style.concentration}점의 균형이 두드러졌어요.`,
+        reason: `여섯 가지 평가 항목 중 하나에 크게 치우치지 않아 변동 안정성 ${style.stability}점·성장 지속성 ${style.growth}점·비중 균형 ${style.concentration}점으로 나타났어요.`,
       };
     })();
     return {

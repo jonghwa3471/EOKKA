@@ -27,6 +27,18 @@ const scenarioLabels = {
   optimistic: "낙관적",
 } as const;
 
+const investmentStyleTitles = new Set([
+  "파도를 타는 레버리지 서퍼",
+  "급등락을 즐기는 롤러코스터 헌터",
+  "지수를 모으는 ETF 항해사",
+  "꾸준한 우상향 수집가",
+  "한 종목을 믿는 집중 승부사",
+  "바구니를 나누는 분산 설계자",
+  "흔들림을 줄이는 방어형 항해사",
+  "성장을 좇는 복리 탐험가",
+  "균형을 다듬는 포트폴리오 조율사",
+]);
+
 const tierPreviewImages: Record<SharedInvestmentCardPayload["tier"], string> = {
   아이언: "/images/speed-tiers/iron-fantasy-v2-og.jpg",
   브론즈: "/images/speed-tiers/bronze-fantasy-v2-og.jpg",
@@ -50,6 +62,7 @@ function parsePayload(
   const headline = params.get("headline")?.trim();
   const target = params.get("target")?.trim();
   const progress = Number(params.get("progress"));
+  const investmentStyleTitle = params.get("style")?.trim();
 
   if (
     !tier ||
@@ -71,6 +84,10 @@ function parsePayload(
     headline,
     progress: Math.min(100, Math.max(0, progress)),
     target,
+    investmentStyleTitle:
+      investmentStyleTitle && investmentStyleTitles.has(investmentStyleTitle)
+        ? investmentStyleTitle
+        : undefined,
   };
 }
 
@@ -147,7 +164,7 @@ export default function SharedCardScreen({ loaderData }: Route.ComponentProps) {
         </p>
         <h1 className="mt-2 text-2xl font-black">공유받은 목표 속도 카드</h1>
         <p className="mt-2 text-sm font-semibold text-white/55">
-          카드 위에서 마우스를 움직여 홀로그램 효과를 확인해 보세요.
+          카드를 움직여 보고, 클릭해서 투자 성향 뒷면도 확인해 보세요.
         </p>
 
         <div className="mt-7">

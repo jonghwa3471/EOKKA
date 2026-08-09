@@ -7,6 +7,7 @@ import {
   DownloadIcon,
   LinkIcon,
   LoaderCircleIcon,
+  RefreshCwIcon,
   Share2Icon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -15,6 +16,54 @@ import { Button } from "~/core/components/ui/button";
 
 type Scenario = AnalysisResult["scenarios"][number];
 type ScenarioKey = Scenario["key"];
+type InvestmentStyle = AnalysisResult["investmentStyle"];
+
+const investmentStyleVisuals: Record<
+  string,
+  { image: string; summary: string }
+> = {
+  "파도를 타는 레버리지 서퍼": {
+    image: "/images/investment-styles/leverage-surfer.jpg",
+    summary: "큰 파도를 기회로 바꾸려는 역동적인 투자 성향이에요.",
+  },
+  "급등락을 즐기는 롤러코스터 헌터": {
+    image: "/images/investment-styles/rollercoaster-hunter.jpg",
+    summary: "시장보다 큰 등락을 감수하며 성장 가능성을 좇는 성향이에요.",
+  },
+  "지수를 모으는 ETF 항해사": {
+    image: "/images/investment-styles/etf-navigator.jpg",
+    summary: "개별 종목보다 시장 전체의 흐름을 활용하는 투자 성향이에요.",
+  },
+  "꾸준한 우상향 수집가": {
+    image: "/images/investment-styles/uptrend-collector.jpg",
+    summary: "급격한 움직임보다 꾸준히 상승해 온 흐름을 모으는 성향이에요.",
+  },
+  "한 종목을 믿는 집중 승부사": {
+    image: "/images/investment-styles/focused-strategist.jpg",
+    summary: "가장 확신하는 종목에 포트폴리오의 힘을 집중하는 성향이에요.",
+  },
+  "바구니를 나누는 분산 설계자": {
+    image: "/images/investment-styles/diversification-architect.jpg",
+    summary: "여러 자산에 비중을 나눠 한 종목의 영향을 줄이는 성향이에요.",
+  },
+  "흔들림을 줄이는 방어형 항해사": {
+    image: "/images/investment-styles/defensive-captain.jpg",
+    summary: "시장 변화 속에서도 낙폭과 흔들림을 줄이려는 성향이에요.",
+  },
+  "성장을 좇는 복리 탐험가": {
+    image: "/images/investment-styles/compound-explorer.jpg",
+    summary: "장기 성장 흐름과 복리의 가능성을 따라가는 투자 성향이에요.",
+  },
+  "균형을 다듬는 포트폴리오 조율사": {
+    image: "/images/investment-styles/balanced-conductor.jpg",
+    summary: "성장과 안정, 집중과 분산 사이의 균형을 조율하는 성향이에요.",
+  },
+};
+
+const fallbackInvestmentStyle = {
+  image: "/images/investment-styles/balanced-conductor.jpg",
+  summary: "성장과 안정 사이에서 나만의 균형을 찾아가는 투자 성향이에요.",
+};
 
 const scenarioTone: Record<ScenarioKey, { active: string; accent: string }> = {
   conservative: {
@@ -265,6 +314,8 @@ function TierCard({
   target,
   expanded = false,
   cardRef,
+  investmentStyle,
+  flippable = false,
 }: {
   tier: Tier;
   scenario: Pick<Scenario, "key" | "label">;
@@ -273,8 +324,16 @@ function TierCard({
   target: string;
   expanded?: boolean;
   cardRef?: Ref<HTMLElement>;
+  investmentStyle?: Pick<InvestmentStyle, "title" | "description" | "reason">;
+  flippable?: boolean;
 }) {
   const [tilt, setTilt] = useState({ x: 0, y: 0, glareX: 50, glareY: 50 });
+  const [flipped, setFlipped] = useState(false);
+  const styleVisual = investmentStyle
+    ? (investmentStyleVisuals[investmentStyle.title] ?? fallbackInvestmentStyle)
+    : fallbackInvestmentStyle;
+
+  useEffect(() => setFlipped(false), [investmentStyle?.title]);
 
   function moveCard(event: ReactMouseEvent<HTMLElement>) {
     if (!expanded) return;
@@ -292,125 +351,193 @@ function TierCard({
   return (
     <article
       ref={cardRef}
+      onClick={() => flippable && setFlipped((current) => !current)}
       onMouseMove={moveCard}
       onMouseLeave={() =>
         expanded && setTilt({ x: 0, y: 0, glareX: 50, glareY: 50 })
       }
-      className={`group relative mx-auto w-full rounded-[28px] bg-gradient-to-br p-[5px] text-left transition-transform duration-200 ${expanded ? "max-w-[510px]" : "max-w-[420px]"} ${tier.frame}`}
+      className={`group relative mx-auto w-full rounded-[28px] bg-gradient-to-br p-[5px] text-left transition-transform ease-out ${flippable ? "duration-700" : "duration-200"} ${expanded ? "max-w-[510px]" : "max-w-[420px]"} ${tier.frame}`}
       style={{
         transform: expanded
-          ? `perspective(1100px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg) scale(0.96)`
-          : undefined,
+          ? `perspective(1100px) rotateX(${tilt.x}deg) rotateY(${tilt.y + (flipped ? 180 : 0)}deg) scale(0.96)`
+          : flipped
+            ? "perspective(1100px) rotateY(180deg)"
+            : undefined,
         transformStyle: "preserve-3d",
+        transformOrigin: "center center",
       }}
       aria-label={`${scenario.label} 시나리오 ${tier.tier} 티어 카드`}
+      role={flippable ? "button" : undefined}
+      tabIndex={flippable ? 0 : undefined}
+      onKeyDown={(event) => {
+        if (!flippable || (event.key !== "Enter" && event.key !== " ")) return;
+        event.preventDefault();
+        setFlipped((current) => !current);
+      }}
     >
-      <div
-        className={`relative isolate overflow-hidden rounded-[23px] bg-gradient-to-b ${tier.surface} p-3 text-white`}
-      >
-        {tier.rank >= 4 && (
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 z-30 bg-[linear-gradient(115deg,transparent_20%,rgba(255,255,255,0.04)_35%,rgba(103,232,249,0.28)_45%,rgba(244,114,182,0.2)_52%,transparent_68%)] bg-[length:240%_100%] opacity-70 mix-blend-screen transition-[background-position] duration-1000 group-hover:bg-[position:100%_0]"
-          />
-        )}
-        {tier.rank >= 7 && (
-          <>
-            <div className="pointer-events-none absolute top-1/4 -left-20 z-20 size-48 animate-pulse rounded-full bg-cyan-300/20 blur-3xl" />
-            <div className="pointer-events-none absolute -right-20 bottom-1/4 z-20 size-48 animate-pulse rounded-full bg-fuchsia-300/20 blur-3xl" />
-          </>
-        )}
-        {expanded && tier.rank >= 3 && (
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 z-40 opacity-70 mix-blend-screen"
-            style={{
-              background: `radial-gradient(circle at ${tilt.glareX}% ${tilt.glareY}%, rgba(255,255,255,0.45), transparent 30%)`,
-            }}
-          />
-        )}
-
-        <header className="relative z-10 flex items-start justify-between gap-3 px-2 pt-1 pb-3">
-          <div>
-            <p
-              className={`text-[10px] font-black tracking-[0.22em] ${scenarioTone[scenario.key].accent}`}
-            >
-              {scenario.label.toUpperCase()} SCENARIO
-            </p>
-            <h3 className="mt-1 text-lg font-black tracking-tight sm:text-xl">
-              {tier.name}
-            </h3>
-          </div>
-          <span
-            className={`rounded-full border px-2.5 py-1 text-[10px] font-black tracking-[0.08em] backdrop-blur ${tier.badge}`}
-          >
-            {tier.tier}
-          </span>
-        </header>
-
-        <div className="relative z-10 overflow-hidden rounded-2xl border border-white/20 bg-black">
-          <img
-            src={tier.image}
-            alt={tier.name}
-            width={900}
-            height={900}
-            className="aspect-square w-full object-cover"
-          />
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent px-4 pt-16 pb-4">
-            <p className="text-[11px] leading-4 font-medium text-white/55">
-              당신의 자산 증가 속도를
-              <br />
-              이동 수단에 비유하자면...
-            </p>
-            <strong className="mt-1 block text-2xl font-black tracking-tight text-white">
-              시속 {tier.speed}
-            </strong>
-          </div>
-          {tier.rank >= 6 && (
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_25%_20%,white_0_1px,transparent_2px),radial-gradient(circle_at_75%_35%,white_0_1px,transparent_2px),radial-gradient(circle_at_55%_72%,white_0_1px,transparent_2px)] bg-[length:70px_70px,95px_95px,120px_120px] opacity-60" />
+      <div className="relative" style={{ transformStyle: "preserve-3d" }}>
+        <div
+          className={`relative isolate overflow-hidden rounded-[23px] bg-gradient-to-b ${tier.surface} p-3 text-white`}
+          style={{ backfaceVisibility: "hidden" }}
+        >
+          {tier.rank >= 4 && (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 z-30 bg-[linear-gradient(115deg,transparent_20%,rgba(255,255,255,0.04)_35%,rgba(103,232,249,0.28)_45%,rgba(244,114,182,0.2)_52%,transparent_68%)] bg-[length:240%_100%] opacity-70 mix-blend-screen transition-[background-position] duration-1000 group-hover:bg-[position:100%_0]"
+            />
           )}
+          {tier.rank >= 7 && (
+            <>
+              <div className="pointer-events-none absolute top-1/4 -left-20 z-20 size-48 animate-pulse rounded-full bg-cyan-300/20 blur-3xl" />
+              <div className="pointer-events-none absolute -right-20 bottom-1/4 z-20 size-48 animate-pulse rounded-full bg-fuchsia-300/20 blur-3xl" />
+            </>
+          )}
+          {expanded && tier.rank >= 3 && (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 z-40 opacity-70 mix-blend-screen"
+              style={{
+                background: `radial-gradient(circle at ${tilt.glareX}% ${tilt.glareY}%, rgba(255,255,255,0.45), transparent 30%)`,
+              }}
+            />
+          )}
+
+          <header className="relative z-10 flex items-start justify-between gap-3 px-2 pt-1 pb-3">
+            <div>
+              <p
+                className={`text-[10px] font-black tracking-[0.22em] ${scenarioTone[scenario.key].accent}`}
+              >
+                {scenario.label.toUpperCase()} SCENARIO
+              </p>
+              <h3 className="mt-1 text-lg font-black tracking-tight sm:text-xl">
+                {tier.name}
+              </h3>
+            </div>
+            <span
+              className={`rounded-full border px-2.5 py-1 text-[10px] font-black tracking-[0.08em] backdrop-blur ${tier.badge}`}
+            >
+              {tier.tier}
+            </span>
+          </header>
+
+          <div className="relative z-10 overflow-hidden rounded-2xl border border-white/20 bg-black">
+            <img
+              src={tier.image}
+              alt={tier.name}
+              width={900}
+              height={900}
+              className="aspect-square w-full object-cover"
+            />
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent px-4 pt-16 pb-4">
+              <p className="text-[11px] leading-4 font-medium text-white/55">
+                당신의 자산 증가 속도를
+                <br />
+                이동 수단에 비유하자면...
+              </p>
+              <strong className="mt-1 block text-2xl font-black tracking-tight text-white">
+                시속 {tier.speed}
+              </strong>
+            </div>
+            {tier.rank >= 6 && (
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_25%_20%,white_0_1px,transparent_2px),radial-gradient(circle_at_75%_35%,white_0_1px,transparent_2px),radial-gradient(circle_at_55%_72%,white_0_1px,transparent_2px)] bg-[length:70px_70px,95px_95px,120px_120px] opacity-60" />
+            )}
+          </div>
+
+          <div className="relative z-10 px-2 pt-4 pb-2">
+            <div
+              className={`rounded-xl border px-4 py-4 ${tier.rank <= 1 ? "border-white/10 bg-black/20" : "border-white/15 bg-white/[0.07] backdrop-blur-sm"}`}
+            >
+              <p className="text-[10px] font-black tracking-[0.18em] text-white/45">
+                TIME TO GOAL
+              </p>
+              <strong className="mt-1 block text-lg leading-snug font-black sm:text-xl">
+                {headline}
+              </strong>
+            </div>
+
+            <div className="mt-4">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 text-[11px] leading-none font-bold text-white/70">
+                <span className="whitespace-nowrap">
+                  목표 달성률 {progress.toFixed(1)}%
+                </span>
+                <span className="shrink-0 whitespace-nowrap">{target}</span>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className={`h-full rounded-full transition-[width] duration-500 ${
+                    tier.rank >= 7
+                      ? "bg-gradient-to-r from-cyan-300 via-fuchsia-300 to-amber-200 shadow-[0_0_14px_rgba(103,232,249,0.9)]"
+                      : tier.rank >= 4
+                        ? "bg-gradient-to-r from-emerald-400 to-cyan-300 shadow-[0_0_9px_rgba(52,211,153,0.6)]"
+                        : tier.rank >= 2
+                          ? "bg-amber-400"
+                          : "bg-zinc-500"
+                  }`}
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-3">
+              <span className="text-[9px] font-black tracking-[0.2em] text-white/35">
+                EOKKA SPEED COLLECTION
+              </span>
+              <span className="text-xs font-black tracking-[0.22em]">
+                EOKKA
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div className="relative z-10 px-2 pt-4 pb-2">
-          <div
-            className={`rounded-xl border px-4 py-4 ${tier.rank <= 1 ? "border-white/10 bg-black/20" : "border-white/15 bg-white/[0.07] backdrop-blur-sm"}`}
-          >
-            <p className="text-[10px] font-black tracking-[0.18em] text-white/45">
-              TIME TO GOAL
-            </p>
-            <strong className="mt-1 block text-lg leading-snug font-black sm:text-xl">
-              {headline}
-            </strong>
-          </div>
-
-          <div className="mt-4">
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 text-[11px] leading-none font-bold text-white/70">
-              <span className="whitespace-nowrap">
-                목표 달성률 {progress.toFixed(1)}%
+        <div
+          className={`absolute inset-0 isolate overflow-hidden rounded-[23px] bg-gradient-to-b ${tier.surface} p-3 text-white`}
+          style={{
+            backfaceVisibility: "hidden",
+            transform: "rotateY(180deg)",
+          }}
+          aria-hidden={!flipped}
+        >
+          <div className="relative h-full overflow-hidden rounded-2xl border border-white/20 bg-slate-950">
+            <img
+              src={styleVisual.image}
+              alt=""
+              width={418}
+              height={418}
+              className="h-full min-h-[560px] w-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/25 to-black/15" />
+            <div className="absolute inset-x-0 top-0 flex items-center justify-between p-4">
+              <span className="text-[10px] font-black tracking-[0.22em] text-fuchsia-200">
+                MY INVESTMENT TYPE
               </span>
-              <span className="shrink-0 whitespace-nowrap">{target}</span>
+              <span className="rounded-full border border-white/25 bg-black/35 px-2.5 py-1 text-[10px] font-black backdrop-blur">
+                {tier.tier}
+              </span>
             </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
-              <div
-                className={`h-full rounded-full transition-[width] duration-500 ${
-                  tier.rank >= 7
-                    ? "bg-gradient-to-r from-cyan-300 via-fuchsia-300 to-amber-200 shadow-[0_0_14px_rgba(103,232,249,0.9)]"
-                    : tier.rank >= 4
-                      ? "bg-gradient-to-r from-emerald-400 to-cyan-300 shadow-[0_0_9px_rgba(52,211,153,0.6)]"
-                      : tier.rank >= 2
-                        ? "bg-amber-400"
-                        : "bg-zinc-500"
-                }`}
-                style={{ width: `${progress}%` }}
-              />
+            <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6">
+              <p className="text-[10px] font-black tracking-[0.18em] text-fuchsia-300">
+                INVESTMENT STYLE
+              </p>
+              <h3 className="mt-2 text-2xl leading-tight font-black">
+                {investmentStyle?.title ?? "나만의 투자 성향"}
+              </h3>
+              <p className="mt-3 text-sm leading-6 text-white/75">
+                {investmentStyle?.description ?? styleVisual.summary}
+              </p>
+              {investmentStyle?.reason && (
+                <p className="mt-2 text-xs leading-5 text-white/50">
+                  {investmentStyle.reason}
+                </p>
+              )}
+              <div className="mt-5 flex items-center justify-between border-t border-white/15 pt-4">
+                <span className="text-[9px] font-black tracking-[0.2em] text-white/35">
+                  EOKKA STYLE COLLECTION
+                </span>
+                <span className="flex items-center gap-1.5 text-[10px] font-bold text-white/60">
+                  <RefreshCwIcon className="size-3" /> 다시 클릭해 앞면 보기
+                </span>
+              </div>
             </div>
-          </div>
-
-          <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-3">
-            <span className="text-[9px] font-black tracking-[0.2em] text-white/35">
-              EOKKA SPEED COLLECTION
-            </span>
-            <span className="text-xs font-black tracking-[0.22em]">EOKKA</span>
           </div>
         </div>
       </div>
@@ -425,6 +552,7 @@ export type SharedInvestmentCardPayload = {
   headline: string;
   progress: number;
   target: string;
+  investmentStyleTitle?: string;
 };
 
 export function SharedInvestmentCard({
@@ -434,6 +562,15 @@ export function SharedInvestmentCard({
 }) {
   const tier =
     tiers.find((item) => item.tier === payload.tier) ?? tiers.at(-1)!;
+  const sharedStyle = payload.investmentStyleTitle
+    ? {
+        title: payload.investmentStyleTitle,
+        description:
+          investmentStyleVisuals[payload.investmentStyleTitle]?.summary ??
+          fallbackInvestmentStyle.summary,
+        reason: "",
+      }
+    : undefined;
 
   return (
     <TierCard
@@ -443,6 +580,8 @@ export function SharedInvestmentCard({
       progress={Math.min(100, Math.max(0, payload.progress))}
       target={payload.target}
       expanded
+      investmentStyle={sharedStyle}
+      flippable={Boolean(sharedStyle)}
     />
   );
 }
@@ -508,6 +647,7 @@ export function InvestmentCharacterCard({
     url.searchParams.set("headline", cardProps.headline);
     url.searchParams.set("progress", progress.toFixed(1));
     url.searchParams.set("target", target);
+    url.searchParams.set("style", result.investmentStyle.title);
     url.searchParams.set("utm_source", "share_card");
     url.searchParams.set("utm_medium", "referral");
     return url.toString();
@@ -711,9 +851,14 @@ export function InvestmentCharacterCard({
                 닫기
               </button>
               <p className="absolute -top-9 right-20 left-20 hidden text-center text-xs font-bold whitespace-nowrap text-white/60 sm:block">
-                마우스를 움직여 카드의 홀로그램 효과를 확인해 보세요
+                마우스로 움직이고 클릭해서 투자 성향 뒷면을 확인해 보세요
               </p>
-              <TierCard {...cardProps} expanded />
+              <TierCard
+                {...cardProps}
+                expanded
+                investmentStyle={result.investmentStyle}
+                flippable
+              />
             </div>
           </div>
         </div>
