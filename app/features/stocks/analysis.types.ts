@@ -2,6 +2,7 @@ export interface AnalysisResult {
   asOf: string;
   marketMode: "domestic" | "global-test";
   goalAmount: number;
+  monthlyContribution: number;
   totalCost: number;
   currentValue: number;
   profit: number;
@@ -33,6 +34,13 @@ export interface AnalysisResult {
     valueAt30Years: number;
     valueAt50Years: number;
   }>;
+  contributionScenarios: Array<{
+    key: "conservative" | "base" | "optimistic";
+    label: string;
+    percentile: number;
+    goalMonth: number | null;
+    shortenedByMonths: number | null;
+  }>;
   chart: Array<{
     month: number;
     conservative: number;
@@ -47,7 +55,63 @@ export interface AnalysisResult {
     valueAt10Years: number;
     cagr: number | null;
   } | null;
-  probability: { tenYears: number; twentyYears: number; thirtyYears: number };
+  probability: {
+    tenYears: number;
+    twentyYears: number;
+    thirtyYears: number;
+    fortyYears: number;
+    fiftyYears: number;
+  };
+  investmentStyle: {
+    title: string;
+    description: string;
+    reason: string;
+    scores: Array<{
+      key:
+        | "stability"
+        | "growth"
+        | "concentration"
+        | "diversification"
+        | "etf"
+        | "aggression";
+      label: string;
+      score: number;
+    }>;
+  };
   riskWarnings: string[];
   summary: string[];
+  aiStrategy?: AiStrategy | null;
+}
+
+export interface AiStrategy {
+  headline: string;
+  diagnosis: string;
+  scores: Array<{
+    key:
+      | "currentAssets"
+      | "monthlyInvestment"
+      | "profitability"
+      | "diversification"
+      | "growthPotential"
+      | "stability";
+    label: string;
+    description: string;
+    score: number;
+  }>;
+  strengths: Array<{
+    title: string;
+    detail: string;
+  }>;
+  improvements: Array<{
+    title: string;
+    detail: string;
+  }>;
+  monthlyPlan: string;
+  diversification: string;
+  actions: Array<{
+    title: string;
+    detail: string;
+    priority: "높음" | "보통" | "낮음";
+  }>;
+  disclaimer: string;
 }

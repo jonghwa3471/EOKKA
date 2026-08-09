@@ -9,11 +9,13 @@ import {
 } from "~/core/lib/rate-limit.server";
 
 import { type AnalysisInput, analyzePortfolio } from "../analysis.server";
+import { generateAiStrategy } from "../ai-strategy.server";
 
 const MAX_REQUEST_SIZE = 10_000;
 const inputSchema = z
   .object({
     goalAmount: z.number().int().min(100_000_000).max(100_000_000_000),
+    monthlyContribution: z.number().int().min(0).max(1_000_000_000).default(0),
     holdings: z
       .array(
         z
@@ -61,7 +63,14 @@ export async function action({ request }: Route.ActionArgs) {
       );
 
     const input: AnalysisInput = validation.data;
-    return data(await analyzePortfolio(input));
+    const result = await analyzePortfolio(input);
+    let aiStrategy = null;
+    try {
+      aiStrategy = await generateAiStrategy(result);
+    } catch (error) {
+      console.error("AI strategy generation failed", error);
+    }
+    return data({ ...result, aiStrategy });
   } catch (error) {
     console.error("Stock analysis failed", error);
     return data(

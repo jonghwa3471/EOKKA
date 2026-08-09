@@ -19,6 +19,7 @@ const SIMULATION_MONTHS = 600;
 
 export interface AnalysisInput {
   goalAmount: number;
+  monthlyContribution: number;
   holdings: Array<{
     stockId: number;
     averagePrice: number;
@@ -52,6 +53,44 @@ function cagr(returns: number[], months: number) {
   const selected = returns.slice(-months);
   const growth = selected.reduce((value, rate) => value * (1 + rate), 1);
   return (growth ** (12 / months) - 1) * 100;
+}
+
+const clampStyleScore = (score: number) =>
+  Math.round(Math.max(0, Math.min(100, score)));
+
+function annualizedVolatility(returns: number[]) {
+  if (returns.length < 2) return 0;
+  const average = returns.reduce((sum, rate) => sum + rate, 0) / returns.length;
+  const variance =
+    returns.reduce((sum, rate) => sum + (rate - average) ** 2, 0) /
+    (returns.length - 1);
+  return Math.sqrt(variance) * Math.sqrt(12) * 100;
+}
+
+function maximumDrawdown(returns: number[]) {
+  let value = 1;
+  let peak = 1;
+  let drawdown = 0;
+  for (const rate of returns) {
+    value *= 1 + rate;
+    peak = Math.max(peak, value);
+    drawdown = Math.max(drawdown, (peak - value) / peak);
+  }
+  return drawdown * 100;
+}
+
+function positiveRollingYearRatio(returns: number[]) {
+  if (returns.length < 12) return 0;
+  let positive = 0;
+  let windows = 0;
+  for (let end = 12; end <= returns.length; end++) {
+    const growth = returns
+      .slice(end - 12, end)
+      .reduce((value, rate) => value * (1 + rate), 1);
+    if (growth > 1) positive++;
+    windows++;
+  }
+  return windows ? positive / windows : 0;
 }
 
 function seededRandom(seed: number) {
@@ -128,6 +167,7 @@ function simulatePaths(
   goalAmount: number,
   seed: number,
   longTermAnnualReturn: number,
+  monthlyContribution = 0,
 ) {
   const logReturns = returns.map((rate) => Math.log1p(rate));
   const rawHistoricalMonthlyDrift =
@@ -150,7 +190,7 @@ function simulatePaths(
     for (let month = 0; month <= SIMULATION_MONTHS; month++) {
       valuesByMonth[month][path] = value;
       if (
-        month <= GOAL_MONTHS &&
+        month <= SIMULATION_MONTHS &&
         value >= goalAmount &&
         goalMonths[path] === -1
       )
@@ -167,7 +207,10 @@ function simulatePaths(
         longTermMonthlyDrift * (1 - driftWeight);
       const projectedLogReturn =
         monthlyDrift + residual * residualVolatilityWeight(month);
-      value = Math.max(0, value * Math.exp(projectedLogReturn));
+      value = Math.max(
+        0,
+        value * Math.exp(projectedLogReturn) + monthlyContribution,
+      );
     }
   }
 
@@ -183,6 +226,12 @@ export async function analyzePortfolio(
     input.goalAmount > 100_000_000_000
   )
     throw new Error("목표 금액은 1억 이상 1,000억 이하로 입력해 주세요.");
+  if (
+    !Number.isInteger(input.monthlyContribution) ||
+    input.monthlyContribution < 0 ||
+    input.monthlyContribution > 1_000_000_000
+  )
+    throw new Error("월 추가 투자금은 0원 이상 10억원 이하로 입력해 주세요.");
   if (!input.holdings.length || input.holdings.length > 10)
     throw new Error("분석할 종목은 1개 이상 10개 이하로 입력해 주세요.");
   if (
@@ -263,6 +312,166 @@ export async function analyzePortfolio(
   if (portfolioReturns.length < 24)
     throw new Error("시나리오 계산에 필요한 과거 데이터가 부족합니다.");
 
+  const volatility = annualizedVolatility(portfolioReturns);
+  const historicalGrowth =
+    cagr(portfolioReturns, Math.min(60, portfolioReturns.length)) ?? 0;
+  const concentration = weights.reduce((sum, weight) => sum + weight ** 2, 0);
+  const effectiveHoldings = concentration > 0 ? 1 / concentration : 1;
+  const largestWeight = Math.max(0, ...weights) * 100;
+  const etfWeight = marketData.reduce(
+    (sum, { stock }, index) =>
+      sum + (["ETF", "ETN"].includes(stock.security_type) ? weights[index] : 0),
+    0,
+  );
+  const leverageWeight = marketData.reduce(
+    (sum, { stock }, index) =>
+      sum +
+      (/(레버리지|인버스|2X|곱버스)/i.test(stock.name) ? weights[index] : 0),
+    0,
+  );
+  const buildInvestmentStyle = (benchmarkReturns: number[]) => {
+    const benchmarkVolatility = annualizedVolatility(benchmarkReturns);
+    const relativeVolatility =
+      benchmarkVolatility > 0
+        ? volatility / benchmarkVolatility
+        : volatility / 22;
+    const drawdown = maximumDrawdown(portfolioReturns);
+    const benchmarkDrawdown = benchmarkReturns.length
+      ? maximumDrawdown(benchmarkReturns)
+      : 25;
+    const excessDrawdown = Math.max(0, drawdown - benchmarkDrawdown);
+    const upwardRatio = positiveRollingYearRatio(portfolioReturns);
+    const benchmarkGrowth =
+      benchmarkReturns.length >= 12
+        ? (cagr(benchmarkReturns, Math.min(60, benchmarkReturns.length)) ?? 0)
+        : 0;
+    const excessGrowth = historicalGrowth - benchmarkGrowth;
+    const investmentStyleScores: AnalysisResult["investmentStyle"]["scores"] = [
+      {
+        key: "stability",
+        label: "안정 추구",
+        score: clampStyleScore(
+          75 - (relativeVolatility - 0.7) * 50 - excessDrawdown * 0.6,
+        ),
+      },
+      {
+        key: "growth",
+        label: "성장 추구",
+        score: clampStyleScore(
+          35 + historicalGrowth * 1.4 + upwardRatio * 30 + excessGrowth * 0.5,
+        ),
+      },
+      {
+        key: "concentration",
+        label: "집중 성향",
+        score: clampStyleScore(largestWeight),
+      },
+      {
+        key: "diversification",
+        label: "분산 성향",
+        score: clampStyleScore(20 + (effectiveHoldings - 1) * 20),
+      },
+      {
+        key: "etf",
+        label: "ETF 활용",
+        score: clampStyleScore(etfWeight * 100),
+      },
+      {
+        key: "aggression",
+        label: "공격 성향",
+        score: clampStyleScore(
+          25 +
+            (relativeVolatility - 0.8) * 45 +
+            excessDrawdown * 0.8 +
+            leverageWeight * 60,
+        ),
+      },
+    ];
+    const style = Object.fromEntries(
+      investmentStyleScores.map(({ key, score }) => [key, score]),
+    ) as Record<
+      AnalysisResult["investmentStyle"]["scores"][number]["key"],
+      number
+    >;
+    const styleResult = (() => {
+      if (leverageWeight >= 0.3)
+        return {
+          title: "파도를 타는 레버리지 서퍼",
+          description:
+            "레버리지·인버스 비중이 높아 빠른 움직임을 선호하는 유형이에요.",
+          reason: `현재 평가금액 중 레버리지·인버스 상품 비중이 ${Math.round(leverageWeight * 100)}%로 높게 나타났어요.`,
+        };
+      if (
+        style.aggression >= 75 &&
+        relativeVolatility >= 1.45 &&
+        (excessDrawdown >= 8 || upwardRatio < 0.55)
+      )
+        return {
+          title: "급등락을 즐기는 롤러코스터 헌터",
+          description:
+            "시장보다 큰 등락과 낙폭을 감수하며 높은 성장 가능성을 추구하는 유형이에요.",
+          reason: `과거 변동성이 시장 기준의 ${relativeVolatility.toFixed(2)}배이고 최대 낙폭은 ${drawdown.toFixed(1)}%로 나타났어요.`,
+        };
+      if (style.etf >= 60)
+        return {
+          title: "지수를 모으는 ETF 항해사",
+          description:
+            "개별 종목보다 ETF·ETN을 활용해 시장의 흐름을 따라가는 유형이에요.",
+          reason: `현재 평가금액 중 ETF·ETN 비중이 ${Math.round(etfWeight * 100)}%로 포트폴리오의 절반 이상을 차지해요.`,
+        };
+      if (
+        historicalGrowth > 0 &&
+        upwardRatio >= 0.7 &&
+        relativeVolatility <= 1.35 &&
+        drawdown <= benchmarkDrawdown + 10
+      )
+        return {
+          title: "꾸준한 우상향 수집가",
+          description:
+            "시장과 크게 다르지 않은 변동 범위에서 장기 상승 흐름을 이어온 종목을 모은 유형이에요.",
+          reason: `최근 최대 5년 연평균 성장률은 ${historicalGrowth.toFixed(1)}%이고, 12개월 단위 관측 구간의 ${Math.round(upwardRatio * 100)}%에서 상승했어요. 변동성은 시장 기준의 ${relativeVolatility.toFixed(2)}배예요.`,
+        };
+      if (style.concentration >= 60)
+        return {
+          title: "한 종목을 믿는 집중 승부사",
+          description:
+            "가장 큰 확신을 가진 종목에 포트폴리오의 힘을 모으는 유형이에요.",
+          reason: `가장 비중이 큰 한 종목이 현재 포트폴리오의 ${largestWeight.toFixed(1)}%를 차지해요.`,
+        };
+      if (style.diversification >= 75)
+        return {
+          title: "바구니를 나누는 분산 설계자",
+          description:
+            "여러 종목에 비중을 나눠 특정 종목의 영향을 줄이는 유형이에요.",
+          reason: `종목별 평가 비중을 반영한 유효 종목 수가 약 ${effectiveHoldings.toFixed(1)}개로 분산 성향이 ${style.diversification}점이에요.`,
+        };
+      if (style.stability >= 70)
+        return {
+          title: "흔들림을 줄이는 방어형 항해사",
+          description:
+            "큰 변동보다 비교적 안정적인 흐름을 선호하는 유형이에요.",
+          reason: `포트폴리오 변동성이 시장 기준의 ${relativeVolatility.toFixed(2)}배이고 최대 낙폭은 ${drawdown.toFixed(1)}%로 나타났어요.`,
+        };
+      if (style.growth >= 70)
+        return {
+          title: "성장을 좇는 복리 탐험가",
+          description:
+            "과거 성장 흐름이 강한 자산을 중심으로 복리의 힘을 기대하는 유형이에요.",
+          reason: `최근 최대 5년의 과거 연평균 성장률이 ${historicalGrowth.toFixed(1)}%로 성장 추구 점수가 ${style.growth}점이에요.`,
+        };
+      return {
+        title: "균형을 다듬는 포트폴리오 조율사",
+        description:
+          "안정과 성장, 집중과 분산 사이에서 균형점을 찾아가는 유형이에요.",
+        reason: `여섯 가지 성향 중 하나가 압도적으로 높지 않아 안정 ${style.stability}점·성장 ${style.growth}점·집중 ${style.concentration}점의 균형이 두드러졌어요.`,
+      };
+    })();
+    return {
+      ...styleResult,
+      scores: investmentStyleScores,
+    };
+  };
+
   const { valuesByMonth, goalMonths } = simulatePaths(
     portfolioReturns,
     currentValue,
@@ -289,6 +498,7 @@ export async function analyzePortfolio(
 
   let benchmark: AnalysisResult["benchmark"] = null;
   let benchmarkValues: Float64Array[] | null = null;
+  let benchmarkHistoricalReturns: number[] = [];
   try {
     const components: Array<{
       name: string;
@@ -338,6 +548,7 @@ export async function analyzePortfolio(
 
     const benchmarkReturns = weightedMonthlyReturns(components);
     if (benchmarkReturns.length >= 24) {
+      benchmarkHistoricalReturns = benchmarkReturns;
       const simulated = simulatePaths(
         benchmarkReturns,
         currentValue,
@@ -367,6 +578,8 @@ export async function analyzePortfolio(
   } catch (error) {
     console.warn("Market benchmark calculation skipped", error);
   }
+
+  const investmentStyle = buildInvestmentStyle(benchmarkHistoricalReturns);
 
   const chart = [];
   for (let month = 0; month <= GOAL_MONTHS; month += 6) {
@@ -407,6 +620,43 @@ export async function analyzePortfolio(
     };
   });
 
+  const contributionScenarios = input.monthlyContribution
+    ? (() => {
+        const { valuesByMonth: contributionValues } = simulatePaths(
+          portfolioReturns,
+          currentValue,
+          input.goalAmount,
+          ids.reduce((sum, id) => sum + id, 2_026),
+          expectedLongTermReturn,
+          input.monthlyContribution,
+        );
+
+        return scenarioConfig.map(([key, label, percentile], index) => {
+          let goalMonth: number | null = null;
+          for (let month = 0; month <= GOAL_MONTHS; month++) {
+            if (
+              quantile(contributionValues[month], percentile) >=
+              input.goalAmount
+            ) {
+              goalMonth = month;
+              break;
+            }
+          }
+          const baselineGoalMonth = scenarios[index].goalMonth;
+          return {
+            key,
+            label,
+            percentile,
+            goalMonth,
+            shortenedByMonths:
+              goalMonth !== null && baselineGoalMonth !== null
+                ? Math.max(0, baselineGoalMonth - goalMonth)
+                : null,
+          };
+        });
+      })()
+    : [];
+
   const probabilityAt = (months: number) =>
     (Array.from(goalMonths).filter((month) => month >= 0 && month <= months)
       .length /
@@ -443,6 +693,7 @@ export async function analyzePortfolio(
       .at(0)!,
     marketMode,
     goalAmount: input.goalAmount,
+    monthlyContribution: input.monthlyContribution,
     totalCost,
     currentValue,
     profit,
@@ -459,13 +710,17 @@ export async function analyzePortfolio(
       available: cagr(portfolioReturns, portfolioReturns.length),
     },
     scenarios,
+    contributionScenarios,
     benchmark,
     chart,
     probability: {
       tenYears: probabilityAt(120),
       twentyYears: probabilityAt(240),
       thirtyYears: probabilityAt(360),
+      fortyYears: probabilityAt(480),
+      fiftyYears: probabilityAt(600),
     },
+    investmentStyle,
     riskWarnings:
       leveragedProducts.length > 0
         ? [
@@ -477,6 +732,20 @@ export async function analyzePortfolio(
       baseGoal === null
         ? `평균 시나리오에서는 30년 안에 ${goalLabel(input.goalAmount)} 도달이 확인되지 않습니다.`
         : `평균 시나리오에서는 약 ${periodLabel(baseGoal)} 후 ${goalLabel(input.goalAmount)} 도달이 예상됩니다.`,
+      ...(input.monthlyContribution > 0
+        ? [
+            (() => {
+              const contributedBase = contributionScenarios[1];
+              if (contributedBase.goalMonth === null)
+                return `매월 ${Math.round(input.monthlyContribution).toLocaleString("ko-KR")}원을 추가 투자해도 평균 시나리오에서는 30년 안에 목표 도달이 확인되지 않습니다.`;
+              if (baseGoal === null)
+                return `매월 ${Math.round(input.monthlyContribution).toLocaleString("ko-KR")}원을 추가 투자하면 평균 시나리오에서 약 ${periodLabel(contributedBase.goalMonth)} 후 목표에 도달합니다.`;
+              if (baseGoal <= contributedBase.goalMonth)
+                return `매월 ${Math.round(input.monthlyContribution).toLocaleString("ko-KR")}원을 추가 투자해도 평균 시나리오의 목표 도달 시점은 현재 계산과 같습니다.`;
+              return `매월 ${Math.round(input.monthlyContribution).toLocaleString("ko-KR")}원을 추가 투자하면 평균 시나리오의 목표 도달 시점이 약 ${periodLabel(baseGoal - contributedBase.goalMonth)} 당겨집니다.`;
+            })(),
+          ]
+        : []),
       ...(benchmarkComparison ? [benchmarkComparison] : []),
       `20년 안에 ${goalLabel(input.goalAmount)}을 넘은 시뮬레이션 비율은 ${probabilityAt(240).toFixed(1)}%입니다.`,
       marketMode === "domestic"

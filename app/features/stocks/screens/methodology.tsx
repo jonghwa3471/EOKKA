@@ -45,7 +45,7 @@ const steps = [
     icon: RouteIcon,
     title: "5,000개 미래 경로 생성",
     description:
-      "과거 월별 흐름을 6개월 블록으로 다시 조합해 현재 평가금액에서 시작하는 50년 경로 5,000개를 만들어요.",
+      "과거 월별 흐름을 6개월 블록으로 다시 조합해 현재 평가금액에서 시작하는 50년 경로 5,000개를 만들어요. 월 투자금을 입력하면 매월 말 같은 금액을 포트폴리오 비중대로 투자한 비교 경로도 계산해요.",
   },
   {
     icon: ChartSplineIcon,
@@ -167,7 +167,10 @@ export default function MethodologyScreen() {
           </h2>
           <ul className="text-muted-foreground mt-5 grid gap-3 leading-6 md:grid-cols-2">
             <li>• 과거 수익률은 미래 수익률을 보장하지 않아요.</li>
-            <li>• 세금, 거래 수수료와 추가 매수는 반영하지 않아요.</li>
+            <li>
+              • 세금과 거래 수수료, 입력한 월 투자금 외 비정기 매수는 반영하지
+              않아요.
+            </li>
             <li>• 30·50년 결과는 기간이 길수록 불확실성이 커져요.</li>
             <li>• 개별 기업의 상장폐지와 사업 변화는 직접 예측하지 않아요.</li>
             <li>• 국내 종가는 기업행사를 완전히 보정하지 못할 수 있어요.</li>

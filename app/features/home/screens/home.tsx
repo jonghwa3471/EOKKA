@@ -49,8 +49,27 @@ type Holding = {
 };
 
 const HOLDINGS_STORAGE_KEY = "eokka:portfolio-draft:v1";
-const ANALYSIS_STORAGE_KEY = "eokka:portfolio-analysis:v6";
+const ANALYSIS_STORAGE_KEY = "eokka:portfolio-analysis:v7";
 const GOAL_PRESETS = [1, 10, 100];
+const MONTHLY_CONTRIBUTION_MAX = 1_000_000_000;
+const MONTHLY_CONTRIBUTION_PRESETS = [10_000, 50_000, 100_000];
+const ANALYSIS_ESTIMATED_SECONDS = 20;
+
+function formatKoreanMoney(amount: number) {
+  if (!Number.isFinite(amount) || amount <= 0) return "0원";
+
+  const won = Math.floor(amount);
+  const eok = Math.floor(won / 100_000_000);
+  const man = Math.floor((won % 100_000_000) / 10_000);
+  const remainder = won % 10_000;
+  const parts = [
+    eok > 0 ? `${eok.toLocaleString("ko-KR")}억` : "",
+    man > 0 ? `${man.toLocaleString("ko-KR")}만` : "",
+    remainder > 0 ? remainder.toLocaleString("ko-KR") : "",
+  ].filter(Boolean);
+
+  return `${parts.join(" ")}원`;
+}
 
 const emptyHolding = (id: number): Holding => ({
   id,
@@ -118,10 +137,23 @@ export default function Home() {
   const [tab, setTab] = useState<"quick" | "saved">("quick");
   const [holdings, setHoldings] = useState<Holding[]>([emptyHolding(1)]);
   const [targetEok, setTargetEok] = useState("1");
+  const [monthlyContribution, setMonthlyContribution] = useState("");
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisSecondsLeft, setAnalysisSecondsLeft] = useState(
+    ANALYSIS_ESTIMATED_SECONDS,
+  );
   const [draftLoaded, setDraftLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!isAnalyzing) return;
+    setAnalysisSecondsLeft(ANALYSIS_ESTIMATED_SECONDS);
+    const timer = window.setInterval(() => {
+      setAnalysisSecondsLeft((seconds) => Math.max(0, seconds - 1));
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, [isAnalyzing]);
 
   useEffect(() => {
     // 이전 버전에서 장기 저장한 입력값은 남기지 않습니다.
@@ -134,6 +166,7 @@ export default function Home() {
         const draft = JSON.parse(storedDraft) as {
           holdings?: Holding[];
           targetEok?: string;
+          monthlyContribution?: string;
         };
 
         if (
@@ -166,6 +199,12 @@ export default function Home() {
           Number(draft.targetEok) <= 1_000
         )
           setTargetEok(draft.targetEok);
+        if (
+          typeof draft.monthlyContribution === "string" &&
+          /^\d*$/.test(draft.monthlyContribution) &&
+          Number(draft.monthlyContribution || 0) <= 1_000_000_000
+        )
+          setMonthlyContribution(draft.monthlyContribution);
       }
     } catch {
       window.sessionStorage.removeItem(HOLDINGS_STORAGE_KEY);
@@ -199,9 +238,9 @@ export default function Home() {
     if (!draftLoaded) return;
     window.sessionStorage.setItem(
       HOLDINGS_STORAGE_KEY,
-      JSON.stringify({ holdings, targetEok }),
+      JSON.stringify({ holdings, targetEok, monthlyContribution }),
     );
-  }, [draftLoaded, holdings, targetEok]);
+  }, [draftLoaded, holdings, monthlyContribution, targetEok]);
 
   const updateHolding = (
     id: number,
@@ -259,15 +298,38 @@ export default function Home() {
     window.sessionStorage.removeItem(ANALYSIS_STORAGE_KEY);
     setHoldings([emptyHolding(1)]);
     setTargetEok("1");
+    setMonthlyContribution("");
     setAnalysis(null);
     setAnalysisError("");
   };
 
   const targetAmount = Number(targetEok) * 100_000_000;
+  const monthlyContributionAmount = Number(monthlyContribution || 0);
+  const updateMonthlyContribution = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 10);
+    if (!digits) {
+      setMonthlyContribution("");
+      return;
+    }
+
+    setMonthlyContribution(
+      String(Math.min(Number(digits), MONTHLY_CONTRIBUTION_MAX)),
+    );
+  };
+  const addMonthlyContribution = (amount: number) => {
+    setMonthlyContribution(
+      String(
+        Math.min(monthlyContributionAmount + amount, MONTHLY_CONTRIBUTION_MAX),
+      ),
+    );
+  };
   const canAnalyze =
     Number.isInteger(Number(targetEok)) &&
     Number(targetEok) >= 1 &&
     Number(targetEok) <= 1_000 &&
+    Number.isInteger(monthlyContributionAmount) &&
+    monthlyContributionAmount >= 0 &&
+    monthlyContributionAmount <= MONTHLY_CONTRIBUTION_MAX &&
     holdings.every(
       ({ selectedStock, averagePrice, quantity }) =>
         selectedStock && Number(averagePrice) > 0 && Number(quantity) > 0,
@@ -283,6 +345,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           goalAmount: targetAmount,
+          monthlyContribution: monthlyContributionAmount,
           holdings: holdings.map((holding) => ({
             stockId: holding.selectedStock!.stockId,
             averagePrice: Number(holding.averagePrice),
@@ -620,6 +683,63 @@ export default function Home() {
                         ))}
                       </div>
                     </div>
+                    <div className="mt-5 border-t border-emerald-500/15 pt-5">
+                      <Label
+                        htmlFor="monthly-contribution"
+                        className="font-bold"
+                      >
+                        매월 추가 투자금{" "}
+                        <span className="text-muted-foreground text-xs font-normal">
+                          (선택)
+                        </span>
+                      </Label>
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        매달 같은 금액을 현재 포트폴리오 비중대로 투자한다고
+                        가정해 목표 기간이 얼마나 줄어드는지 비교해요.
+                      </p>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <div className="relative w-full sm:w-80">
+                          <Input
+                            id="monthly-contribution"
+                            type="text"
+                            inputMode="numeric"
+                            value={
+                              monthlyContribution
+                                ? monthlyContributionAmount.toLocaleString(
+                                    "ko-KR",
+                                  )
+                                : ""
+                            }
+                            onChange={(event) =>
+                              updateMonthlyContribution(event.target.value)
+                            }
+                            placeholder="예: 1,000,000"
+                            className="bg-background h-11 pr-12 text-right font-bold tabular-nums"
+                          />
+                          <span className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm">
+                            원
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {MONTHLY_CONTRIBUTION_PRESETS.map((amount) => (
+                            <button
+                              key={amount}
+                              type="button"
+                              onClick={() => addMonthlyContribution(amount)}
+                              className="bg-background h-8 rounded-full border px-3 text-xs font-semibold transition-colors hover:border-emerald-500/60 hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400"
+                              aria-label={`월 투자금에 ${formatKoreanMoney(amount)} 추가`}
+                            >
+                              +{formatKoreanMoney(amount)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {monthlyContributionAmount > 0 && (
+                        <p className="mt-2 text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                          {`매월 ${formatKoreanMoney(monthlyContributionAmount)}씩 투자`}
+                        </p>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -641,6 +761,35 @@ export default function Home() {
                         </>
                       )}
                     </Button>
+                    {isAnalyzing && (
+                      <div className="mt-3" role="status" aria-live="polite">
+                        <div className="text-muted-foreground flex items-center justify-between gap-3 text-xs">
+                          <span>시세·시나리오·AI 전략을 분석하고 있어요</span>
+                          <span className="shrink-0 font-bold text-emerald-600 tabular-nums dark:text-emerald-400">
+                            {analysisSecondsLeft > 0
+                              ? `약 ${analysisSecondsLeft}초 남음`
+                              : "마무리 중..."}
+                          </span>
+                        </div>
+                        <div className="bg-muted mt-2 h-1.5 overflow-hidden rounded-full">
+                          <div
+                            className="h-full rounded-full bg-emerald-500 transition-[width] duration-1000 ease-linear"
+                            style={{
+                              width: `${Math.min(
+                                95,
+                                ((ANALYSIS_ESTIMATED_SECONDS -
+                                  analysisSecondsLeft) /
+                                  ANALYSIS_ESTIMATED_SECONDS) *
+                                  100,
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                        <p className="text-muted-foreground mt-1.5 text-center text-[11px]">
+                          데이터 조회 상황에 따라 실제 시간은 달라질 수 있어요
+                        </p>
+                      </div>
+                    )}
                     <p className="text-muted-foreground mt-3 flex items-center justify-center gap-1.5 text-xs">
                       <LockKeyholeIcon className="size-3.5" />
                       입력 정보는 현재 탭에서만 유지되며, 탭을 닫으면 자동

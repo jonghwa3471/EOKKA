@@ -1,6 +1,11 @@
 import type { AnalysisResult } from "../analysis.types";
 
-import { CircleHelpIcon } from "lucide-react";
+import {
+  CircleAlertIcon,
+  CircleCheckIcon,
+  CircleHelpIcon,
+  SparklesIcon,
+} from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 
@@ -22,6 +27,18 @@ const colors = {
   optimistic: "#0ea5e9",
   market: "#a78bfa",
 };
+const allocationColors = [
+  "#10b981",
+  "#0ea5e9",
+  "#8b5cf6",
+  "#f59e0b",
+  "#f43f5e",
+  "#14b8a6",
+  "#6366f1",
+  "#84cc16",
+  "#f97316",
+  "#ec4899",
+];
 const won = (value: number) => `${Math.round(value).toLocaleString("ko-KR")}원`;
 const price = (value: number, currency: "KRW" | "USD") =>
   currency === "USD"
@@ -77,6 +94,404 @@ function goalDurationLabel(month: number | null) {
     .filter(Boolean)
     .join(" ");
   return `약 ${period}`;
+}
+
+function periodOnlyLabel(months: number) {
+  if (months <= 0) return "변화 없음";
+  const years = Math.floor(months / 12);
+  const remainingMonths = months % 12;
+  return [
+    years > 0 ? `${years}년` : "",
+    remainingMonths > 0 ? `${remainingMonths}개월` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function PortfolioAllocation({ result }: { result: AnalysisResult }) {
+  const totalValue = result.holdings.reduce(
+    (sum, holding) => sum + Math.max(0, holding.valueKrw),
+    0,
+  );
+  const allocations = result.holdings
+    .map((holding, originalIndex) => ({
+      ...holding,
+      color: allocationColors[originalIndex % allocationColors.length],
+      ratio:
+        totalValue > 0 ? (Math.max(0, holding.valueKrw) / totalValue) * 100 : 0,
+    }))
+    .sort((a, b) => b.ratio - a.ratio);
+  let cursor = 0;
+  const gradient = allocations
+    .map((holding) => {
+      const start = cursor;
+      cursor += holding.ratio;
+      return `${holding.color} ${start.toFixed(2)}% ${cursor.toFixed(2)}%`;
+    })
+    .join(", ");
+
+  return (
+    <section className="mt-6 rounded-2xl border bg-gradient-to-br from-emerald-500/[0.08] to-transparent p-5">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+        <div className="mx-auto shrink-0 sm:mx-0">
+          <div
+            className="relative size-40 rounded-full shadow-lg shadow-emerald-500/10"
+            style={{
+              background: gradient
+                ? `conic-gradient(${gradient})`
+                : "var(--muted)",
+            }}
+            role="img"
+            aria-label={`현재 평가금액 기준 ${allocations
+              .map(
+                (holding) =>
+                  `${holding.name} ${holding.ratio.toFixed(1)}퍼센트`,
+              )
+              .join(", ")}`}
+          >
+            <div className="bg-card absolute inset-[22%] flex flex-col items-center justify-center rounded-full border shadow-inner">
+              <strong className="text-xl font-black tabular-nums">
+                {allocations.length}
+              </strong>
+              <span className="text-muted-foreground mt-0.5 text-[11px] font-bold">
+                보유 종목
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div>
+            <h3 className="font-black">포트폴리오 비중</h3>
+            <p className="text-muted-foreground mt-1 text-xs">
+              현재 평가금액을 기준으로 계산했어요.
+            </p>
+          </div>
+          <ul className="mt-4 grid gap-x-5 gap-y-3 sm:grid-cols-2">
+            {allocations.map((holding) => (
+              <li
+                key={`${holding.ticker}-${holding.name}`}
+                className="flex min-w-0 items-center gap-2.5"
+              >
+                <span
+                  className="size-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: holding.color }}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold">{holding.name}</p>
+                  <p className="text-muted-foreground truncate text-[11px]">
+                    {holding.ticker}
+                  </p>
+                </div>
+                <strong className="shrink-0 text-sm tabular-nums">
+                  {holding.ratio.toFixed(1)}%
+                </strong>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+type StrategyScores = NonNullable<AnalysisResult["aiStrategy"]>["scores"];
+
+function AiStrategyRadar({ scores }: { scores: StrategyScores }) {
+  const size = 340;
+  const center = size / 2;
+  const radius = 105;
+  const point = (index: number, score: number, extraRadius = 0) => {
+    const angle = -Math.PI / 2 + (index * Math.PI * 2) / scores.length;
+    const distance = radius * (score / 100) + extraRadius;
+    return {
+      x: center + Math.cos(angle) * distance,
+      y: center + Math.sin(angle) * distance,
+    };
+  };
+  const polygonPoints = scores
+    .map((item, index) => {
+      const { x, y } = point(index, item.score);
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  return (
+    <div className="border-b border-violet-500/15 px-5 py-5 sm:px-6">
+      <div>
+        <h4 className="text-sm font-black">투자 균형 한눈에 보기</h4>
+        <p className="text-muted-foreground mt-1 text-xs">
+          현재 계산 결과를 EOKKA 내부 기준으로 100점 환산했어요.
+        </p>
+      </div>
+      <div className="mt-4 grid items-center gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
+        <svg
+          viewBox={`0 0 ${size} ${size}`}
+          className="mx-auto w-full max-w-[360px] overflow-visible"
+          role="img"
+          aria-label={scores
+            .map((item) => `${item.label} ${item.score}점`)
+            .join(", ")}
+        >
+          <defs>
+            <linearGradient id="ai-radar-fill" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.5" />
+              <stop offset="100%" stopColor="#10b981" stopOpacity="0.28" />
+            </linearGradient>
+          </defs>
+          {[20, 40, 60, 80, 100].map((level) => (
+            <polygon
+              key={level}
+              points={scores
+                .map((_, index) => {
+                  const { x, y } = point(index, level);
+                  return `${x},${y}`;
+                })
+                .join(" ")}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={level === 100 ? 1.2 : 0.7}
+              className="text-border"
+            />
+          ))}
+          {scores.map((_, index) => {
+            const outer = point(index, 100);
+            return (
+              <line
+                key={index}
+                x1={center}
+                y1={center}
+                x2={outer.x}
+                y2={outer.y}
+                stroke="currentColor"
+                strokeWidth="0.7"
+                className="text-border"
+              />
+            );
+          })}
+          <polygon
+            points={polygonPoints}
+            fill="url(#ai-radar-fill)"
+            stroke="#8b5cf6"
+            strokeWidth="2.5"
+            strokeLinejoin="round"
+          />
+          {scores.map((item, index) => {
+            const dataPoint = point(index, item.score);
+            const labelPoint = point(index, 100, 28);
+            const anchor =
+              labelPoint.x < center - 10
+                ? "end"
+                : labelPoint.x > center + 10
+                  ? "start"
+                  : "middle";
+            return (
+              <g key={item.key}>
+                <circle
+                  cx={dataPoint.x}
+                  cy={dataPoint.y}
+                  r="4"
+                  fill="#8b5cf6"
+                  stroke="white"
+                  strokeWidth="1.5"
+                />
+                <text
+                  x={labelPoint.x}
+                  y={labelPoint.y}
+                  textAnchor={anchor}
+                  dominantBaseline="middle"
+                  fill="currentColor"
+                  className="text-[11px] font-bold"
+                >
+                  {item.label}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+
+        <ul className="grid grid-cols-2 gap-2 lg:grid-cols-1">
+          {scores.map((item) => (
+            <li
+              key={item.key}
+              className="bg-background/70 flex items-center justify-between gap-3 rounded-lg border px-3 py-2"
+            >
+              <span className="min-w-0">
+                <span className="block text-xs font-bold">{item.label}</span>
+                <span className="text-muted-foreground mt-0.5 block text-[10px] leading-4">
+                  {item.description}
+                </span>
+              </span>
+              <strong
+                className={`text-sm tabular-nums ${
+                  item.score >= 70
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : item.score < 40
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-violet-600 dark:text-violet-400"
+                }`}
+              >
+                {item.score}점
+              </strong>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function InvestmentStyleRadar({
+  style,
+}: {
+  style: AnalysisResult["investmentStyle"];
+}) {
+  const size = 320;
+  const center = size / 2;
+  const radius = 92;
+  const point = (index: number, score: number, extraRadius = 0) => {
+    const angle = -Math.PI / 2 + (index * Math.PI * 2) / style.scores.length;
+    const distance = radius * (score / 100) + extraRadius;
+    return {
+      x: center + Math.cos(angle) * distance,
+      y: center + Math.sin(angle) * distance,
+    };
+  };
+  const dataPoints = style.scores
+    .map((item, index) => {
+      const { x, y } = point(index, item.score);
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  return (
+    <div className="border-b border-violet-500/15 px-5 py-5 sm:px-6">
+      <div className="rounded-2xl border border-fuchsia-500/25 bg-fuchsia-500/[0.06] p-4 text-center">
+        <p className="text-xs font-black tracking-[0.14em] text-fuchsia-600 uppercase dark:text-fuchsia-400">
+          My Investment Type
+        </p>
+        <h4 className="mt-2 text-xl font-black">{style.title}</h4>
+        <div className="mx-auto mt-3 max-w-xl rounded-xl border border-fuchsia-500/20 bg-background/60 px-4 py-3 text-left">
+          <p className="text-[11px] font-black text-fuchsia-600 dark:text-fuchsia-400">
+            투자 성향 분석
+          </p>
+          <p className="text-muted-foreground mt-1 text-xs leading-5">
+            {style.description} {style.reason}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid items-center gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
+        <svg
+          viewBox={`0 0 ${size} ${size}`}
+          className="mx-auto w-full max-w-[340px] overflow-visible"
+          role="img"
+          aria-label={style.scores
+            .map((item) => `${item.label} ${item.score}점`)
+            .join(", ")}
+        >
+          <defs>
+            <linearGradient
+              id="investment-style-fill"
+              x1="0"
+              y1="0"
+              x2="1"
+              y2="1"
+            >
+              <stop offset="0%" stopColor="#ec4899" stopOpacity="0.5" />
+              <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.28" />
+            </linearGradient>
+          </defs>
+          {[25, 50, 75, 100].map((level) => (
+            <polygon
+              key={level}
+              points={style.scores
+                .map((_, index) => {
+                  const { x, y } = point(index, level);
+                  return `${x},${y}`;
+                })
+                .join(" ")}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={level === 100 ? 1.2 : 0.7}
+              className="text-border"
+            />
+          ))}
+          {style.scores.map((_, index) => {
+            const outer = point(index, 100);
+            return (
+              <line
+                key={index}
+                x1={center}
+                y1={center}
+                x2={outer.x}
+                y2={outer.y}
+                stroke="currentColor"
+                strokeWidth="0.7"
+                className="text-border"
+              />
+            );
+          })}
+          <polygon
+            points={dataPoints}
+            fill="url(#investment-style-fill)"
+            stroke="#ec4899"
+            strokeWidth="2.5"
+            strokeLinejoin="round"
+          />
+          {style.scores.map((item, index) => {
+            const dataPoint = point(index, item.score);
+            const labelPoint = point(index, 100, 27);
+            const anchor =
+              labelPoint.x < center - 10
+                ? "end"
+                : labelPoint.x > center + 10
+                  ? "start"
+                  : "middle";
+            return (
+              <g key={item.key}>
+                <circle
+                  cx={dataPoint.x}
+                  cy={dataPoint.y}
+                  r="4"
+                  fill="#ec4899"
+                  stroke="white"
+                  strokeWidth="1.5"
+                />
+                <text
+                  x={labelPoint.x}
+                  y={labelPoint.y}
+                  textAnchor={anchor}
+                  dominantBaseline="middle"
+                  fill="currentColor"
+                  className="text-[11px] font-bold"
+                >
+                  {item.label}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+
+        <ul className="grid grid-cols-2 gap-2 lg:grid-cols-1">
+          {style.scores.map((item) => (
+            <li
+              key={item.key}
+              className="bg-background/70 flex items-center justify-between rounded-lg border px-3 py-2"
+            >
+              <span className="text-xs font-bold">{item.label}</span>
+              <strong className="text-sm text-fuchsia-600 tabular-nums dark:text-fuchsia-400">
+                {item.score}
+              </strong>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <p className="text-muted-foreground mt-2 text-center text-[10px] leading-4">
+        투자 유형 점수는 높고 낮음의 우열이 아니라 현재 성향의 강도를 뜻해요.
+      </p>
+    </div>
+  );
 }
 
 type MarketComparisonResult = {
@@ -183,8 +598,9 @@ function AnalysisMethodDialog({ result }: { result: AnalysisResult }) {
             <h3 className="font-bold">3. 미래 경로 5,000개 생성</h3>
             <p className="text-muted-foreground mt-1">
               과거 월별 흐름을 6개월 단위 블록으로 다시 조합해 최대 50년까지
-              5,000개의 미래 자산 경로를 만듭니다. 월 추가 투자금은 포함하지
-              않으며, 현재 보유 주식을 그대로 유지한다고 가정합니다.
+              5,000개의 미래 자산 경로를 만듭니다. 입력한 월 추가 투자금이
+              있다면 매월 수익률을 적용한 뒤 같은 금액을 현재 포트폴리오
+              비중으로 투자한다고 가정해 별도 경로를 계산합니다.
             </p>
           </section>
 
@@ -248,7 +664,10 @@ function AnalysisMethodDialog({ result }: { result: AnalysisResult }) {
             </h3>
             <ul className="text-muted-foreground mt-2 space-y-1">
               <li>• 과거 수익률이 미래 수익률을 보장하지 않습니다.</li>
-              <li>• 세금, 거래 수수료와 이후 추가 매수는 반영하지 않습니다.</li>
+              <li>
+                • 세금과 거래 수수료, 입력한 월 투자금 외의 비정기 추가 매수는
+                반영하지 않습니다.
+              </li>
               <li>
                 • 국내 종가는 수정주가가 아니므로 액면분할·병합 등이 과거
                 수익률에 영향을 줄 수 있습니다.
@@ -827,6 +1246,21 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
     { years: 30, valueKey: "valueAt30Years" },
     { years: 50, valueKey: "valueAt50Years" },
   ] as const;
+  const contributedBase = result.contributionScenarios.find(
+    (scenario) => scenario.key === "base",
+  );
+  const returnMedals = new Map<string, { icon: string; label: string }>(
+    [...result.holdings]
+      .sort((a, b) => b.returnRate - a.returnRate)
+      .slice(0, 3)
+      .map((holding, index) => [
+        `${holding.ticker}-${holding.name}`,
+        {
+          icon: ["🥇", "🥈", "🥉"][index],
+          label: `수익률 ${index + 1}위`,
+        },
+      ]),
+  );
 
   return (
     <section
@@ -858,6 +1292,8 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
           </p>
         </div>
       </div>
+
+      <PortfolioAllocation result={result} />
 
       <div className="mt-6 grid gap-3 sm:grid-cols-4">
         {[
@@ -901,13 +1337,26 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
         <div className="mt-4 divide-y">
           {result.holdings.map((holding) => {
             const isProfit = holding.profitKrw >= 0;
+            const holdingKey = `${holding.ticker}-${holding.name}`;
+            const medal = returnMedals.get(holdingKey);
             return (
               <div
-                key={`${holding.ticker}-${holding.name}`}
+                key={holdingKey}
                 className="grid gap-3 py-4 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))] sm:items-center"
               >
                 <div className="min-w-0">
-                  <strong className="block truncate">{holding.name}</strong>
+                  <strong className="flex min-w-0 items-center gap-1.5">
+                    {medal && (
+                      <span
+                        className="shrink-0 text-lg"
+                        title={medal.label}
+                        aria-label={medal.label}
+                      >
+                        {medal.icon}
+                      </span>
+                    )}
+                    <span className="truncate">{holding.name}</span>
+                  </strong>
                   <span className="text-muted-foreground text-xs">
                     {holding.ticker} · 현재가{" "}
                     {price(holding.currentPrice, holding.currency)}
@@ -958,6 +1407,84 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
           현재 평가금액 기준 {won(remainingToGoal)} 남았어요
         </p>
       </div>
+
+      {result.monthlyContribution > 0 && contributedBase && (
+        <div className="mt-5 overflow-hidden rounded-2xl border border-sky-500/25 bg-sky-500/[0.06]">
+          <div className="border-b border-sky-500/15 px-5 py-5">
+            <p className="text-sm font-bold text-sky-600 dark:text-sky-400">
+              매월 {compactWon(result.monthlyContribution)}을 꾸준히 투자하면
+            </p>
+            <h3 className="mt-1 text-xl font-black">
+              평균 목표 기간이{" "}
+              {result.scenarios[1].goalMonth === null &&
+              contributedBase.goalMonth !== null ? (
+                <span className="text-sky-600 dark:text-sky-400">
+                  30년 이내로 들어와요
+                </span>
+              ) : contributedBase.shortenedByMonths ? (
+                <>
+                  <span className="text-red-500">
+                    {periodOnlyLabel(contributedBase.shortenedByMonths)}
+                  </span>{" "}
+                  당겨져요
+                </>
+              ) : (
+                "뚜렷하게 줄어들지 않아요"
+              )}
+            </h3>
+            <p className="text-muted-foreground mt-2 text-xs leading-5">
+              매월 말에 현재 포트폴리오 비중대로 추가 투자하고, 다음 달부터 해당
+              금액에도 같은 수익률이 적용된다고 가정했어요.
+            </p>
+          </div>
+
+          <div className="grid gap-px bg-border sm:grid-cols-3">
+            {result.contributionScenarios.map((contributed) => {
+              const baseline = result.scenarios.find(
+                (scenario) => scenario.key === contributed.key,
+              )!;
+              return (
+                <div key={contributed.key} className="bg-card/95 px-5 py-4">
+                  <strong style={{ color: colors[contributed.key] }}>
+                    {contributed.label}
+                  </strong>
+                  <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+                    <div>
+                      <p className="text-muted-foreground text-[11px]">
+                        현재만 유지
+                      </p>
+                      <p className="mt-0.5 font-bold">
+                        {goalDurationLabel(baseline.goalMonth)}
+                      </p>
+                    </div>
+                    <span className="text-muted-foreground" aria-hidden="true">
+                      →
+                    </span>
+                    <div className="text-right">
+                      <p className="text-muted-foreground text-[11px]">
+                        매월 추가 투자
+                      </p>
+                      <p className="mt-0.5 font-black text-sky-600 dark:text-sky-400">
+                        {goalDurationLabel(contributed.goalMonth)}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-xs font-bold text-red-500">
+                    {baseline.goalMonth === null &&
+                    contributed.goalMonth !== null
+                      ? "30년 내 도달 가능"
+                      : contributed.shortenedByMonths
+                        ? `${periodOnlyLabel(contributed.shortenedByMonths)} 단축`
+                        : contributed.goalMonth === null
+                          ? "30년 내 미도달"
+                          : "기간 변화 없음"}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <InvestmentCharacterCard result={result} />
 
@@ -1170,13 +1697,19 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
               [10, result.probability.tenYears],
               [20, result.probability.twentyYears],
               [30, result.probability.thirtyYears],
+              [40, result.probability.fortyYears],
+              [50, result.probability.fiftyYears],
             ].map(([year, value]) => (
               <div
                 key={year}
                 className="flex items-center justify-between text-sm"
               >
                 <dt>{year}년 이내</dt>
-                <dd className="font-bold">{value.toFixed(1)}%</dd>
+                <dd className="font-bold">
+                  {typeof value === "number"
+                    ? `${value.toFixed(1)}%`
+                    : "재분석 필요"}
+                </dd>
               </div>
             ))}
           </dl>
@@ -1197,6 +1730,113 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
       )}
 
       <GoalMomentumCard result={result} />
+
+      {result.aiStrategy && (
+        <section className="mt-5 overflow-hidden rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 via-background to-emerald-500/10">
+          <div className="border-b border-violet-500/15 p-5 sm:p-6">
+            <p className="flex items-center gap-2 text-xs font-black tracking-[0.16em] text-violet-600 uppercase dark:text-violet-400">
+              <SparklesIcon className="size-4" />
+              AI Strategy
+            </p>
+            <h3 className="mt-2 text-xl font-black">
+              {result.aiStrategy.headline}
+            </h3>
+            <p className="text-muted-foreground mt-2 text-sm leading-6">
+              {result.aiStrategy.diagnosis}
+            </p>
+          </div>
+
+          {result.aiStrategy.scores?.length === 6 && (
+            <AiStrategyRadar scores={result.aiStrategy.scores} />
+          )}
+
+          {result.investmentStyle?.scores?.length === 6 && (
+            <InvestmentStyleRadar style={result.investmentStyle} />
+          )}
+
+          <div className="grid gap-3 px-5 pt-5 sm:grid-cols-2 sm:px-6 sm:pt-6">
+            <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.07] p-4">
+              <p className="flex items-center gap-2 text-sm font-black text-emerald-700 dark:text-emerald-300">
+                <CircleCheckIcon className="size-4" />
+                잘하고 있는 점
+              </p>
+              <ul className="mt-3 space-y-3">
+                {(result.aiStrategy.strengths ?? []).map((item) => (
+                  <li key={item.title}>
+                    <p className="text-sm font-bold">{item.title}</p>
+                    <p className="text-muted-foreground mt-1 text-xs leading-5">
+                      {item.detail}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.07] p-4">
+              <p className="flex items-center gap-2 text-sm font-black text-amber-700 dark:text-amber-300">
+                <CircleAlertIcon className="size-4" />
+                아쉬운 점
+              </p>
+              <ul className="mt-3 space-y-3">
+                {(result.aiStrategy.improvements ?? []).map((item) => (
+                  <li key={item.title}>
+                    <p className="text-sm font-bold">{item.title}</p>
+                    <p className="text-muted-foreground mt-1 text-xs leading-5">
+                      {item.detail}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          <div className="grid gap-3 p-5 sm:grid-cols-2 sm:p-6">
+            <div className="bg-background/70 rounded-xl border p-4">
+              <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                월 투자 전략
+              </p>
+              <p className="mt-2 text-sm leading-6">
+                {result.aiStrategy.monthlyPlan}
+              </p>
+            </div>
+            <div className="bg-background/70 rounded-xl border p-4">
+              <p className="text-xs font-bold text-sky-600 dark:text-sky-400">
+                포트폴리오 점검
+              </p>
+              <p className="mt-2 text-sm leading-6">
+                {result.aiStrategy.diversification}
+              </p>
+            </div>
+          </div>
+
+          <div className="px-5 pb-5 sm:px-6 sm:pb-6">
+            <p className="text-sm font-black">지금 확인할 3가지</p>
+            <ol className="mt-3 grid gap-3 sm:grid-cols-3">
+              {result.aiStrategy.actions.map((action, index) => (
+                <li
+                  key={`${action.title}-${index}`}
+                  className="bg-background/70 rounded-xl border p-4"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-black text-violet-600 dark:text-violet-400">
+                      {index + 1}
+                    </span>
+                    <span className="text-muted-foreground rounded-full border px-2 py-0.5 text-[10px] font-bold">
+                      우선순위 {action.priority}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm font-bold">{action.title}</p>
+                  <p className="text-muted-foreground mt-1 text-xs leading-5">
+                    {action.detail}
+                  </p>
+                </li>
+              ))}
+            </ol>
+            <p className="text-muted-foreground mt-4 text-[11px] leading-5">
+              {result.aiStrategy.disclaimer}
+            </p>
+          </div>
+        </section>
+      )}
 
       <div className="mt-5 rounded-2xl bg-emerald-500/10 p-5">
         <h3 className="font-bold text-emerald-600 dark:text-emerald-400">
