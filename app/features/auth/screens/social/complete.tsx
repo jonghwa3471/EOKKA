@@ -70,11 +70,22 @@ function getOAuthProfile(user: {
 
   return {
     name:
-      firstString(metadata.name, metadata.full_name, metadata.user_name) ??
+      firstString(
+        metadata.name,
+        metadata.full_name,
+        metadata.user_name,
+        metadata.nickname,
+        metadata.preferred_username,
+      ) ??
       user.email?.split("@")[0] ??
       "사용자",
     avatarUrl:
-      firstString(metadata.avatar_url, metadata.picture) ?? null,
+      firstString(
+        metadata.avatar_url,
+        metadata.picture,
+        metadata.profile_image_url,
+        metadata.thumbnail_image_url,
+      ) ?? null,
   };
 }
 
@@ -151,6 +162,26 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   // repairs older OAuth accounts that do not have a profile yet. On later
   // logins we preserve any name or image the user edited in EOKKA.
   const oauthProfile = getOAuthProfile(user);
+
+  // Normalize provider-specific metadata so the navigation and account screens
+  // can use the same fields for both Google and Kakao.
+  const normalizedMetadata = {
+    ...user.user_metadata,
+    name: oauthProfile.name,
+    display_name: oauthProfile.name,
+    avatar_url: oauthProfile.avatarUrl,
+  };
+  const { error: metadataError } = await client.auth.updateUser({
+    data: normalizedMetadata,
+  });
+
+  if (metadataError) {
+    return data(
+      { error: "소셜 프로필 정보를 저장하지 못했어요. 다시 시도해 주세요." },
+      { status: 500, headers },
+    );
+  }
+
   const { data: existingProfile, error: profileReadError } = await client
     .from("profiles")
     .select("profile_id, name, avatar_url")

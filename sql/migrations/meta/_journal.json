@@ -64,6 +64,13 @@
       "when": 1786618053095,
       "tag": "0008_dashing_spitfire",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786619454639,
+      "tag": "0009_kakao_profile_metadata",
+      "breakpoints": true
     }
   ]
 }
