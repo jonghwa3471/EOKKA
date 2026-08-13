@@ -16,14 +16,14 @@ import {
 
 const enabledProviders = [
   {
-    name: "Google",
+    name: "구글",
     key: "google",
     logo: <GoogleLogo />,
   },
   {
-    name: "Kakao",
+    name: "카카오",
     key: "kakao",
-    logo: <KakaoLogo />,
+    logo: <KakaoLogo className="size-5 text-[#FEE500]" />,
   },
 ];
 
@@ -35,9 +35,9 @@ export default function ConnectSocialAccountsForm({
   return (
     <Card className="w-full max-w-screen-md">
       <CardHeader>
-        <CardTitle>Connect social accounts</CardTitle>
+        <CardTitle>소셜 계정 연결</CardTitle>
         <CardDescription>
-          Add or remove additional authentication methods to your account.
+          구글이나 카카오 계정을 연결하거나 연결을 해제할 수 있어요.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">

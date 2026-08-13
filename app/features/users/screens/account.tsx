@@ -6,14 +6,13 @@ import { Await } from "react-router";
 import makeServerClient from "~/core/lib/supa-client.server";
 
 import ChangeEmailForm from "../components/forms/change-email-form";
-import ChangePasswordForm from "../components/forms/change-password-form";
 import ConnectSocialAccountsForm from "../components/forms/connect-social-accounts-form";
 import DeleteAccountForm from "../components/forms/delete-account-form";
 import EditProfileForm from "../components/forms/edit-profile-form";
 import { getUserProfile } from "../queries";
 
 export const meta: Route.MetaFunction = () => {
-  return [{ title: `Account | ${import.meta.env.VITE_APP_NAME}` }];
+  return [{ title: `프로필 설정 | ${import.meta.env.VITE_APP_NAME}` }];
 };
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -32,11 +31,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function Account({ loaderData }: Route.ComponentProps) {
   const { user, identities, profile } = loaderData;
-  const hasEmailIdentity = user?.identities?.some(
-    (identity) => identity.provider === "email",
-  );
   return (
-    <div className="flex w-full flex-col items-center gap-10 pt-0 pb-8">
+    <div className="flex w-full flex-col items-center gap-10 px-5 pt-8 pb-10 md:px-8 md:pt-12">
       <Suspense
         fallback={
           <div className="bg-card animate-fast-pulse h-60 w-full max-w-screen-md rounded-xl border shadow-sm" />
@@ -45,7 +41,7 @@ export default function Account({ loaderData }: Route.ComponentProps) {
         <Await
           resolve={profile}
           errorElement={
-            <div className="text-red-500">Could not load profile</div>
+            <div className="text-red-500">프로필을 불러오지 못했습니다.</div>
           }
         >
           {(profile) => {
@@ -63,7 +59,6 @@ export default function Account({ loaderData }: Route.ComponentProps) {
         </Await>
       </Suspense>
       <ChangeEmailForm email={user?.email ?? ""} />
-      <ChangePasswordForm hasPassword={hasEmailIdentity ?? false} />
       <Suspense
         fallback={
           <div className="bg-card animate-fast-pulse h-60 w-full max-w-screen-md rounded-xl border shadow-sm" />
@@ -72,16 +67,16 @@ export default function Account({ loaderData }: Route.ComponentProps) {
         <Await
           resolve={identities}
           errorElement={
-            <div className="text-red-500">Could not load social accounts</div>
+            <div className="text-red-500">소셜 계정을 불러오지 못했습니다.</div>
           }
         >
           {({ data, error }) => {
             if (!data) {
               return (
                 <div className="text-red-500">
-                  <span>Could not load social accounts</span>
-                  <span className="text-xs">Code: {error.code}</span>
-                  <span className="text-xs">Message: {error.message}</span>
+                  <span>소셜 계정을 불러오지 못했습니다.</span>
+                  <span className="text-xs">오류 코드: {error.code}</span>
+                  <span className="text-xs">오류 내용: {error.message}</span>
                 </div>
               );
             }

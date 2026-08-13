@@ -6,8 +6,10 @@
 
 @theme {
   --font-sans:
-    "Geist", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
-    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    "Pretendard Variable", Pretendard, "SUIT Variable", SUIT,
+    "Noto Sans KR", "Apple SD Gothic Neo", ui-sans-serif, system-ui,
+    sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
+    "Noto Color Emoji";
 }
 
 html,
@@ -141,6 +143,7 @@ body {
       opacity: 0.3;
     }
   }
+
 }
 
 @layer base {
@@ -148,7 +151,9 @@ body {
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
   }
   html.dark {
     @apply bg-background!;

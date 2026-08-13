@@ -1,6 +1,6 @@
 import type { Route } from "./+types/dashboard.layout";
 
-import { Outlet } from "react-router";
+import { Outlet, useLocation } from "react-router";
 
 import {
   SidebarInset,
@@ -34,6 +34,10 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function DashboardLayout({ loaderData }: Route.ComponentProps) {
   const user = loaderData.user!;
+  const { pathname } = useLocation();
+  const pageTitle = pathname.startsWith("/account/")
+    ? "프로필 설정"
+    : "내 투자 대시보드";
   return (
     <SidebarProvider>
       <DashboardSidebar
@@ -43,7 +47,9 @@ export default function DashboardLayout({ loaderData }: Route.ComponentProps) {
         <header className="flex h-16 shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
           <div className="flex items-center gap-3 px-5">
             <SidebarTrigger className="-ml-1" />
-            <span className="text-muted-foreground text-sm font-semibold">내 투자 대시보드</span>
+            <span className="text-muted-foreground font-sans text-sm font-semibold tracking-[-0.015em]">
+              {pageTitle}
+            </span>
           </div>
         </header>
         <Outlet />

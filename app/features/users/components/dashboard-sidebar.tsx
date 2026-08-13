@@ -31,7 +31,7 @@ export default function DashboardSidebar({
   user: { name: string; email: string; avatarUrl: string };
 }) {
   return (
-    <Sidebar collapsible="icon" variant="inset" {...props}>
+    <Sidebar className="font-sans" collapsible="icon" variant="inset" {...props}>
       <SidebarHeader className="p-3">
         <SidebarMenu>
           <SidebarMenuItem>
@@ -41,7 +41,7 @@ export default function DashboardSidebar({
                   <HomeIcon className="size-5" />
                 </div>
                 <div className="grid flex-1 text-left leading-tight">
-                  <span className="font-black tracking-wide">EOKKA</span>
+                  <span className="font-black tracking-[-0.02em]">EOKKA</span>
                 </div>
               </Link>
             </SidebarMenuButton>

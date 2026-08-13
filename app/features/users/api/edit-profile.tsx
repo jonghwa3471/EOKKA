@@ -106,6 +106,8 @@ export async function action({ request }: Route.ActionArgs) {
       .from("avatars")
       .upload(user.id, validData.avatar, {
         upsert: true, // Replace existing avatar if any
+        cacheControl: "3600",
+        contentType: validData.avatar.type,
       });
       
     // Handle upload errors
@@ -117,7 +119,10 @@ export async function action({ request }: Route.ActionArgs) {
     const {
       data: { publicUrl },
     } = await client.storage.from("avatars").getPublicUrl(user.id);
-    avatarUrl = publicUrl;
+    // The storage object keeps the same path when it is replaced. Add a
+    // version query so browsers and social-provider image caches request the
+    // newly uploaded image instead of reusing the previous response.
+    avatarUrl = `${publicUrl}?v=${Date.now()}`;
   }
   
   // Update profile information in the profiles table
