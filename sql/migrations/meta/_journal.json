@@ -50,6 +50,20 @@
       "when": 1785309916128,
       "tag": "0006_harden_function_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786617436890,
+      "tag": "0007_chubby_doctor_strange",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786618053095,
+      "tag": "0008_dashing_spitfire",
+      "breakpoints": true
     }
   ]
 }

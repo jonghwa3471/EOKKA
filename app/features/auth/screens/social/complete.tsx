@@ -41,6 +41,10 @@ const searchParamsSchema = z.object({
   code: z.string(),
 });
 
+const paramsSchema = z.object({
+  provider: z.enum(["google", "kakao"]),
+});
+
 /**
  * Schema for validating error parameters from OAuth providers
  *
@@ -52,6 +56,27 @@ const errorSchema = z.object({
   error_code: z.string(),
   error_description: z.string(),
 });
+
+function getOAuthProfile(user: {
+  email?: string;
+  user_metadata: Record<string, unknown>;
+}) {
+  const metadata = user.user_metadata;
+  const firstString = (...values: unknown[]) =>
+    values.find(
+      (value): value is string =>
+        typeof value === "string" && value.trim().length > 0,
+    );
+
+  return {
+    name:
+      firstString(metadata.name, metadata.full_name, metadata.user_name) ??
+      user.email?.split("@")[0] ??
+      "사용자",
+    avatarUrl:
+      firstString(metadata.avatar_url, metadata.picture) ?? null,
+  };
+}
 
 /**
  * Loader function for the social authentication complete page
@@ -65,7 +90,12 @@ const errorSchema = z.object({
  * @param request - The incoming request with OAuth callback parameters
  * @returns Redirect to home page with auth cookies or error response
  */
-export async function loader({ request }: Route.LoaderArgs) {
+export async function loader({ params, request }: Route.LoaderArgs) {
+  const parsedParams = paramsSchema.safeParse(params);
+  if (!parsedParams.success) {
+    return data({ error: "지원하지 않는 로그인 방식입니다." }, { status: 400 });
+  }
+
   // Extract query parameters from the URL
   const { searchParams } = new URL(request.url);
 
@@ -86,18 +116,74 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
 
     // Return the error description from the provider
-    return data({ error: errorData.error_description }, { status: 400 });
+    return data(
+      {
+        error:
+          errorData.error === "access_denied"
+            ? "소셜 로그인이 취소되었어요."
+            : errorData.error_description,
+      },
+      { status: 400 },
+    );
   }
 
   // Create Supabase client and get response headers for auth cookies
   const [client, headers] = makeServerClient(request);
 
   // Exchange the OAuth code for a session
-  const { error } = await client.auth.exchangeCodeForSession(validData.code);
+  const { data: authData, error } =
+    await client.auth.exchangeCodeForSession(validData.code);
 
   // Return error if session exchange fails
   if (error) {
     return data({ error: error.message }, { status: 400 });
+  }
+
+  const user = authData.user;
+  if (!user) {
+    return data(
+      { error: "로그인 사용자 정보를 확인하지 못했어요." },
+      { status: 400, headers },
+    );
+  }
+
+  // Supabase creates new profiles through handle_sign_up(). This upsert also
+  // repairs older OAuth accounts that do not have a profile yet. On later
+  // logins we preserve any name or image the user edited in EOKKA.
+  const oauthProfile = getOAuthProfile(user);
+  const { data: existingProfile, error: profileReadError } = await client
+    .from("profiles")
+    .select("profile_id, name, avatar_url")
+    .eq("profile_id", user.id)
+    .maybeSingle();
+
+  if (profileReadError) {
+    return data(
+      { error: "프로필 정보를 확인하지 못했어요. 다시 시도해 주세요." },
+      { status: 500, headers },
+    );
+  }
+
+  const profileResult = existingProfile
+    ? await client
+        .from("profiles")
+        .update({
+          name: existingProfile.name || oauthProfile.name,
+          avatar_url: existingProfile.avatar_url || oauthProfile.avatarUrl,
+        })
+        .eq("profile_id", user.id)
+    : await client.from("profiles").insert({
+        profile_id: user.id,
+        name: oauthProfile.name,
+        avatar_url: oauthProfile.avatarUrl,
+        marketing_consent: false,
+      });
+
+  if (profileResult.error) {
+    return data(
+      { error: "프로필을 만들지 못했어요. 다시 시도해 주세요." },
+      { status: 500, headers },
+    );
   }
 
   // Redirect to home page with auth cookies in headers
@@ -120,7 +206,7 @@ export default function Confirm({ loaderData }: Route.ComponentProps) {
   return (
     <div className="flex flex-col items-center justify-center gap-2.5">
       {/* Display error heading */}
-      <h1 className="text-2xl font-semibold">Login failed</h1>
+      <h1 className="text-2xl font-semibold">로그인하지 못했어요</h1>
       {/* Display specific error message from the provider or Supabase */}
       <p className="text-muted-foreground">{loaderData.error}</p>
     </div>

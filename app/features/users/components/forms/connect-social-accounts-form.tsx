@@ -6,7 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "~/core/components/ui/card";
-import { GithubLogo } from "~/features/auth/components/logos/github";
+import { GoogleLogo } from "~/features/auth/components/logos/google";
 import { KakaoLogo } from "~/features/auth/components/logos/kakao";
 
 import {
@@ -16,9 +16,9 @@ import {
 
 const enabledProviders = [
   {
-    name: "Github",
-    key: "github",
-    logo: <GithubLogo />,
+    name: "Google",
+    key: "google",
+    logo: <GoogleLogo />,
   },
   {
     name: "Kakao",

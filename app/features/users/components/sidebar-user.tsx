@@ -88,7 +88,7 @@ export default function SidebarUser({
             <DropdownMenuGroup>
               <DropdownMenuItem>
                 <Sparkles />
-                Upgrade to Pro
+                EOKKA Pro 준비 중
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
@@ -96,25 +96,25 @@ export default function SidebarUser({
               <DropdownMenuItem asChild>
                 <Link to="/account/edit" viewTransition>
                   <UserCircle2Icon />
-                  Account
+                  프로필 설정
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link to="/dashboard/payments">
                   <CreditCard />
-                  Payments
+                  결제 내역
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem>
                 <Bell />
-                Notifications
+                알림 설정
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <Link to="/logout">
                 <LogOut />
-                Log out
+                로그아웃
               </Link>
             </DropdownMenuItem>
           </DropdownMenuContent>

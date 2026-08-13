@@ -17,25 +17,33 @@ export async function loader({ request }: Route.LoaderArgs) {
     data: { user },
   } = await client.auth.getUser();
   return {
-    user,
+    user: user
+      ? {
+          name:
+            user.user_metadata.name ??
+            user.user_metadata.full_name ??
+            user.email?.split("@")[0] ??
+            "사용자",
+          avatarUrl:
+            user.user_metadata.avatar_url ?? user.user_metadata.picture ?? "",
+          email: user.email ?? "",
+        }
+      : null,
   };
 }
 
 export default function DashboardLayout({ loaderData }: Route.ComponentProps) {
-  const { user } = loaderData;
+  const user = loaderData.user!;
   return (
     <SidebarProvider>
       <DashboardSidebar
-        user={{
-          name: user?.user_metadata.name ?? "",
-          avatarUrl: user?.user_metadata.avatar_url ?? "",
-          email: user?.email ?? "",
-        }}
+        user={user}
       />
       <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
-          <div className="flex items-center gap-2 px-4">
+        <header className="flex h-16 shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
+          <div className="flex items-center gap-3 px-5">
             <SidebarTrigger className="-ml-1" />
+            <span className="text-muted-foreground text-sm font-semibold">내 투자 대시보드</span>
           </div>
         </header>
         <Outlet />

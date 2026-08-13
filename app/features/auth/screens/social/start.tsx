@@ -50,6 +50,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   // Create Supabase client and get response headers for auth cookies
   const [client, headers] = makeServerClient(request);
+  const origin = new URL(request.url).origin;
 
   // Initialize OAuth flow with the specified provider
   const { data: signInData, error: signInError } =
@@ -57,13 +58,25 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       provider: parsedParams.provider,
       options: {
         // Set the callback URL for when authentication is complete
-        redirectTo: `${process.env.SITE_URL}/auth/social/complete/${parsedParams.provider}`,
+        redirectTo: `${origin}/auth/social/complete/${parsedParams.provider}`,
+        queryParams:
+          parsedParams.provider === "google"
+            ? { access_type: "offline", prompt: "select_account" }
+            : undefined,
       },
     });
 
   // Return error if OAuth initialization fails
   if (signInError) {
-    return data({ error: signInError.message }, { status: 400 });
+    return data(
+      {
+        error:
+          signInError.code === "validation_failed"
+            ? "선택한 소셜 로그인을 사용할 수 없어요. Supabase 제공자 설정을 확인해 주세요."
+            : signInError.message,
+      },
+      { status: 400 },
+    );
   }
 
   // Redirect to the provider's authentication page with auth headers
@@ -90,7 +103,7 @@ export default function StartSocialLogin({ loaderData }: Route.ComponentProps) {
     <div className="flex flex-col items-center justify-center gap-2.5">
       {/* Display error message */}
       <h1 className="text-2xl font-semibold">{error}</h1>
-      <p className="text-muted-foreground">Please try again.</p>
+      <p className="text-muted-foreground">잠시 후 다시 시도해 주세요.</p>
     </div>
   );
 }

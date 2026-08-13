@@ -14,7 +14,6 @@
  * - Integration with Supabase Auth API for identity unlinking
  * - Error handling for invalid inputs and API errors
  */
-
 import type { Route } from "./+types/disconnect-provider";
 
 import { data, redirect } from "react-router";
@@ -33,7 +32,7 @@ import makeServerClient from "~/core/lib/supa-client.server";
  * preventing potential security issues with unsupported providers.
  */
 const schema = z.object({
-  provider: z.enum(["github", "kakao"]),
+  provider: z.enum(["google", "kakao"]),
 });
 
 /**
@@ -64,19 +63,19 @@ const schema = z.object({
 export async function action({ request, params }: Route.ActionArgs) {
   // Validate request method (only allow DELETE)
   requireMethod("DELETE")(request);
-  
+
   // Create a server-side Supabase client with the user's session
   const [client] = makeServerClient(request);
-  
+
   // Verify the user is authenticated
   await requireAuthentication(client);
-  
+
   // Validate the provider parameter
   const { error, success, data: parsedParams } = schema.safeParse(params);
   if (!success) {
     return data({ error: "Invalid provider" }, { status: 400 });
   }
-  
+
   // Fetch the user's current connected identities
   const { data: userIdentities } = await client.auth.getUserIdentities();
 
@@ -84,20 +83,20 @@ export async function action({ request, params }: Route.ActionArgs) {
   const identity = userIdentities?.identities.find(
     (identity) => identity.provider === parsedParams.provider,
   );
-  
+
   // Return error if the identity is not found
   if (!identity) {
     return data({ error: "Identity not found" }, { status: 400 });
   }
-  
+
   // Unlink the identity using Supabase Auth API
   const { error: unlinkingError } = await client.auth.unlinkIdentity(identity);
-  
+
   // Handle API errors
   if (unlinkingError) {
     return data({ error: unlinkingError.message }, { status: 400 });
   }
-  
+
   // Return success response
   return {
     success: true,

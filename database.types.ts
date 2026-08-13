@@ -14,6 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      analysis_snapshots: {
+        Row: {
+          analysis_snapshot_id: number
+          created_at: string
+          current_value: number
+          goal_amount: number
+          goal_month: number | null
+          monthly_contribution: number
+          profit: number
+          result: Json
+          return_rate: number
+          saved_on: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          analysis_snapshot_id?: never
+          created_at?: string
+          current_value: number
+          goal_amount: number
+          goal_month?: number | null
+          monthly_contribution?: number
+          profit: number
+          result: Json
+          return_rate: number
+          saved_on: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          analysis_snapshot_id?: never
+          created_at?: string
+          current_value?: number
+          goal_amount?: number
+          goal_month?: number | null
+          monthly_contribution?: number
+          profit?: number
+          result?: Json
+          return_rate?: number
+          saved_on?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       payments: {
         Row: {
           approved_at: string

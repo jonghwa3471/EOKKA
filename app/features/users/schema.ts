@@ -36,6 +36,15 @@ export const profiles = pgTable(
     ...timestamps,
   },
   (table) => [
+    // RLS Policy: Authenticated users can create only their own profile.
+    // The auth trigger normally creates it, while this policy lets the OAuth
+    // callback safely repair a missing profile for an existing account.
+    pgPolicy("insert-profile-policy", {
+      for: "insert",
+      to: authenticatedRole,
+      as: "permissive",
+      withCheck: sql`${authUid} = ${table.profile_id}`,
+    }),
     // RLS Policy: Users can only update their own profile
     pgPolicy("edit-profile-policy", {
       for: "update",

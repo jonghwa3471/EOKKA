@@ -7,9 +7,11 @@ import {
   checkRateLimit,
   rateLimitResponse,
 } from "~/core/lib/rate-limit.server";
+import makeServerClient from "~/core/lib/supa-client.server";
 
 import { type AnalysisInput, analyzePortfolio } from "../analysis.server";
 import { generateAiStrategy } from "../ai-strategy.server";
+import { saveDailyAnalysisSnapshot } from "../history/analysis-history.server";
 
 const MAX_REQUEST_SIZE = 10_000;
 const inputSchema = z
@@ -70,7 +72,24 @@ export async function action({ request }: Route.ActionArgs) {
     } catch (error) {
       console.error("AI strategy generation failed", error);
     }
-    return data({ ...result, aiStrategy });
+    const completeResult = { ...result, aiStrategy };
+
+    // Anonymous analysis remains ephemeral. Signed-in users get one snapshot
+    // per Seoul calendar day; subsequent analyses update that day's snapshot.
+    try {
+      const [client] = makeServerClient(request);
+      const {
+        data: { user },
+      } = await client.auth.getUser();
+      if (user) {
+        await saveDailyAnalysisSnapshot({ userId: user.id, result: completeResult });
+      }
+    } catch (snapshotError) {
+      // A storage problem must not discard an otherwise valid analysis.
+      console.error("Analysis snapshot save failed", snapshotError);
+    }
+
+    return data(completeResult);
   } catch (error) {
     console.error("Stock analysis failed", error);
     return data(

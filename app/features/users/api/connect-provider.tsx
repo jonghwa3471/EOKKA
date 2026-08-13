@@ -13,7 +13,6 @@
  * - Redirect to provider OAuth flow
  * - Error handling for invalid inputs and API errors
  */
-
 import type { Route } from "./+types/connect-provider";
 
 import { data, redirect } from "react-router";
@@ -32,7 +31,7 @@ import makeServerClient from "~/core/lib/supa-client.server";
  * preventing potential security issues with unsupported providers.
  */
 const schema = z.object({
-  provider: z.enum(["github", "kakao"]),
+  provider: z.enum(["google", "kakao"]),
 });
 
 /**
@@ -60,24 +59,24 @@ const schema = z.object({
 export async function action({ request }: Route.ActionArgs) {
   // Validate request method (only allow POST)
   requireMethod("POST")(request);
-  
+
   // Create a server-side Supabase client with the user's session
-  const [client] = makeServerClient(request);
-  
+  const [client, headers] = makeServerClient(request);
+
   // Verify the user is authenticated
   await requireAuthentication(client);
-  
+
   // Extract and validate form data
   const form = await request.formData();
   const { success, data: parsedParams } = schema.safeParse(
     Object.fromEntries(form),
   );
-  
+
   // Return error if provider validation fails
   if (!success) {
     return data({ error: "Invalid provider" }, { status: 400 });
   }
-  
+
   // Initiate identity linking process with Supabase Auth API
   const { data: linkingData, error: linkingError } =
     await client.auth.linkIdentity({
@@ -85,16 +84,16 @@ export async function action({ request }: Route.ActionArgs) {
       options: {
         // Note: There is a known issue with this option
         // See: https://github.com/supabase/auth/issues/1927
-        redirectTo: `${process.env.APP_URL}/auth/connect`,
+        redirectTo: `${new URL(request.url).origin}/account/edit`,
       },
     });
-  
+
   // Handle API errors
   if (linkingError) {
     return data({ error: linkingError.message }, { status: 400 });
   }
-  
+
   // Redirect to provider's OAuth flow
   // The user will be redirected back to the redirectTo URL after authentication
-  return redirect(linkingData.url);
+  return redirect(linkingData.url, { headers });
 }
