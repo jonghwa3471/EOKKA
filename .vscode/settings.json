@@ -1,5 +1,6 @@
 {
   "css.validate": false,
+  "deno.enablePaths": ["./supabase/functions"],
   "editor.formatOnSave": true,
   "editor.defaultFormatter": "esbenp.prettier-vscode",
 }

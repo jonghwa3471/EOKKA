@@ -5,12 +5,12 @@ import { Outlet, redirect } from "react-router";
 import makeServerClient from "../lib/supa-client.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const [client] = makeServerClient(request);
+  const [client, headers] = makeServerClient(request);
   const {
     data: { user },
   } = await client.auth.getUser();
   if (user) {
-    throw redirect("/dashboard");
+    throw redirect("/", { headers });
   }
 
   // Return an empty object to avoid the "Cannot read properties of undefined" error

@@ -38,7 +38,7 @@ const loginSchema = z.object({
 
 function loginErrorMessage(code?: string) {
   if (code === "otp_disabled")
-    return "이메일 링크 로그인이 비활성화되어 있어요.";
+    return "가입되지 않은 이메일이에요. 먼저 회원가입을 진행해 주세요.";
   if (code === "over_email_send_rate_limit")
     return "로그인 이메일을 너무 자주 요청했어요. 잠시 후 다시 시도해 주세요.";
   if (code === "over_request_rate_limit")
@@ -57,9 +57,13 @@ export async function action({ request }: Route.ActionArgs) {
     );
 
   const [client] = makeServerClient(request);
+  const origin = new URL(request.url).origin;
   const { error } = await client.auth.signInWithOtp({
     email: parsed.data.email,
-    options: { shouldCreateUser: false },
+    options: {
+      shouldCreateUser: false,
+      emailRedirectTo: origin,
+    },
   });
   if (error)
     return data({ error: loginErrorMessage(error.code) }, { status: 400 });

@@ -59,10 +59,12 @@ export async function action({ request }: Route.ActionArgs) {
     );
 
   const [client] = makeServerClient(request);
+  const origin = new URL(request.url).origin;
   const { error } = await client.auth.signInWithOtp({
     email: parsed.data.email,
     options: {
       shouldCreateUser: true,
+      emailRedirectTo: origin,
       data: {
         name: parsed.data.name,
         display_name: parsed.data.name,
