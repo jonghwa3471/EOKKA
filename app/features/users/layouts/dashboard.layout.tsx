@@ -37,12 +37,12 @@ export default function DashboardLayout({ loaderData }: Route.ComponentProps) {
   const { pathname } = useLocation();
   const pageTitle = pathname.startsWith("/account/")
     ? "프로필 설정"
-    : "내 투자 대시보드";
+    : pathname.startsWith("/dashboard/history")
+      ? "분석 기록"
+      : "내 투자 대시보드";
   return (
     <SidebarProvider>
-      <DashboardSidebar
-        user={user}
-      />
+      <DashboardSidebar user={user} />
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
           <div className="flex items-center gap-3 px-5">

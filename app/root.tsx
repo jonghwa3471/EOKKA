@@ -48,7 +48,8 @@ import { cn } from "./core/lib/utils";
 import NotFound from "./core/screens/404";
 
 export const links: Route.LinksFunction = () => [
-  { rel: "icon", href: "/favicon.ico" },
+  { rel: "icon", href: "/images/eokka-app-logo-kakao.png", type: "image/png" },
+  { rel: "apple-touch-icon", href: "/images/eokka-app-logo.png" },
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
     rel: "preconnect",

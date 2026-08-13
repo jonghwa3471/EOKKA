@@ -371,7 +371,7 @@ function InvestmentStyleRadar({
           My Investment Type
         </p>
         <h4 className="mt-2 text-xl font-black">{style.title}</h4>
-        <div className="mx-auto mt-3 max-w-xl rounded-xl border border-fuchsia-500/20 bg-background/60 px-4 py-3 text-left">
+        <div className="bg-background/60 mx-auto mt-3 max-w-xl rounded-xl border border-fuchsia-500/20 px-4 py-3 text-left">
           <p className="text-[11px] font-black text-fuchsia-600 dark:text-fuchsia-400">
             투자 성향 분석
           </p>
@@ -1013,11 +1013,10 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
 function GoalMomentumCard({ result }: { result: AnalysisResult }) {
   const baseGoalMonth = result.scenarios[1].goalMonth;
   const marketGoalMonth = result.benchmark?.goalMonth ?? null;
+  const hasBenchmark =
+    result.benchmark !== null && result.benchmark !== undefined;
   const hasComparableGoals =
-    result.benchmark !== null &&
-    result.benchmark !== undefined &&
-    baseGoalMonth !== null &&
-    marketGoalMonth !== null;
+    hasBenchmark && baseGoalMonth !== null && marketGoalMonth !== null;
   const speedRatio = hasComparableGoals
     ? baseGoalMonth === 0
       ? Number.POSITIVE_INFINITY
@@ -1029,20 +1028,31 @@ function GoalMomentumCard({ result }: { result: AnalysisResult }) {
       : speedRatio === Number.POSITIVE_INFINITY
         ? 100
         : Math.round(Math.min(100, Math.max(0, (speedRatio - 0.5) * 100)));
-  const speedLabel =
-    speedScore === null
-      ? "비교 준비 중"
-      : speedScore >= 85
-        ? "매우 빠른 편"
-        : speedScore >= 60
-          ? "빠른 편"
-          : speedScore >= 40
-            ? "시장과 비슷한 편"
-            : speedScore >= 15
-              ? "느린 편"
-              : "매우 느린 편";
-  const isFaster = speedRatio !== null && speedRatio > 1.01;
-  const isSlower = speedRatio !== null && speedRatio < 0.99;
+  const speedLabel = !hasBenchmark
+    ? "시장 기준 없음"
+    : baseGoalMonth === null && marketGoalMonth === null
+      ? "50년 내 도달 어려움"
+      : baseGoalMonth !== null && marketGoalMonth === null
+        ? "시장보다 빠른 편"
+        : baseGoalMonth === null && marketGoalMonth !== null
+          ? "시장보다 느린 편"
+          : speedScore === null
+            ? "비교할 수 없음"
+            : speedScore >= 85
+              ? "매우 빠른 편"
+              : speedScore >= 60
+                ? "빠른 편"
+                : speedScore >= 40
+                  ? "시장과 비슷한 편"
+                  : speedScore >= 15
+                    ? "느린 편"
+                    : "매우 느린 편";
+  const isFaster =
+    (baseGoalMonth !== null && marketGoalMonth === null) ||
+    (speedRatio !== null && speedRatio > 1.01);
+  const isSlower =
+    (baseGoalMonth === null && marketGoalMonth !== null) ||
+    (speedRatio !== null && speedRatio < 0.99);
   const lineColor = isFaster ? "#ef4444" : isSlower ? "#3b82f6" : "#10b981";
   const endCandidates = [baseGoalMonth, marketGoalMonth].filter(
     (month): month is number => month !== null,
@@ -1096,16 +1106,23 @@ function GoalMomentumCard({ result }: { result: AnalysisResult }) {
     basePoints.length > 0
       ? `${x(basePoints[0].month)},${height - bottom} ${polyline(basePoints)} ${x(basePoints.at(-1)!.month)},${height - bottom}`
       : "";
-  const comparisonText =
-    speedRatio === null
-      ? "시장 기준 데이터가 확보되면 상대 속도를 함께 보여드려요."
-      : speedRatio === Number.POSITIVE_INFINITY
-        ? "평균 시나리오 기준으로 이미 목표에 도착했어요."
-        : isFaster
-          ? `시장보다 약 ${speedRatio.toFixed(2)}배 빠르게 목표에 접근하고 있어요.`
-          : isSlower
-            ? `현재 목표 접근 속도는 시장의 약 ${speedRatio.toFixed(2)}배예요.`
-            : "시장과 거의 같은 속도로 목표에 접근하고 있어요.";
+  const comparisonText = !hasBenchmark
+    ? "시장 기준 데이터가 없어 상대 속도를 계산하지 못했어요."
+    : baseGoalMonth === null && marketGoalMonth === null
+      ? "내 평균 시나리오와 시장 기준 모두 50년 안에 목표 도달이 확인되지 않았어요."
+      : baseGoalMonth !== null && marketGoalMonth === null
+        ? "내 평균 시나리오는 50년 안에 목표에 도달하지만 시장 기준은 도달하지 못했어요."
+        : baseGoalMonth === null && marketGoalMonth !== null
+          ? "시장 기준은 50년 안에 목표에 도달하지만 내 평균 시나리오는 도달하지 못했어요."
+          : speedRatio === null
+            ? "목표 도달 속도를 비교할 수 없어요."
+            : speedRatio === Number.POSITIVE_INFINITY
+              ? "평균 시나리오 기준으로 이미 목표에 도착했어요."
+              : isFaster
+                ? `시장보다 약 ${speedRatio.toFixed(2)}배 빠르게 목표에 접근하고 있어요.`
+                : isSlower
+                  ? `현재 목표 접근 속도는 시장의 약 ${speedRatio.toFixed(2)}배예요.`
+                  : "시장과 거의 같은 속도로 목표에 접근하고 있어요.";
 
   return (
     <section className="from-background via-background to-muted/40 mt-5 overflow-hidden rounded-2xl border bg-gradient-to-br p-5 sm:p-6">
@@ -1231,7 +1248,13 @@ function GoalMomentumCard({ result }: { result: AnalysisResult }) {
   );
 }
 
-export function AnalysisResultView({ result }: { result: AnalysisResult }) {
+export function AnalysisResultView({
+  result,
+  showAuthCta = true,
+}: {
+  result: AnalysisResult;
+  showAuthCta?: boolean;
+}) {
   const remainingToGoal = Math.max(0, result.goalAmount - result.currentValue);
   const targetLabel = goalLabel(result.goalAmount);
   const benchmarkComparison = result.benchmark
@@ -1438,7 +1461,7 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
             </p>
           </div>
 
-          <div className="grid gap-px bg-border sm:grid-cols-3">
+          <div className="bg-border grid gap-px sm:grid-cols-3">
             {result.contributionScenarios.map((contributed) => {
               const baseline = result.scenarios.find(
                 (scenario) => scenario.key === contributed.key,
@@ -1732,7 +1755,7 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
       <GoalMomentumCard result={result} />
 
       {result.aiStrategy && (
-        <section className="mt-5 overflow-hidden rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 via-background to-emerald-500/10">
+        <section className="via-background mt-5 overflow-hidden rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-emerald-500/10">
           <div className="border-b border-violet-500/15 p-5 sm:p-6">
             <p className="flex items-center gap-2 text-xs font-black tracking-[0.16em] text-violet-600 uppercase dark:text-violet-400">
               <SparklesIcon className="size-4" />
@@ -1849,32 +1872,34 @@ export function AnalysisResultView({ result }: { result: AnalysisResult }) {
         </ul>
       </div>
 
-      <div className="mt-5 rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 to-teal-500/5 p-5 sm:flex sm:items-center sm:justify-between sm:gap-6 sm:p-6">
-        <div>
-          <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
-            분석 결과를 계속 관리하고 싶다면
-          </p>
-          <h3 className="mt-1 text-lg font-black">
-            로그인하고 이 분석 정보를 저장하세요
-          </h3>
-          <p className="text-muted-foreground mt-2 max-w-xl text-sm leading-6">
-            빠른 분석의 입력 정보는 현재 탭에서만 유지되며, 탭을 닫으면 자동
-            삭제됩니다. 가입하면 보유 종목과 분석 결과를 저장하고 다음 방문에도
-            이어서 확인할 수 있어요.
-          </p>
+      {showAuthCta && (
+        <div className="mt-5 rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 to-teal-500/5 p-5 sm:flex sm:items-center sm:justify-between sm:gap-6 sm:p-6">
+          <div>
+            <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+              분석 결과를 계속 관리하고 싶다면
+            </p>
+            <h3 className="mt-1 text-lg font-black">
+              로그인하고 이 분석 정보를 저장하세요
+            </h3>
+            <p className="text-muted-foreground mt-2 max-w-xl text-sm leading-6">
+              빠른 분석의 입력 정보는 현재 탭에서만 유지되며, 탭을 닫으면 자동
+              삭제됩니다. 가입하면 보유 종목과 분석 결과를 저장하고 다음
+              방문에도 이어서 확인할 수 있어요.
+            </p>
+          </div>
+          <div className="mt-5 flex shrink-0 gap-2 sm:mt-0">
+            <Button asChild variant="outline">
+              <Link to="/login">로그인</Link>
+            </Button>
+            <Button
+              asChild
+              className="bg-emerald-500 text-white hover:bg-emerald-600"
+            >
+              <Link to="/join">무료 회원가입</Link>
+            </Button>
+          </div>
         </div>
-        <div className="mt-5 flex shrink-0 gap-2 sm:mt-0">
-          <Button asChild variant="outline">
-            <Link to="/login">로그인</Link>
-          </Button>
-          <Button
-            asChild
-            className="bg-emerald-500 text-white hover:bg-emerald-600"
-          >
-            <Link to="/join">무료 회원가입</Link>
-          </Button>
-        </div>
-      </div>
+      )}
 
       {result.marketMode === "domestic" ? (
         <p className="text-muted-foreground mt-4 text-xs">

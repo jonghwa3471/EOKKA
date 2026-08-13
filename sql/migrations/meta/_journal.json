@@ -71,6 +71,27 @@
       "when": 1786619454639,
       "tag": "0009_kakao_profile_metadata",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786627243601,
+      "tag": "0010_loving_energizer",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786628967936,
+      "tag": "0011_vengeful_black_widow",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1786629312070,
+      "tag": "0012_yellow_the_initiative",
+      "breakpoints": true
     }
   ]
 }

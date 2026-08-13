@@ -19,6 +19,7 @@
 import { CogIcon, HomeIcon, LogOutIcon, MenuIcon } from "lucide-react";
 import { Link } from "react-router";
 
+import { EokkaLogo } from "./eokka-logo";
 import LangSwitcher from "./lang-switcher";
 import ThemeSwitcher from "./theme-switcher";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
@@ -242,8 +243,15 @@ export function NavigationBar({
     >
       <div className="mx-auto flex h-full w-full max-w-screen-2xl items-center justify-between py-3">
         {/* Application logo/title with link to home */}
-        <Link to="/">
-          <h1 className="text-lg font-black tracking-[-0.02em]">EOKKA</h1>
+        <Link
+          to="/"
+          className="inline-grid h-8 grid-flow-col items-center gap-2"
+          aria-label="EOKKA 홈"
+        >
+          <EokkaLogo className="block size-8 self-center" priority />
+          <span className="block h-8 self-center text-lg leading-8 font-black tracking-[-0.02em]">
+            EOKKA
+          </span>
         </Link>
 
         {/* Desktop navigation menu (hidden on mobile) */}

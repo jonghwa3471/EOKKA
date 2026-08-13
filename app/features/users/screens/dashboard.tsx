@@ -14,7 +14,7 @@ import {
   TargetIcon,
   TrendingUpIcon,
 } from "lucide-react";
-import { Link } from "react-router";
+import { Form, Link, redirect } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
 import makeServerClient from "~/core/lib/supa-client.server";
@@ -22,6 +22,8 @@ import { cn } from "~/core/lib/utils";
 import {
   FREE_HISTORY_DAYS,
   getAnalysisHistory,
+  getPreferredGoalAmount,
+  setPreferredGoalAmount,
 } from "~/features/stocks/history/analysis-history.server";
 
 export const meta: Route.MetaFunction = () => [
@@ -34,9 +36,33 @@ export async function loader({ request }: Route.LoaderArgs) {
     data: { user },
   } = await client.auth.getUser();
 
-  const history = user ? await getAnalysisHistory(user.id) : [];
+  const [allHistory, savedPreferredGoal] = user
+    ? await Promise.all([
+        getAnalysisHistory(user.id),
+        getPreferredGoalAmount(user.id),
+      ])
+    : [[], null];
+  const goalOptions = [
+    ...new Set(allHistory.map((item) => item.goalAmount)),
+  ].sort((a, b) => a - b);
+  const oneEokGoal = 100_000_000;
+  const preferredGoal =
+    (savedPreferredGoal && goalOptions.includes(savedPreferredGoal)
+      ? savedPreferredGoal
+      : goalOptions.includes(oneEokGoal)
+        ? oneEokGoal
+        : goalOptions[0]) ?? null;
+  const goalHistory = preferredGoal
+    ? allHistory.filter((item) => item.goalAmount === preferredGoal)
+    : [];
+  const history = Array.from(
+    new Map(goalHistory.map((item) => [item.savedOn, item])).values(),
+  );
+
   return {
     history,
+    goalOptions,
+    preferredGoal,
     name:
       user?.user_metadata.name ??
       user?.user_metadata.full_name ??
@@ -44,6 +70,25 @@ export async function loader({ request }: Route.LoaderArgs) {
       "사용자",
     freeHistoryDays: FREE_HISTORY_DAYS,
   };
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  const [client] = makeServerClient(request);
+  const {
+    data: { user },
+  } = await client.auth.getUser();
+  if (!user) throw new Response("Unauthorized", { status: 401 });
+
+  const formData = await request.formData();
+  const goalAmount = Number(formData.get("goalAmount"));
+  const history = await getAnalysisHistory(user.id);
+  const validGoals = new Set(history.map((item) => item.goalAmount));
+  if (!Number.isSafeInteger(goalAmount) || !validGoals.has(goalAmount)) {
+    throw new Response("Invalid goal amount", { status: 400 });
+  }
+
+  await setPreferredGoalAmount(user.id, goalAmount);
+  return redirect("/dashboard");
 }
 
 type History = Awaited<ReturnType<typeof getAnalysisHistory>>;
@@ -55,6 +100,13 @@ const won = new Intl.NumberFormat("ko-KR", {
 
 function formatWon(value: number) {
   return `${won.format(value)}원`;
+}
+
+function formatGoalAmount(value: number) {
+  if (value >= 100_000_000 && value % 100_000_000 === 0) {
+    return `${(value / 100_000_000).toLocaleString("ko-KR")}억`;
+  }
+  return formatWon(value);
 }
 
 function formatRate(value: number) {
@@ -95,7 +147,8 @@ function Change({
       )}
     >
       <Icon className="size-3.5" />
-      전일 대비 {Math.abs(value).toFixed(suffix === "%p" ? 1 : 0)}{suffix}
+      전일 대비 {Math.abs(value).toFixed(suffix === "%p" ? 1 : 0)}
+      {suffix}
     </span>
   );
 }
@@ -117,14 +170,16 @@ function TrendChart({ history }: { history: History }) {
   const y = (value: number) =>
     padding.top +
     (1 - (value - min) / span) * (height - padding.top - padding.bottom);
-  const points = history.map((item, index) => `${x(index)},${y(item.currentValue)}`);
+  const points = history.map(
+    (item, index) => `${x(index)},${y(item.currentValue)}`,
+  );
   const area = `${padding.left},${height - padding.bottom} ${points.join(" ")} ${x(history.length - 1)},${height - padding.bottom}`;
 
   return (
     <div className="overflow-x-auto">
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        className="h-[280px] min-w-[680px] w-full"
+        className="h-[280px] w-full min-w-[680px]"
         role="img"
         aria-label="최근 7일 포트폴리오 평가금액 추이"
       >
@@ -135,7 +190,8 @@ function TrendChart({ history }: { history: History }) {
           </linearGradient>
         </defs>
         {[0, 0.5, 1].map((ratio) => {
-          const lineY = padding.top + ratio * (height - padding.top - padding.bottom);
+          const lineY =
+            padding.top + ratio * (height - padding.top - padding.bottom);
           return (
             <line
               key={ratio}
@@ -160,8 +216,18 @@ function TrendChart({ history }: { history: History }) {
         />
         {history.map((item, index) => (
           <g key={item.id}>
-            <circle cx={x(index)} cy={y(item.currentValue)} r="7" fill="#10b981" />
-            <circle cx={x(index)} cy={y(item.currentValue)} r="3" fill="white" />
+            <circle
+              cx={x(index)}
+              cy={y(item.currentValue)}
+              r="7"
+              fill="#10b981"
+            />
+            <circle
+              cx={x(index)}
+              cy={y(item.currentValue)}
+              r="3"
+              fill="white"
+            />
             <text
               x={x(index)}
               y={height - 14}
@@ -169,7 +235,8 @@ function TrendChart({ history }: { history: History }) {
               fill="currentColor"
               className="text-muted-foreground text-[13px]"
             >
-              {Number(item.savedOn.slice(5, 7))}/{Number(item.savedOn.slice(8, 10))}
+              {Number(item.savedOn.slice(5, 7))}/
+              {Number(item.savedOn.slice(8, 10))}
             </text>
           </g>
         ))}
@@ -179,7 +246,8 @@ function TrendChart({ history }: { history: History }) {
 }
 
 export default function Dashboard({ loaderData }: Route.ComponentProps) {
-  const { history, name, freeHistoryDays } = loaderData;
+  const { history, name, freeHistoryDays, goalOptions, preferredGoal } =
+    loaderData;
   const latest = history.at(-1);
   const previous = history.at(-2);
 
@@ -192,11 +260,16 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             <div className="relative mx-auto flex size-16 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-500">
               <ChartNoAxesCombinedIcon className="size-8" />
             </div>
-            <p className="mt-8 text-sm font-bold tracking-[0.2em] text-emerald-500">MY EOKKA</p>
-            <h1 className="mt-3 text-3xl font-black md:text-5xl">첫 분석 기록을 만들어 보세요</h1>
+            <p className="mt-8 text-sm font-bold tracking-[0.2em] text-emerald-500">
+              MY EOKKA
+            </p>
+            <h1 className="mt-3 text-3xl font-black md:text-5xl">
+              첫 분석 기록을 만들어 보세요
+            </h1>
             <p className="text-muted-foreground mx-auto mt-5 max-w-xl leading-7">
-              로그인 상태로 홈에서 포트폴리오를 분석하면 오늘의 결과가 자동 저장되고,
-              내일부터 목표 달성 기간과 수익률의 변화를 비교할 수 있어요.
+              로그인 상태로 홈에서 포트폴리오를 분석하면 오늘의 결과가 자동
+              저장되고, 내일부터 목표 달성 기간과 수익률의 변화를 비교할 수
+              있어요.
             </p>
             <Button asChild size="lg" className="mt-8 rounded-full px-7">
               <Link to="/">
@@ -209,14 +282,26 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
     );
   }
 
-  const assetChange = difference(latest.currentValue, previous?.currentValue ?? null);
-  const returnChange = difference(latest.returnRate, previous?.returnRate ?? null);
-  const periodChange = difference(latest.goalMonth, previous?.goalMonth ?? null);
+  const assetChange = difference(
+    latest.currentValue,
+    previous?.currentValue ?? null,
+  );
+  const returnChange = difference(
+    latest.returnRate,
+    previous?.returnRate ?? null,
+  );
+  const periodChange = difference(
+    latest.goalMonth,
+    previous?.goalMonth ?? null,
+  );
   const first = history[0];
   const weekAssetChange = latest.currentValue - first.currentValue;
   const weekReturnChange = latest.returnRate - first.returnRate;
   const weekPeriodChange = difference(latest.goalMonth, first.goalMonth);
-  const progress = Math.min(100, (latest.currentValue / latest.goalAmount) * 100);
+  const progress = Math.min(
+    100,
+    (latest.currentValue / latest.goalAmount) * 100,
+  );
 
   return (
     <main className="flex flex-1 flex-col px-5 pt-8 pb-10 md:px-8 md:pt-12">
@@ -240,7 +325,38 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
           </Button>
         </header>
 
-        <section className="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {goalOptions.length > 1 && (
+          <section className="bg-card mt-7 flex flex-col gap-4 rounded-3xl border p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between md:p-5">
+            <div>
+              <p className="font-black">대시보드 기준 목표</p>
+              <p className="text-muted-foreground mt-1 text-xs leading-5">
+                선택한 목표의 최근 기록을 대시보드에서 우선 표시해요.
+              </p>
+            </div>
+            <Form method="post" className="flex flex-wrap gap-2">
+              {goalOptions.map((goal) => (
+                <Button
+                  key={goal}
+                  type="submit"
+                  name="goalAmount"
+                  value={goal}
+                  size="sm"
+                  variant={goal === preferredGoal ? "default" : "outline"}
+                  className="rounded-full px-4"
+                >
+                  {formatGoalAmount(goal)}
+                </Button>
+              ))}
+            </Form>
+          </section>
+        )}
+
+        <section
+          className={cn(
+            "grid gap-4 md:grid-cols-2 xl:grid-cols-4",
+            goalOptions.length > 1 ? "mt-5" : "mt-7",
+          )}
+        >
           <SummaryCard
             icon={PiggyBankIcon}
             label="현재 평가금액"
@@ -251,22 +367,27 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             icon={TrendingUpIcon}
             label="현재 수익률"
             value={formatRate(latest.returnRate)}
-            valueClass={latest.returnRate >= 0 ? "text-rose-500" : "text-blue-500"}
+            valueClass={
+              latest.returnRate >= 0 ? "text-rose-500" : "text-blue-500"
+            }
             change={<Change value={returnChange} suffix="%p" />}
           />
           <SummaryCard
             icon={Clock3Icon}
-            label="목표 도달 예상"
+            label={`${formatGoalAmount(latest.goalAmount)} 목표 도달 예상`}
             value={formatMonths(latest.goalMonth)}
             change={<Change value={periodChange} suffix="개월" inverse />}
           />
           <SummaryCard
             icon={TargetIcon}
-            label="목표 달성률"
+            label={`${formatGoalAmount(latest.goalAmount)} 목표 달성률`}
             value={`${progress.toFixed(1)}%`}
             change={
               <span className="text-muted-foreground text-xs">
-                {formatWon(Math.max(0, latest.goalAmount - latest.currentValue))} 남음
+                {formatWon(
+                  Math.max(0, latest.goalAmount - latest.currentValue),
+                )}{" "}
+                남음
               </span>
             }
           />
@@ -276,7 +397,9 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
           <div className="bg-card rounded-3xl border p-5 shadow-sm md:p-7">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <p className="text-muted-foreground text-sm font-semibold">최근 {freeHistoryDays}일</p>
+                <p className="text-muted-foreground text-sm font-semibold">
+                  최근 {freeHistoryDays}일
+                </p>
                 <h2 className="mt-1 text-xl font-black">내 자산 성장 추이</h2>
               </div>
               <div className="flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-500">
@@ -289,7 +412,9 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
           </div>
 
           <div className="bg-card rounded-3xl border p-6 shadow-sm md:p-7">
-            <p className="text-muted-foreground text-sm font-semibold">첫 기록과 비교</p>
+            <p className="text-muted-foreground text-sm font-semibold">
+              첫 기록과 비교
+            </p>
             <h2 className="mt-1 text-xl font-black">기간 변화 요약</h2>
             <div className="mt-6 space-y-3">
               <ComparisonRow
@@ -314,12 +439,12 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                 improved={weekPeriodChange !== null && weekPeriodChange < 0}
               />
             </div>
-            <div className="mt-6 rounded-2xl bg-muted/60 p-4">
+            <div className="bg-muted/60 mt-6 rounded-2xl p-4">
               <div className="flex justify-between text-xs font-bold">
                 <span>목표까지의 여정</span>
                 <span>{progress.toFixed(1)}%</span>
               </div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+              <div className="bg-muted mt-3 h-2 overflow-hidden rounded-full">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400"
                   style={{ width: `${progress}%` }}
@@ -337,33 +462,56 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
               </div>
               <div>
                 <h2 className="font-black">일별 분석 기록</h2>
-                <p className="text-muted-foreground text-xs">하루 한 번, 최신 분석으로 갱신</p>
+                <p className="text-muted-foreground text-xs">
+                  날짜별 마지막 분석을 대표 기록으로 표시
+                </p>
               </div>
             </div>
             <div className="mt-5 divide-y">
               {[...history].reverse().map((item) => (
-                <div key={item.id} className="grid grid-cols-3 items-center gap-2 py-3 text-sm">
-                  <span className="font-bold">{item.savedOn.slice(5).replace("-", ".")}</span>
-                  <span className="text-center font-semibold">{formatRate(item.returnRate)}</span>
-                  <span className="text-right text-muted-foreground">{formatMonths(item.goalMonth)}</span>
+                <div
+                  key={item.id}
+                  className="grid grid-cols-3 items-center gap-2 py-3 text-sm"
+                >
+                  <span className="font-bold">
+                    {item.savedOn.slice(5).replace("-", ".")}
+                  </span>
+                  <span className="text-center font-semibold">
+                    {formatRate(item.returnRate)}
+                  </span>
+                  <span className="text-muted-foreground text-right">
+                    {formatMonths(item.goalMonth)}
+                  </span>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="relative overflow-hidden rounded-3xl border border-amber-400/30 bg-gradient-to-br from-amber-400/15 via-card to-violet-500/10 p-6 shadow-sm md:p-8">
-            <CrownIcon className="absolute -right-5 -top-5 size-32 rotate-12 text-amber-400/10" />
+          <div className="via-card relative overflow-hidden rounded-3xl border border-amber-400/30 bg-gradient-to-br from-amber-400/15 to-violet-500/10 p-6 shadow-sm md:p-8">
+            <CrownIcon className="absolute -top-5 -right-5 size-32 rotate-12 text-amber-400/10" />
             <div className="relative">
-              <span className="inline-flex rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs font-black text-amber-500">COMING SOON</span>
-              <h2 className="mt-5 text-2xl font-black">더 긴 투자 흐름이 필요하다면</h2>
+              <span className="inline-flex rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs font-black text-amber-500">
+                COMING SOON
+              </span>
+              <h2 className="mt-5 text-2xl font-black">
+                더 긴 투자 흐름이 필요하다면
+              </h2>
               <p className="text-muted-foreground mt-3 max-w-xl leading-7">
-                무료 베타에서는 최근 {freeHistoryDays}일의 변화만 저장해요. 향후 EOKKA Pro에서는 기록을 기간 제한 없이 보관하고 월간·연간 투자 리포트까지 확인할 수 있게 준비할 예정이에요.
+                무료 베타에서는 최근 {freeHistoryDays}일의 변화만 저장해요. 향후
+                EOKKA Pro에서는 기록을 기간 제한 없이 보관하고 월간·연간 투자
+                리포트까지 확인할 수 있게 준비할 예정이에요.
               </p>
               <div className="mt-6 grid gap-2 text-sm sm:grid-cols-2">
-                <div className="rounded-2xl border bg-background/50 p-4 font-semibold">전체 분석 기록 보관</div>
-                <div className="rounded-2xl border bg-background/50 p-4 font-semibold">월간·연간 변화 리포트</div>
+                <div className="bg-background/50 rounded-2xl border p-4 font-semibold">
+                  전체 분석 기록 보관
+                </div>
+                <div className="bg-background/50 rounded-2xl border p-4 font-semibold">
+                  월간·연간 변화 리포트
+                </div>
               </div>
-              <p className="text-muted-foreground mt-4 text-xs">아직 결제되거나 자동으로 구독되지 않습니다.</p>
+              <p className="text-muted-foreground mt-4 text-xs">
+                아직 결제되거나 자동으로 구독되지 않습니다.
+              </p>
             </div>
           </div>
         </section>
@@ -372,7 +520,13 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
   );
 }
 
-function SummaryCard({ icon: Icon, label, value, valueClass, change }: {
+function SummaryCard({
+  icon: Icon,
+  label,
+  value,
+  valueClass,
+  change,
+}: {
   icon: typeof TrendingUpIcon;
   label: string;
   value: string;
@@ -382,8 +536,12 @@ function SummaryCard({ icon: Icon, label, value, valueClass, change }: {
   return (
     <div className="bg-card rounded-3xl border p-5 shadow-sm">
       <div className="flex items-center justify-between">
-        <span className="text-muted-foreground text-sm font-semibold">{label}</span>
-        <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500"><Icon className="size-4.5" /></div>
+        <span className="text-muted-foreground text-sm font-semibold">
+          {label}
+        </span>
+        <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
+          <Icon className="size-4.5" />
+        </div>
       </div>
       <p className={cn("mt-4 text-2xl font-black", valueClass)}>{value}</p>
       <div className="mt-2">{change}</div>
@@ -391,11 +549,26 @@ function SummaryCard({ icon: Icon, label, value, valueClass, change }: {
   );
 }
 
-function ComparisonRow({ label, value, improved }: { label: string; value: string; improved: boolean }) {
+function ComparisonRow({
+  label,
+  value,
+  improved,
+}: {
+  label: string;
+  value: string;
+  improved: boolean;
+}) {
   return (
-    <div className="flex items-center justify-between rounded-2xl border bg-background/40 p-4">
+    <div className="bg-background/40 flex items-center justify-between rounded-2xl border p-4">
       <span className="text-sm font-semibold">{label}</span>
-      <span className={cn("text-sm font-black", improved ? "text-rose-500" : "text-blue-500")}>{value}</span>
+      <span
+        className={cn(
+          "text-sm font-black",
+          improved ? "text-rose-500" : "text-blue-500",
+        )}
+      >
+        {value}
+      </span>
     </div>
   );
 }

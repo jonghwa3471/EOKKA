@@ -80,7 +80,7 @@ function CurrencyMatrixSpotlight({
     let pixelRatio = 1;
     const spacing = 10;
     const lightRadius = 76;
-    const maxTrailLifetime = 720;
+    const maxTrailLifetime = 460;
     const rippleLifetime = 900;
 
     const resize = () => {
@@ -134,11 +134,13 @@ function CurrencyMatrixSpotlight({
 
       const cells = new Map<string, { x: number; y: number; alpha: number }>();
       for (const point of trailRef.current) {
-        const lifetime = Math.min(maxTrailLifetime, 90 + point.speed * 360);
+        const lifetime = Math.min(maxTrailLifetime, 65 + point.speed * 235);
         const age = (now - point.time) / lifetime;
         if (age >= 1) continue;
         const normalizedSpeed = Math.min(point.speed / 1.4, 1);
-        const pointRadius = lightRadius * (0.72 + normalizedSpeed * 0.25);
+        const trailTaper = 0.28 + Math.pow(1 - age, 0.8) * 0.72;
+        const pointRadius =
+          lightRadius * (0.72 + normalizedSpeed * 0.25) * trailTaper;
         const speedBrightness = 0.34 + normalizedSpeed * 0.66;
         const minColumn = Math.floor((point.x - pointRadius) / spacing);
         const maxColumn = Math.ceil((point.x + pointRadius) / spacing);

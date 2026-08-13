@@ -1,10 +1,11 @@
 import type { Route } from "./+types/join";
 
-import { CheckCircle2Icon, UserPlusIcon } from "lucide-react";
+import { CheckCircle2Icon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Form, Link, data } from "react-router";
 import { z } from "zod";
 
+import { EokkaLogo } from "~/core/components/eokka-logo";
 import FormButton from "~/core/components/form-button";
 import FormErrors from "~/core/components/form-error";
 import {
@@ -113,9 +114,7 @@ export default function Join({ actionData }: Route.ComponentProps) {
       <Card className="w-full max-w-md overflow-hidden">
         <div className="h-1 bg-gradient-to-r from-emerald-400 via-cyan-400 to-violet-500" />
         <CardHeader className="items-center pt-7 text-center">
-          <div className="mb-2 flex size-11 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-500">
-            <UserPlusIcon className="size-5" />
-          </div>
+          <EokkaLogo className="mb-2 size-14" priority />
           <div className="flex items-center justify-center gap-2.5">
             <CardTitle className="text-2xl font-black">
               EOKKA 시작하기

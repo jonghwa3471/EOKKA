@@ -1,8 +1,8 @@
-import type { AnalysisResult } from "~/features/stocks/analysis.types";
-
 import { and, asc, eq, lt } from "drizzle-orm";
 
 import db from "~/core/db/drizzle-client.server";
+import type { AnalysisResult } from "~/features/stocks/analysis.types";
+import { profiles } from "~/features/users/schema";
 
 import { analysisSnapshots } from "./schema";
 
@@ -33,7 +33,13 @@ function goalMonthFor(result: AnalysisResult) {
     result.monthlyContribution > 0
       ? result.contributionScenarios
       : result.scenarios;
-  return scenarios.find((scenario) => scenario.key === "base")?.goalMonth ?? null;
+  return (
+    scenarios.find((scenario) => scenario.key === "base")?.goalMonth ?? null
+  );
+}
+
+function jsonSafeResult(result: AnalysisResult) {
+  return JSON.parse(JSON.stringify(result)) as AnalysisResult;
 }
 
 export async function saveDailyAnalysisSnapshot({
@@ -55,17 +61,35 @@ export async function saveDailyAnalysisSnapshot({
     return_rate: result.returnRate,
     goal_month: goalMonthFor(result),
     monthly_contribution: Math.round(result.monthlyContribution),
-    result,
+    result: jsonSafeResult(result),
     updated_at: new Date(),
   };
 
-  await db
-    .insert(analysisSnapshots)
-    .values(values)
-    .onConflictDoUpdate({
-      target: [analysisSnapshots.user_id, analysisSnapshots.saved_on],
-      set: values,
-    });
+  await db.transaction(async (transaction) => {
+    const updated = await transaction
+      .update(analysisSnapshots)
+      .set({
+        current_value: values.current_value,
+        profit: values.profit,
+        return_rate: values.return_rate,
+        goal_month: values.goal_month,
+        monthly_contribution: values.monthly_contribution,
+        result: values.result,
+        updated_at: values.updated_at,
+      })
+      .where(
+        and(
+          eq(analysisSnapshots.user_id, values.user_id),
+          eq(analysisSnapshots.goal_amount, values.goal_amount),
+          eq(analysisSnapshots.saved_on, values.saved_on),
+        ),
+      )
+      .returning({ id: analysisSnapshots.analysis_snapshot_id });
+
+    if (updated.length === 0) {
+      await transaction.insert(analysisSnapshots).values(values);
+    }
+  });
 
   if (!hasUnlimitedHistory) {
     const cutoff = addDays(savedOn, -(FREE_HISTORY_DAYS - 1));
@@ -95,5 +119,27 @@ export async function getAnalysisHistory(userId: string) {
     })
     .from(analysisSnapshots)
     .where(eq(analysisSnapshots.user_id, userId))
-    .orderBy(asc(analysisSnapshots.saved_on));
+    .orderBy(
+      asc(analysisSnapshots.saved_on),
+      asc(analysisSnapshots.analysis_snapshot_id),
+    );
+}
+
+export async function getPreferredGoalAmount(userId: string) {
+  const [profile] = await db
+    .select({ goalAmount: profiles.preferred_goal_amount })
+    .from(profiles)
+    .where(eq(profiles.profile_id, userId))
+    .limit(1);
+  return profile?.goalAmount ?? null;
+}
+
+export async function setPreferredGoalAmount(
+  userId: string,
+  goalAmount: number,
+) {
+  await db
+    .update(profiles)
+    .set({ preferred_goal_amount: goalAmount, updated_at: new Date() })
+    .where(eq(profiles.profile_id, userId));
 }

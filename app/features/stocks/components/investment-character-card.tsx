@@ -7,7 +7,6 @@ import {
   DownloadIcon,
   LinkIcon,
   LoaderCircleIcon,
-  RefreshCwIcon,
   Share2Icon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -533,8 +532,8 @@ function TierCard({
                 <span className="text-[9px] font-black tracking-[0.2em] text-white/35">
                   EOKKA STYLE COLLECTION
                 </span>
-                <span className="flex items-center gap-1.5 text-[10px] font-bold text-white/60">
-                  <RefreshCwIcon className="size-3" /> 다시 클릭해 앞면 보기
+                <span className="text-xs font-black tracking-[0.22em]">
+                  EOKKA
                 </span>
               </div>
             </div>
@@ -843,22 +842,24 @@ export function InvestmentCharacterCard({
             }}
           >
             <div className="relative w-full max-w-[560px]">
-              <button
-                type="button"
-                onClick={() => setDetailOpen(false)}
-                className="absolute -top-12 right-0 z-[110] rounded-full border border-white/25 bg-black/80 px-4 py-2 text-sm font-bold text-white shadow-lg backdrop-blur hover:bg-white/15 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
-              >
-                닫기
-              </button>
-              <p className="absolute -top-9 right-20 left-20 hidden text-center text-xs font-bold whitespace-nowrap text-white/60 sm:block">
-                마우스로 움직이고 클릭해서 투자 성향 뒷면을 확인해 보세요
-              </p>
               <TierCard
                 {...cardProps}
                 expanded
                 investmentStyle={result.investmentStyle}
                 flippable
               />
+              <div className="mt-4 flex items-start justify-between gap-3 lg:absolute lg:top-1/2 lg:left-[calc(100%+1rem)] lg:mt-0 lg:w-40 lg:-translate-y-1/2 lg:flex-col">
+                <p className="max-w-sm text-xs leading-5 font-bold text-white/60 lg:max-w-none">
+                  마우스로 움직이고 클릭해서 투자 성향 뒷면을 확인해 보세요
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setDetailOpen(false)}
+                  className="z-[110] shrink-0 rounded-full border border-white/25 bg-black/80 px-4 py-2 text-sm font-bold text-white shadow-lg backdrop-blur hover:bg-white/15 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
+                >
+                  닫기
+                </button>
+              </div>
             </div>
           </div>
         </div>

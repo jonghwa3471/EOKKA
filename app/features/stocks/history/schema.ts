@@ -1,5 +1,3 @@
-import type { AnalysisResult } from "~/features/stocks/analysis.types";
-
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -15,6 +13,7 @@ import {
 import { authUid, authUsers, authenticatedRole } from "drizzle-orm/supabase";
 
 import { timestamps } from "~/core/db/helpers.server";
+import type { AnalysisResult } from "~/features/stocks/analysis.types";
 
 export const analysisSnapshots = pgTable(
   "analysis_snapshots",
@@ -36,8 +35,9 @@ export const analysisSnapshots = pgTable(
     ...timestamps,
   },
   (table) => [
-    uniqueIndex("analysis_snapshots_user_date_unique").on(
+    uniqueIndex("analysis_snapshots_user_goal_date_unique").on(
       table.user_id,
+      table.goal_amount,
       table.saved_on,
     ),
     pgPolicy("select-own-analysis-snapshots", {

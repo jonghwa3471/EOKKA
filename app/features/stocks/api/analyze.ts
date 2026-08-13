@@ -9,8 +9,8 @@ import {
 } from "~/core/lib/rate-limit.server";
 import makeServerClient from "~/core/lib/supa-client.server";
 
-import { type AnalysisInput, analyzePortfolio } from "../analysis.server";
 import { generateAiStrategy } from "../ai-strategy.server";
+import { type AnalysisInput, analyzePortfolio } from "../analysis.server";
 import { saveDailyAnalysisSnapshot } from "../history/analysis-history.server";
 
 const MAX_REQUEST_SIZE = 10_000;
@@ -75,14 +75,18 @@ export async function action({ request }: Route.ActionArgs) {
     const completeResult = { ...result, aiStrategy };
 
     // Anonymous analysis remains ephemeral. Signed-in users get one snapshot
-    // per Seoul calendar day; subsequent analyses update that day's snapshot.
+    // for each goal and Seoul calendar day combination. Re-analysis after a
+    // portfolio change replaces that goal's snapshot for the same day.
     try {
       const [client] = makeServerClient(request);
       const {
         data: { user },
       } = await client.auth.getUser();
       if (user) {
-        await saveDailyAnalysisSnapshot({ userId: user.id, result: completeResult });
+        await saveDailyAnalysisSnapshot({
+          userId: user.id,
+          result: completeResult,
+        });
       }
     } catch (snapshotError) {
       // A storage problem must not discard an otherwise valid analysis.
