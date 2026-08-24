@@ -1,4 +1,4 @@
-import { and, asc, eq, lt } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 
 import db from "~/core/db/drizzle-client.server";
 import type { AnalysisResult } from "~/features/stocks/analysis.types";
@@ -6,26 +6,15 @@ import { profiles } from "~/features/users/schema";
 
 import { analysisSnapshots } from "./schema";
 
-export const FREE_HISTORY_DAYS = 7;
+export const FREE_HISTORY_LIMIT = 30;
 
-function seoulDate(date = new Date()) {
+export function seoulDate(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Seoul",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   }).format(date);
-}
-
-function addDays(date: string, days: number) {
-  const value = new Date(`${date}T00:00:00+09:00`);
-  value.setUTCDate(value.getUTCDate() + days);
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(value);
 }
 
 function goalMonthFor(result: AnalysisResult) {
@@ -89,15 +78,25 @@ export async function saveDailyAnalysisSnapshot({
   });
 
   if (!hasUnlimitedHistory) {
-    const cutoff = addDays(savedOn, -(FREE_HISTORY_DAYS - 1));
-    await db
-      .delete(analysisSnapshots)
-      .where(
-        and(
-          eq(analysisSnapshots.user_id, userId),
-          lt(analysisSnapshots.saved_on, cutoff),
-        ),
-      );
+    await db.execute(sql`
+      delete from ${analysisSnapshots}
+      where ${analysisSnapshots.analysis_snapshot_id} in (
+        select analysis_snapshot_id
+        from (
+          select
+            ${analysisSnapshots.analysis_snapshot_id} as analysis_snapshot_id,
+            row_number() over (
+              partition by ${analysisSnapshots.goal_amount}
+              order by
+                ${analysisSnapshots.saved_on} desc,
+                ${analysisSnapshots.analysis_snapshot_id} desc
+            ) as record_number
+          from ${analysisSnapshots}
+          where ${analysisSnapshots.user_id} = ${userId}
+        ) ranked_snapshots
+        where record_number > ${FREE_HISTORY_LIMIT}
+      )
+    `);
   }
 }
 

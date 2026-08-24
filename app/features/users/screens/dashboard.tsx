@@ -23,7 +23,7 @@ import db from "~/core/db/drizzle-client.server";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
 import {
-  FREE_HISTORY_DAYS,
+  FREE_HISTORY_LIMIT,
   getAnalysisHistory,
   getPreferredGoalAmount,
   setPreferredGoalAmount,
@@ -119,7 +119,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       user?.user_metadata.full_name ??
       user?.email?.split("@")[0] ??
       "사용자",
-    freeHistoryDays: FREE_HISTORY_DAYS,
+    historyLimit: FREE_HISTORY_LIMIT,
   };
 }
 
@@ -275,7 +275,7 @@ function TrendChart({ history }: { history: History }) {
         viewBox={`0 0 ${width} ${height}`}
         className="h-[280px] w-full min-w-[680px]"
         role="img"
-        aria-label="최근 7일 포트폴리오 평가금액 추이"
+        aria-label="최근 30개 포트폴리오 평가금액 추이"
       >
         <defs>
           <linearGradient id="dashboard-area" x1="0" y1="0" x2="0" y2="1">
@@ -389,7 +389,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
   const {
     history,
     name,
-    freeHistoryDays,
+    historyLimit,
     goalOptions,
     preferredGoal,
     updateDraft,
@@ -467,7 +467,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
               {name}님의 목표 현황
             </h1>
             <p className="text-muted-foreground mt-2">
-              마지막 분석 {latest.savedOn} · 최근 {freeHistoryDays}일 기록
+              마지막 분석 {latest.savedOn} · 최근 {historyLimit}개 기록
             </p>
           </div>
           <Button asChild className="rounded-full">
@@ -564,7 +564,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="text-muted-foreground text-sm font-semibold">
-                  최근 {freeHistoryDays}일
+                  최근 {historyLimit}개 기록
                 </p>
                 <h2 className="mt-1 text-xl font-black">내 자산 성장 추이</h2>
               </div>
@@ -652,9 +652,9 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                 더 긴 투자 흐름이 필요하다면
               </h2>
               <p className="text-muted-foreground mt-3 max-w-xl leading-7">
-                무료 베타에서는 최근 {freeHistoryDays}일의 변화만 저장해요. 향후
-                EOKKA Pro에서는 기록을 기간 제한 없이 보관하고 월간·연간 투자
-                리포트까지 확인할 수 있게 준비할 예정이에요.
+                무료 베타에서는 목표별 최신 {historyLimit}개 분석 기록을
+                저장해요. 향후 EOKKA Pro에서는 기록을 개수 제한 없이 보관하고
+                월간·연간 투자 리포트까지 확인할 수 있게 준비할 예정이에요.
               </p>
               <div className="mt-6 grid gap-2 text-sm sm:grid-cols-2">
                 <div className="bg-background/50 rounded-2xl border p-4 font-semibold">

@@ -40,7 +40,10 @@ export default [
         "features/users/api/disconnect-provider.tsx",
       ),
     ]),
-    ...prefix("/cron", [route("/mailer", "features/cron/api/mailer.tsx")]),
+    ...prefix("/cron", [
+      route("/mailer", "features/cron/api/mailer.tsx"),
+      route("/analyze-portfolios", "features/cron/api/analyze-portfolios.ts"),
+    ]),
     ...prefix("/blog", [route("/og", "features/blog/api/og.tsx")]),
     ...prefix("/stocks", [
       route("/search", "features/stocks/api/search.ts"),
