@@ -30,9 +30,16 @@ npm run stocks:sync
 
 ## 자동 포트폴리오 분석
 
-Vercel Cron이 평일 한국시간 오후 4시 30분에
-`/api/cron/analyze-portfolios`를 호출합니다. 배포하기 전에 Vercel의
-Production 환경변수에 충분히 긴 임의의 값을 등록합니다.
+Supabase Cron이 평일 한국시간 오후 4시 30분에 배포된 서비스의
+`/api/cron/analyze-portfolios`를 `GET`으로 호출합니다. Supabase Cron에는
+GMT 기준 `30 7 * * 1-5`를 사용하고, 요청 헤더에 아래 값을 추가합니다.
+
+```text
+Authorization: Bearer <CRON_SECRET>
+```
+
+배포 서비스의 Production 환경변수에는 충분히 긴 임의의 값을 등록하고,
+Supabase Cron의 Authorization 헤더에도 같은 값을 사용합니다.
 
 ```dotenv
 CRON_SECRET=충분히_긴_임의의_문자열
