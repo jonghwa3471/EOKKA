@@ -18,6 +18,7 @@ import { Button } from "~/core/components/ui/button";
 import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
 import i18next from "~/core/lib/i18next.server";
+import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
 import type { AnalysisResult } from "~/features/stocks/analysis.types";
 import { AnalysisResultView } from "~/features/stocks/components/analysis-result";
@@ -32,10 +33,16 @@ export const meta: Route.MetaFunction = ({ data }) => [
 
 export async function loader({ request }: Route.LoaderArgs) {
   await i18next.getFixedT(request);
+  const [client] = makeServerClient(request);
+  const {
+    data: { user },
+  } = await client.auth.getUser();
+
   return {
     title: "억까 — 내 주식, 목표까지",
     subtitle: "보유 주식을 입력하고 목표까지 얼마나 남았는지 확인해보세요.",
     marketMode: getStockMarketMode(),
+    isAuthenticated: user !== null,
   };
 }
 
@@ -313,7 +320,7 @@ function JackpotGoal() {
 }
 
 export default function Home() {
-  const { marketMode } = useLoaderData<typeof loader>();
+  const { marketMode, isAuthenticated } = useLoaderData<typeof loader>();
   const location = useLocation();
   const navigate = useNavigate();
   const isGlobalTest = marketMode === "global-test";
@@ -1059,7 +1066,10 @@ export default function Home() {
 
           {tab === "quick" && analysis && (
             <div className="mx-auto max-w-4xl">
-              <AnalysisResultView result={analysis} />
+              <AnalysisResultView
+                result={analysis}
+                showAuthCta={!isAuthenticated}
+              />
             </div>
           )}
 

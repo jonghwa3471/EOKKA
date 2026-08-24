@@ -116,6 +116,12 @@ export interface AiStrategy {
     title: string;
     detail: string;
   }>;
+  holdingInsights?: Array<{
+    name: string;
+    verdict: "좋은 위치" | "중립" | "주의 필요";
+    evidence: string;
+    strategy: string;
+  }>;
   monthlyPlan: string;
   diversification: string;
   actions: Array<{

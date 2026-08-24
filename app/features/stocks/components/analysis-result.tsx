@@ -7,8 +7,8 @@ import {
   CircleHelpIcon,
   SparklesIcon,
 } from "lucide-react";
-import { useState } from "react";
-import { Link } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { Link, useLocation } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
 import {
@@ -68,6 +68,100 @@ const projectionAnnualRate = (
     : -100;
 const goalLabel = (value: number) =>
   `${(value / 100_000_000).toLocaleString("ko-KR")}억`;
+
+function useChartRevealOnce<T extends Element>(threshold = 0.2) {
+  const ref = useRef<T>(null);
+  const [isRevealed, setIsRevealed] = useState(false);
+  const { key: pageVisitKey } = useLocation();
+  const previousPageVisitKey = useRef(pageVisitKey);
+
+  useEffect(() => {
+    if (previousPageVisitKey.current === pageVisitKey) return;
+    previousPageVisitKey.current = pageVisitKey;
+    setIsRevealed(false);
+  }, [pageVisitKey]);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || isRevealed) return;
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setIsRevealed(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        setIsRevealed(true);
+        observer.disconnect();
+      },
+      { threshold, rootMargin: "0px 0px -8% 0px" },
+    );
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [isRevealed, pageVisitKey, threshold]);
+
+  return { ref, isRevealed };
+}
+
+function RollingNumber({
+  value,
+  isActive,
+  format,
+  delay = 0,
+  duration = 950,
+}: {
+  value: number;
+  isActive: boolean;
+  format: (displayValue: number) => string;
+  delay?: number;
+  duration?: number;
+}) {
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    if (!isActive) {
+      setDisplayValue(0);
+      return;
+    }
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setDisplayValue(value);
+      return;
+    }
+
+    let animationFrame = 0;
+    let startedAt = 0;
+    const timeout = window.setTimeout(() => {
+      const animate = (time: number) => {
+        if (startedAt === 0) startedAt = time;
+        const progress = Math.min(1, (time - startedAt) / duration);
+        const eased = 1 - Math.pow(1 - progress, 4);
+        const remainingJitter = progress < 0.72 ? 1 - progress / 0.72 : 0;
+        const jitter =
+          (Math.random() - 0.5) *
+          Math.max(Math.abs(value) * 0.12, 8) *
+          remainingJitter;
+        const nextValue = progress === 1 ? value : value * eased + jitter;
+        setDisplayValue(nextValue);
+        if (progress < 1) animationFrame = requestAnimationFrame(animate);
+      };
+      animationFrame = requestAnimationFrame(animate);
+    }, delay);
+
+    return () => {
+      window.clearTimeout(timeout);
+      cancelAnimationFrame(animationFrame);
+    };
+  }, [delay, duration, isActive, value]);
+
+  return (
+    <span className="inline-block tabular-nums" aria-label={format(value)}>
+      <span aria-hidden="true">{format(displayValue)}</span>
+    </span>
+  );
+}
 
 const purchasePosition = (rangePosition: number) => {
   if (rangePosition <= 20)
@@ -216,6 +310,7 @@ function periodOnlyLabel(months: number) {
 }
 
 function PortfolioAllocation({ result }: { result: AnalysisResult }) {
+  const { ref, isRevealed } = useChartRevealOnce<HTMLElement>();
   const totalValue = result.holdings.reduce(
     (sum, holding) => sum + Math.max(0, holding.valueKrw),
     0,
@@ -238,7 +333,10 @@ function PortfolioAllocation({ result }: { result: AnalysisResult }) {
     .join(", ");
 
   return (
-    <section className="mt-6 rounded-2xl border bg-gradient-to-br from-emerald-500/[0.08] to-transparent p-5">
+    <section
+      ref={ref}
+      className="mt-6 rounded-2xl border bg-gradient-to-br from-emerald-500/[0.08] to-transparent p-5"
+    >
       <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
         <div className="mx-auto shrink-0 sm:mx-0">
           <div
@@ -247,6 +345,12 @@ function PortfolioAllocation({ result }: { result: AnalysisResult }) {
               background: gradient
                 ? `conic-gradient(${gradient})`
                 : "var(--muted)",
+              opacity: isRevealed ? 1 : 0,
+              transform: isRevealed
+                ? "rotate(0deg) scale(1)"
+                : "rotate(-70deg) scale(0.72)",
+              transition:
+                "opacity 450ms ease-out, transform 900ms cubic-bezier(0.16, 1, 0.3, 1)",
             }}
             role="img"
             aria-label={`현재 평가금액 기준 ${allocations
@@ -275,10 +379,15 @@ function PortfolioAllocation({ result }: { result: AnalysisResult }) {
             </p>
           </div>
           <ul className="mt-4 grid gap-x-5 gap-y-3 sm:grid-cols-2">
-            {allocations.map((holding) => (
+            {allocations.map((holding, index) => (
               <li
                 key={`${holding.ticker}-${holding.name}`}
                 className="flex min-w-0 items-center gap-2.5"
+                style={{
+                  opacity: isRevealed ? 1 : 0,
+                  transform: isRevealed ? "translateX(0)" : "translateX(12px)",
+                  transition: `opacity 420ms ease-out ${180 + index * 55}ms, transform 420ms ease-out ${180 + index * 55}ms`,
+                }}
               >
                 <span
                   className="size-2.5 shrink-0 rounded-full"
@@ -302,9 +411,55 @@ function PortfolioAllocation({ result }: { result: AnalysisResult }) {
   );
 }
 
+function GoalProbabilityChart({ result }: { result: AnalysisResult }) {
+  const { ref, isRevealed } = useChartRevealOnce<HTMLDivElement>();
+  const values = [
+    [10, result.probability.tenYears],
+    [20, result.probability.twentyYears],
+    [30, result.probability.thirtyYears],
+    [40, result.probability.fortyYears],
+    [50, result.probability.fiftyYears],
+  ] as const;
+
+  return (
+    <div ref={ref} className="rounded-2xl border p-5">
+      <h3 className="font-bold">
+        기간 내 {goalLabel(result.goalAmount)} 도달 확률
+      </h3>
+      <dl className="mt-4 space-y-3">
+        {values.map(([year, value], index) => (
+          <div key={year} className="text-sm">
+            <div className="flex items-center justify-between">
+              <dt>{year}년 이내</dt>
+              <dd className="font-bold">
+                {typeof value === "number"
+                  ? `${value.toFixed(1)}%`
+                  : "재분석 필요"}
+              </dd>
+            </div>
+            <div className="bg-muted mt-1.5 h-1.5 overflow-hidden rounded-full">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400"
+                style={{
+                  width:
+                    isRevealed && typeof value === "number"
+                      ? `${Math.min(100, Math.max(0, value))}%`
+                      : "0%",
+                  transition: `width 750ms cubic-bezier(0.16, 1, 0.3, 1) ${index * 90}ms`,
+                }}
+              />
+            </div>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
 type StrategyScores = NonNullable<AnalysisResult["aiStrategy"]>["scores"];
 
 function AiStrategyRadar({ scores }: { scores: StrategyScores }) {
+  const { ref, isRevealed } = useChartRevealOnce<HTMLDivElement>();
   const size = 340;
   const center = size / 2;
   const radius = 105;
@@ -324,7 +479,7 @@ function AiStrategyRadar({ scores }: { scores: StrategyScores }) {
     .join(" ");
 
   return (
-    <div className="border-b border-violet-500/15 px-5 py-5 sm:px-6">
+    <div ref={ref} className="border-b border-violet-500/15 px-5 py-5 sm:px-6">
       <div>
         <h4 className="text-sm font-black">투자 균형 한눈에 보기</h4>
         <p className="text-muted-foreground mt-1 text-xs">
@@ -382,6 +537,13 @@ function AiStrategyRadar({ scores }: { scores: StrategyScores }) {
             stroke="#8b5cf6"
             strokeWidth="2.5"
             strokeLinejoin="round"
+            style={{
+              opacity: isRevealed ? 1 : 0,
+              transform: isRevealed ? "scale(1)" : "scale(0.08)",
+              transformOrigin: "50% 50%",
+              transition:
+                "opacity 350ms ease-out, transform 850ms cubic-bezier(0.16, 1, 0.3, 1)",
+            }}
           />
           {scores.map((item, index) => {
             const dataPoint = point(index, item.score);
@@ -401,6 +563,13 @@ function AiStrategyRadar({ scores }: { scores: StrategyScores }) {
                   fill="#8b5cf6"
                   stroke="white"
                   strokeWidth="1.5"
+                  style={{
+                    opacity: isRevealed ? 1 : 0,
+                    transform: isRevealed ? "scale(1)" : "scale(0)",
+                    transformBox: "fill-box",
+                    transformOrigin: "center",
+                    transition: `opacity 250ms ease-out ${420 + index * 70}ms, transform 350ms ease-out ${420 + index * 70}ms`,
+                  }}
                 />
                 <text
                   x={labelPoint.x}
@@ -438,7 +607,12 @@ function AiStrategyRadar({ scores }: { scores: StrategyScores }) {
                       : "text-violet-600 dark:text-violet-400"
                 }`}
               >
-                {item.score}점
+                <RollingNumber
+                  value={item.score}
+                  isActive={isRevealed}
+                  delay={160 + scores.indexOf(item) * 70}
+                  format={(value) => `${Math.round(value)}점`}
+                />
               </strong>
             </li>
           ))}
@@ -453,6 +627,7 @@ function InvestmentStyleRadar({
 }: {
   style: AnalysisResult["investmentStyle"];
 }) {
+  const { ref, isRevealed } = useChartRevealOnce<HTMLDivElement>();
   const size = 320;
   const center = size / 2;
   const radius = 92;
@@ -472,7 +647,7 @@ function InvestmentStyleRadar({
     .join(" ");
 
   return (
-    <div className="border-b border-violet-500/15 px-5 py-5 sm:px-6">
+    <div ref={ref} className="border-b border-violet-500/15 px-5 py-5 sm:px-6">
       <div className="rounded-2xl border border-fuchsia-500/25 bg-fuchsia-500/[0.06] p-4 text-center">
         <p className="text-xs font-black tracking-[0.14em] text-fuchsia-600 uppercase dark:text-fuchsia-400">
           My Investment Type
@@ -545,6 +720,13 @@ function InvestmentStyleRadar({
             stroke="#ec4899"
             strokeWidth="2.5"
             strokeLinejoin="round"
+            style={{
+              opacity: isRevealed ? 1 : 0,
+              transform: isRevealed ? "scale(1)" : "scale(0.08)",
+              transformOrigin: "50% 50%",
+              transition:
+                "opacity 350ms ease-out, transform 850ms cubic-bezier(0.16, 1, 0.3, 1)",
+            }}
           />
           {style.scores.map((item, index) => {
             const dataPoint = point(index, item.score);
@@ -564,6 +746,13 @@ function InvestmentStyleRadar({
                   fill="#ec4899"
                   stroke="white"
                   strokeWidth="1.5"
+                  style={{
+                    opacity: isRevealed ? 1 : 0,
+                    transform: isRevealed ? "scale(1)" : "scale(0)",
+                    transformBox: "fill-box",
+                    transformOrigin: "center",
+                    transition: `opacity 250ms ease-out ${420 + index * 70}ms, transform 350ms ease-out ${420 + index * 70}ms`,
+                  }}
                 />
                 <text
                   x={labelPoint.x}
@@ -588,7 +777,12 @@ function InvestmentStyleRadar({
             >
               <span className="text-xs font-bold">{item.label}</span>
               <strong className="text-sm text-fuchsia-600 tabular-nums dark:text-fuchsia-400">
-                {item.score}
+                <RollingNumber
+                  value={item.score}
+                  isActive={isRevealed}
+                  delay={160 + style.scores.indexOf(item) * 70}
+                  format={(value) => `${Math.round(value)}`}
+                />
               </strong>
             </li>
           ))}
@@ -789,6 +983,7 @@ function AnalysisMethodDialog({ result }: { result: AnalysisResult }) {
 }
 
 function ScenarioChart({ result }: { result: AnalysisResult }) {
+  const { ref, isRevealed } = useChartRevealOnce<HTMLDivElement>();
   const goal = result.goalAmount;
   const [hoverMonth, setHoverMonth] = useState<number | null>(null);
   const width = 900,
@@ -879,7 +1074,7 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
     hoverMonth === null ? null : marketValueAtMonth(hoverMonth);
 
   return (
-    <div className="overflow-x-auto">
+    <div ref={ref} className="overflow-x-auto">
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className="h-auto w-full min-w-[700px]"
@@ -927,7 +1122,7 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
         >
           {goalLabel(goal)} 목표
         </text>
-        {(["conservative", "base", "optimistic"] as const).map((key) => (
+        {(["conservative", "base", "optimistic"] as const).map((key, index) => (
           <polyline
             key={key}
             points={scenarioPoints(key)
@@ -938,6 +1133,12 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
             strokeWidth={key === "base" ? 4 : 2.5}
             strokeLinecap="round"
             strokeLinejoin="round"
+            pathLength="1"
+            style={{
+              strokeDasharray: 1,
+              strokeDashoffset: isRevealed ? 0 : 1,
+              transition: `stroke-dashoffset 1100ms cubic-bezier(0.4, 0, 0.2, 1) ${index * 120}ms`,
+            }}
           />
         ))}
         {result.benchmark && (
@@ -951,6 +1152,12 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
             strokeDasharray="8 6"
             strokeLinecap="round"
             strokeLinejoin="round"
+            pathLength="1"
+            style={{
+              strokeDasharray: "0.025 0.018",
+              strokeDashoffset: isRevealed ? 0 : 1,
+              transition: "stroke-dashoffset 1200ms ease-out 300ms",
+            }}
           />
         )}
         {result.scenarios.map(
@@ -1118,6 +1325,7 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
 }
 
 function GoalMomentumCard({ result }: { result: AnalysisResult }) {
+  const { ref, isRevealed } = useChartRevealOnce<HTMLElement>();
   const baseGoalMonth = result.scenarios[1].goalMonth;
   const marketGoalMonth = result.benchmark?.goalMonth ?? null;
   const hasBenchmark =
@@ -1232,7 +1440,10 @@ function GoalMomentumCard({ result }: { result: AnalysisResult }) {
                   : "시장과 거의 같은 속도로 목표에 접근하고 있어요.";
 
   return (
-    <section className="from-background via-background to-muted/40 mt-5 overflow-hidden rounded-2xl border bg-gradient-to-br p-5 sm:p-6">
+    <section
+      ref={ref}
+      className="from-background via-background to-muted/40 mt-5 overflow-hidden rounded-2xl border bg-gradient-to-br p-5 sm:p-6"
+    >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-muted-foreground text-xs font-bold tracking-[0.16em]">
@@ -1280,7 +1491,14 @@ function GoalMomentumCard({ result }: { result: AnalysisResult }) {
             />
           ))}
           {baseArea && (
-            <polygon points={baseArea} fill="url(#goal-momentum-area)" />
+            <polygon
+              points={baseArea}
+              fill="url(#goal-momentum-area)"
+              style={{
+                opacity: isRevealed ? 1 : 0,
+                transition: "opacity 700ms ease-out 350ms",
+              }}
+            />
           )}
           {marketPoints.length > 0 && (
             <polyline
@@ -1292,6 +1510,12 @@ function GoalMomentumCard({ result }: { result: AnalysisResult }) {
               strokeLinecap="round"
               strokeLinejoin="round"
               opacity="0.8"
+              pathLength="1"
+              style={{
+                strokeDasharray: "0.025 0.02",
+                strokeDashoffset: isRevealed ? 0 : 1,
+                transition: "stroke-dashoffset 1100ms ease-out 180ms",
+              }}
             />
           )}
           <polyline
@@ -1301,6 +1525,13 @@ function GoalMomentumCard({ result }: { result: AnalysisResult }) {
             strokeWidth="5"
             strokeLinecap="round"
             strokeLinejoin="round"
+            pathLength="1"
+            style={{
+              strokeDasharray: 1,
+              strokeDashoffset: isRevealed ? 0 : 1,
+              transition:
+                "stroke-dashoffset 1050ms cubic-bezier(0.4, 0, 0.2, 1)",
+            }}
           />
           {basePoints.length > 0 && (
             <circle
@@ -1310,6 +1541,14 @@ function GoalMomentumCard({ result }: { result: AnalysisResult }) {
               fill={lineColor}
               stroke="white"
               strokeWidth="2"
+              style={{
+                opacity: isRevealed ? 1 : 0,
+                transform: isRevealed ? "scale(1)" : "scale(0)",
+                transformBox: "fill-box",
+                transformOrigin: "center",
+                transition:
+                  "opacity 250ms ease-out 850ms, transform 350ms ease-out 850ms",
+              }}
             />
           )}
           <text
@@ -1362,6 +1601,8 @@ export function AnalysisResultView({
   result: AnalysisResult;
   showAuthCta?: boolean;
 }) {
+  const { ref: metricsRef, isRevealed: areMetricsRevealed } =
+    useChartRevealOnce<HTMLDivElement>();
   const [selectedPurchaseHolding, setSelectedPurchaseHolding] = useState<
     AnalysisResult["holdings"][number] | null
   >(null);
@@ -1428,21 +1669,27 @@ export function AnalysisResultView({
 
       <PortfolioAllocation result={result} />
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-4">
+      <div ref={metricsRef} className="mt-6 grid gap-3 sm:grid-cols-4">
         {[
           { label: "매수 원금", value: won(result.totalCost) },
           { label: "현재 평가금액", value: won(result.currentValue) },
           {
             label: "평가손익",
             value: `${result.profit >= 0 ? "+" : ""}${won(result.profit)}`,
+            rollingValue: result.profit,
+            rollingFormat: (value: number) =>
+              `${value >= 0 ? "+" : ""}${won(value)}`,
             tone: result.profit >= 0 ? "profit" : "loss",
           },
           {
             label: "현재 수익률",
             value: `${result.returnRate >= 0 ? "+" : ""}${result.returnRate.toFixed(1)}%`,
+            rollingValue: result.returnRate,
+            rollingFormat: (value: number) =>
+              `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`,
             tone: result.returnRate >= 0 ? "profit" : "loss",
           },
-        ].map(({ label, value, tone }) => (
+        ].map(({ label, value, rollingValue, rollingFormat, tone }, index) => (
           <div key={label} className="bg-muted/40 rounded-2xl p-4">
             <p className="text-muted-foreground text-xs">{label}</p>
             <strong
@@ -1454,7 +1701,16 @@ export function AnalysisResultView({
                     : ""
               }`}
             >
-              {value}
+              {typeof rollingValue === "number" && rollingFormat ? (
+                <RollingNumber
+                  value={rollingValue}
+                  isActive={areMetricsRevealed}
+                  delay={index * 100}
+                  format={rollingFormat}
+                />
+              ) : (
+                value
+              )}
             </strong>
           </div>
         ))}
@@ -1480,7 +1736,7 @@ export function AnalysisResultView({
                 onClick={() => setSelectedPurchaseHolding(holding)}
                 className="group hover:bg-muted/40 focus-visible:ring-ring -mx-3 block w-[calc(100%+1.5rem)] cursor-pointer rounded-xl px-3 py-6 text-left transition-colors first:pt-3 last:pb-3 focus-visible:ring-2 focus-visible:outline-none"
               >
-                <div className="grid gap-3 sm:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))] sm:items-center">
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,1fr))] sm:items-center">
                   <div className="min-w-0">
                     <strong className="flex min-w-0 items-center gap-1.5">
                       {medal && (
@@ -1506,6 +1762,12 @@ export function AnalysisResultView({
                   <div>
                     <p className="text-muted-foreground text-xs">매수 원금</p>
                     <p className="mt-0.5 font-bold">{won(holding.costKrw)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">
+                      현재 평가금액
+                    </p>
+                    <p className="mt-0.5 font-bold">{won(holding.valueKrw)}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs">평가손익</p>
@@ -1881,30 +2143,7 @@ export function AnalysisResultView({
             </div>
           </dl>
         </div>
-        <div className="rounded-2xl border p-5">
-          <h3 className="font-bold">기간 내 {targetLabel} 도달 확률</h3>
-          <dl className="mt-4 space-y-3">
-            {[
-              [10, result.probability.tenYears],
-              [20, result.probability.twentyYears],
-              [30, result.probability.thirtyYears],
-              [40, result.probability.fortyYears],
-              [50, result.probability.fiftyYears],
-            ].map(([year, value]) => (
-              <div
-                key={year}
-                className="flex items-center justify-between text-sm"
-              >
-                <dt>{year}년 이내</dt>
-                <dd className="font-bold">
-                  {typeof value === "number"
-                    ? `${value.toFixed(1)}%`
-                    : "재분석 필요"}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </div>
+        <GoalProbabilityChart result={result} />
       </div>
 
       {result.riskWarnings.length > 0 && (
@@ -1943,6 +2182,52 @@ export function AnalysisResultView({
 
           {result.investmentStyle?.scores?.length === 6 && (
             <InvestmentStyleRadar style={result.investmentStyle} />
+          )}
+
+          {(result.aiStrategy.holdingInsights?.length ?? 0) > 0 && (
+            <div className="border-t border-violet-500/15 px-5 pt-5 sm:px-6 sm:pt-6">
+              <div>
+                <p className="text-sm font-black">종목별 매수 전략</p>
+                <p className="text-muted-foreground mt-1 text-xs leading-5">
+                  종목명과 실제 금액은 AI에 보내지 않고, 익명화한 비중·수익률·
+                  매수 위치만으로 분석했어요.
+                </p>
+              </div>
+              <div className="mt-4 grid gap-3">
+                {result.aiStrategy.holdingInsights?.map((insight) => (
+                  <article
+                    key={insight.name}
+                    className="bg-background/70 rounded-xl border p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-black">{insight.name}</p>
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
+                          insight.verdict === "좋은 위치"
+                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300"
+                            : insight.verdict === "주의 필요"
+                              ? "bg-rose-500/15 text-rose-600 dark:text-rose-300"
+                              : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                        }`}
+                      >
+                        {insight.verdict}
+                      </span>
+                    </div>
+                    <p className="text-muted-foreground mt-2 text-xs leading-5">
+                      {insight.evidence}
+                    </p>
+                    <div className="mt-3 rounded-lg bg-violet-500/[0.08] p-3">
+                      <p className="text-[10px] font-black tracking-wide text-violet-600 uppercase dark:text-violet-400">
+                        다음 매수 기준
+                      </p>
+                      <p className="mt-1 text-sm leading-6">
+                        {insight.strategy}
+                      </p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
           )}
 
           <div className="grid gap-3 px-5 pt-5 sm:grid-cols-2 sm:px-6 sm:pt-6">

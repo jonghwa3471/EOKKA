@@ -6,12 +6,12 @@ import { z } from "zod";
 
 const aiStrategySchema = z.object({
   headline: z.string().min(1).max(80),
-  diagnosis: z.string().min(1).max(400),
+  diagnosis: z.string().min(1).max(700),
   strengths: z
     .array(
       z.object({
         title: z.string().min(1).max(60),
-        detail: z.string().min(1).max(240),
+        detail: z.string().min(1).max(400),
       }),
     )
     .length(2),
@@ -19,17 +19,28 @@ const aiStrategySchema = z.object({
     .array(
       z.object({
         title: z.string().min(1).max(60),
-        detail: z.string().min(1).max(240),
+        detail: z.string().min(1).max(500),
       }),
     )
     .length(2),
-  monthlyPlan: z.string().min(1).max(400),
-  diversification: z.string().min(1).max(400),
+  holdingInsights: z
+    .array(
+      z.object({
+        holdingAlias: z.string().min(1).max(20),
+        verdict: z.enum(["좋은 위치", "중립", "주의 필요"]),
+        evidence: z.string().min(1).max(300),
+        strategy: z.string().min(1).max(500),
+      }),
+    )
+    .min(1)
+    .max(5),
+  monthlyPlan: z.string().min(1).max(600),
+  diversification: z.string().min(1).max(600),
   actions: z
     .array(
       z.object({
         title: z.string().min(1).max(60),
-        detail: z.string().min(1).max(240),
+        detail: z.string().min(1).max(400),
         priority: z.enum(["높음", "보통", "낮음"]),
       }),
     )
@@ -52,6 +63,15 @@ function period(months: number | null) {
 
 const clampScore = (score: number) =>
   Math.round(Math.max(0, Math.min(100, score)));
+
+function purchasePositionBand(position: number | null) {
+  if (position === null) return "가격 범위 데이터 없음";
+  if (position <= 20) return "낮은 가격 구간";
+  if (position <= 40) return "비교적 낮은 구간";
+  if (position <= 60) return "중간 가격 구간";
+  if (position <= 80) return "비교적 높은 구간";
+  return "높은 가격 구간";
+}
 
 function buildStrategyScores(result: AnalysisResult): AiStrategy["scores"] {
   const weights = result.holdings.map((holding) =>
@@ -135,15 +155,46 @@ export async function generateAiStrategy(
   const contributedBase = result.contributionScenarios.find(
     (scenario) => scenario.key === "base",
   );
-  const holdings = result.holdings.map((holding) => ({
+  const aliases = result.holdings.map((holding, index) => ({
+    alias: `종목 ${String.fromCharCode(65 + index)}`,
     name: holding.name,
-    ticker: holding.ticker,
-    portfolioWeightPercent:
-      result.currentValue > 0
-        ? Number(((holding.valueKrw / result.currentValue) * 100).toFixed(1))
-        : 0,
-    returnRatePercent: Number(holding.returnRate.toFixed(1)),
   }));
+  const aliasToName = new Map(
+    aliases.map(({ alias, name }) => [alias, name] as const),
+  );
+  const holdings = result.holdings.map((holding, index) => {
+    const longTermPosition = holding.purchasePosition?.tenYearPosition ?? null;
+    const recentPosition = holding.purchasePosition?.oneYearPosition ?? null;
+    return {
+      holdingAlias: aliases[index].alias,
+      portfolioWeightPercent:
+        result.currentValue > 0
+          ? Number(((holding.valueKrw / result.currentValue) * 100).toFixed(1))
+          : 0,
+      returnRatePercent: Number(holding.returnRate.toFixed(1)),
+      profitDirection:
+        holding.profitKrw > 0
+          ? "수익"
+          : holding.profitKrw < 0
+            ? "손실"
+            : "보합",
+      longTermPurchasePositionPercent:
+        longTermPosition === null ? null : Number(longTermPosition.toFixed(1)),
+      longTermPurchasePositionBand: purchasePositionBand(longTermPosition),
+      recentPurchasePositionPercent:
+        recentPosition === null ? null : Number(recentPosition.toFixed(1)),
+      recentPurchasePositionBand: purchasePositionBand(recentPosition),
+    };
+  });
+  const sortedWeights = holdings
+    .map((holding) => holding.portfolioWeightPercent)
+    .sort((a, b) => b - a);
+  const topThreeWeightPercent = Number(
+    sortedWeights
+      .slice(0, 3)
+      .reduce((sum, weight) => sum + weight, 0)
+      .toFixed(1),
+  );
   const scores = buildStrategyScores(result);
 
   const facts = {
@@ -169,17 +220,22 @@ export async function generateAiStrategy(
           goalPeriod: period(result.benchmark.goalMonth),
         }
       : null,
+    portfolioStructure: {
+      holdingCount: holdings.length,
+      largestHoldingWeightPercent: sortedWeights[0] ?? 0,
+      topThreeWeightPercent,
+    },
     holdings,
     investmentCriteriaScores: scores,
     investmentStyle: result.investmentStyle,
     riskWarnings: result.riskWarnings,
   };
 
-  const client = new OpenAI({ apiKey, maxRetries: 1, timeout: 15_000 });
+  const client = new OpenAI({ apiKey, maxRetries: 1, timeout: 30_000 });
   const response = await client.responses.parse({
     model: process.env.OPENAI_MODEL || "gpt-5.4-mini",
     store: false,
-    max_output_tokens: 1_400,
+    max_output_tokens: 2_600,
     input: [
       {
         role: "system",
@@ -188,12 +244,20 @@ export async function generateAiStrategy(
           "반드시 제공된 계산 결과만 해석하고 가격, 뉴스, 재무 상태, 미래 수익률을 새로 만들지 마세요.",
           "목표 기간과 기간 단축 수치는 입력 데이터의 값을 그대로 사용하세요.",
           "개별 종목을 단정적으로 매수·매도하라고 지시하지 마세요.",
-          "종목별 과거 수익률만으로 우수 종목을 판정하지 말고, 비중 쏠림과 분산 위험 관점에서 설명하세요.",
-          "추가 매수 전략은 특정 종목 추천 대신 과도한 집중 완화, 정기 점검, 감당 가능한 월 투자금 유지에 초점을 맞추세요.",
+          "holdingAlias는 실제 종목명을 가린 익명 식별자이므로 응답에 그대로 사용하세요.",
+          "종목별 과거 수익률만으로 우수 종목을 판정하지 말고 매수 위치, 비중 쏠림, 손익 방향과 변동 위험을 함께 설명하세요.",
+          "장기 매수 위치가 80% 이상이면 높은 평균단가의 근거로 언급하고, 무조건적인 물타기 대신 추격매수를 피하며 가격·비중 조건을 정한 분할매수를 검토하라고 안내하세요.",
+          "장기 매수 위치가 20% 이하이면 상대적으로 낮은 구간에서 매수한 점을 인정하되 과거 최저가 부근이라는 이유만으로 추가 매수를 권하지 마세요.",
+          "한 종목 비중이 35% 이상이거나 상위 3종목 합계가 75% 이상이면 집중 위험을 해당 수치와 함께 분명히 지적하세요.",
+          "급등주·우량주 여부는 제공된 데이터로 확인할 수 없습니다. 공격성 점수나 위험 경고가 높다면 특정 종목명을 지어내지 말고, 이익 지속성·부채·현금흐름을 확인한 대형 우량주 또는 광범위 시장 ETF를 고르는 기준을 제시하세요.",
+          "holdingInsights에는 목표에 미치는 영향이 큰 종목을 최대 5개 골라 근거 수치를 포함하고, 지금 할 일과 다음 매수 전에 기다릴 조건을 구분해 작성하세요.",
+          "monthlyPlan에는 월 투자금이 0원이면 임의의 투자 금액이나 단축 기간을 만들지 말고 감당 가능한 금액을 정하는 방법을 설명하세요. 입력값이 있으면 계산된 단축 기간을 그대로 인용하세요.",
+          "diversification에는 단순히 분산하라는 말 대신 최대 비중과 상위 3종목 비중을 인용하고 신규 자금으로 쏠림을 완화하는 순서를 제시하세요.",
           "strengths에는 계산 결과로 확인되는 잘하고 있는 점을 정확히 2개 작성하세요.",
           "improvements에는 개선 여지가 있는 아쉬운 점을 정확히 2개 작성하되 비난하지 말고 개선 방향을 함께 제시하세요.",
+          "actions는 오늘 확인할 항목, 다음 매수 전 확인할 조건, 월 1회 점검할 항목처럼 서로 다른 시간축으로 작성하세요.",
           "근거가 부족하면 추측하지 말고 확인 가능한 범위가 제한적이라는 사실 자체를 솔직하게 설명하세요.",
-          "짧고 구체적인 한국어 존댓말로 작성하세요.",
+          "상투적인 표현을 피하고 사용자가 자신의 수치를 보고 행동 기준을 바로 이해할 수 있는 구체적인 한국어 존댓말로 작성하세요.",
           "disclaimer에는 예측의 불확실성과 투자 판단 책임을 한 문장으로 알리세요.",
         ].join(" "),
       },
@@ -207,5 +271,17 @@ export async function generateAiStrategy(
     },
   });
 
-  return response.output_parsed ? { ...response.output_parsed, scores } : null;
+  if (!response.output_parsed) return null;
+
+  const { holdingInsights, ...strategy } = response.output_parsed;
+  return {
+    ...strategy,
+    holdingInsights: holdingInsights.map((insight) => ({
+      name: aliasToName.get(insight.holdingAlias) ?? insight.holdingAlias,
+      verdict: insight.verdict,
+      evidence: insight.evidence,
+      strategy: insight.strategy,
+    })),
+    scores,
+  };
 }

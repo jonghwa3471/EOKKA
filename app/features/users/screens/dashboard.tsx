@@ -15,7 +15,8 @@ import {
   TargetIcon,
   TrendingUpIcon,
 } from "lucide-react";
-import { Form, Link, redirect } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { Form, Link, redirect, useLocation } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
 import db from "~/core/db/drizzle-client.server";
@@ -210,7 +211,43 @@ function Change({
   );
 }
 
+function useRevealOncePerVisit<T extends Element>() {
+  const ref = useRef<T>(null);
+  const [isRevealed, setIsRevealed] = useState(false);
+  const { key: pageVisitKey } = useLocation();
+  const previousPageVisitKey = useRef(pageVisitKey);
+
+  useEffect(() => {
+    if (previousPageVisitKey.current === pageVisitKey) return;
+    previousPageVisitKey.current = pageVisitKey;
+    setIsRevealed(false);
+  }, [pageVisitKey]);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || isRevealed) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setIsRevealed(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        setIsRevealed(true);
+        observer.disconnect();
+      },
+      { threshold: 0.2, rootMargin: "0px 0px -8% 0px" },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [isRevealed, pageVisitKey]);
+
+  return { ref, isRevealed };
+}
+
 function TrendChart({ history }: { history: History }) {
+  const { ref: chartRef, isRevealed } = useRevealOncePerVisit<HTMLDivElement>();
+
   const width = 900;
   const height = 280;
   const padding = { top: 28, right: 24, bottom: 45, left: 24 };
@@ -233,7 +270,7 @@ function TrendChart({ history }: { history: History }) {
   const area = `${padding.left},${height - padding.bottom} ${points.join(" ")} ${x(history.length - 1)},${height - padding.bottom}`;
 
   return (
-    <div className="overflow-x-auto">
+    <div ref={chartRef} className="overflow-x-auto">
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className="h-[280px] w-full min-w-[680px]"
@@ -262,7 +299,14 @@ function TrendChart({ history }: { history: History }) {
             />
           );
         })}
-        <polygon points={area} fill="url(#dashboard-area)" />
+        <polygon
+          points={area}
+          fill="url(#dashboard-area)"
+          style={{
+            opacity: isRevealed ? 1 : 0,
+            transition: "opacity 700ms ease-out 300ms",
+          }}
+        />
         <polyline
           points={points.join(" ")}
           fill="none"
@@ -270,6 +314,12 @@ function TrendChart({ history }: { history: History }) {
           strokeWidth="5"
           strokeLinecap="round"
           strokeLinejoin="round"
+          pathLength="1"
+          style={{
+            strokeDasharray: 1,
+            strokeDashoffset: isRevealed ? 0 : 1,
+            transition: "stroke-dashoffset 1000ms cubic-bezier(0.4, 0, 0.2, 1)",
+          }}
         />
         {history.map((item, index) => (
           <g key={item.id}>
@@ -278,12 +328,23 @@ function TrendChart({ history }: { history: History }) {
               cy={y(item.currentValue)}
               r="7"
               fill="#10b981"
+              style={{
+                opacity: isRevealed ? 1 : 0,
+                transform: isRevealed ? "scale(1)" : "scale(0)",
+                transformBox: "fill-box",
+                transformOrigin: "center",
+                transition: `opacity 220ms ease-out ${650 + index * 90}ms, transform 300ms ease-out ${650 + index * 90}ms`,
+              }}
             />
             <circle
               cx={x(index)}
               cy={y(item.currentValue)}
               r="3"
               fill="white"
+              style={{
+                opacity: isRevealed ? 1 : 0,
+                transition: `opacity 200ms ease-out ${720 + index * 90}ms`,
+              }}
             />
             <text
               x={x(index)}
@@ -298,6 +359,28 @@ function TrendChart({ history }: { history: History }) {
           </g>
         ))}
       </svg>
+    </div>
+  );
+}
+
+function GoalJourney({ progress }: { progress: number }) {
+  const { ref, isRevealed } = useRevealOncePerVisit<HTMLDivElement>();
+
+  return (
+    <div ref={ref} className="bg-muted/60 mt-6 rounded-2xl p-4">
+      <div className="flex justify-between text-xs font-bold">
+        <span>목표까지의 여정</span>
+        <span>{progress.toFixed(1)}%</span>
+      </div>
+      <div className="bg-muted mt-3 h-2 overflow-hidden rounded-full">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400"
+          style={{
+            width: isRevealed ? `${progress}%` : "0%",
+            transition: "width 950ms cubic-bezier(0.16, 1, 0.3, 1)",
+          }}
+        />
+      </div>
     </div>
   );
 }
@@ -357,6 +440,12 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
     latest.goalMonth,
     previous?.goalMonth ?? null,
   );
+  const contributionGoalMonth =
+    latest.monthlyContribution > 0
+      ? (latest.result.contributionScenarios.find(
+          (scenario) => scenario.key === "base",
+        )?.goalMonth ?? null)
+      : null;
   const first = history[0];
   const weekAssetChange = latest.currentValue - first.currentValue;
   const weekReturnChange = latest.returnRate - first.returnRate;
@@ -448,6 +537,11 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             icon={Clock3Icon}
             label={`${formatGoalAmount(latest.goalAmount)} 목표 도달 예상`}
             value={formatMonths(latest.goalMonth)}
+            detail={
+              latest.monthlyContribution > 0
+                ? `매월 ${formatWon(latest.monthlyContribution)} 투자 시 ${formatMonths(contributionGoalMonth)}`
+                : undefined
+            }
             change={<Change value={periodChange} suffix="개월" inverse />}
           />
           <SummaryCard
@@ -511,18 +605,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                 improved={weekPeriodChange !== null && weekPeriodChange < 0}
               />
             </div>
-            <div className="bg-muted/60 mt-6 rounded-2xl p-4">
-              <div className="flex justify-between text-xs font-bold">
-                <span>목표까지의 여정</span>
-                <span>{progress.toFixed(1)}%</span>
-              </div>
-              <div className="bg-muted mt-3 h-2 overflow-hidden rounded-full">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-            </div>
+            <GoalJourney progress={progress} />
           </div>
         </section>
 
@@ -597,12 +680,14 @@ function SummaryCard({
   label,
   value,
   valueClass,
+  detail,
   change,
 }: {
   icon: typeof TrendingUpIcon;
   label: string;
   value: string;
   valueClass?: string;
+  detail?: string;
   change: React.ReactNode;
 }) {
   return (
@@ -616,6 +701,11 @@ function SummaryCard({
         </div>
       </div>
       <p className={cn("mt-4 text-2xl font-black", valueClass)}>{value}</p>
+      {detail && (
+        <p className="mt-1.5 text-xs font-semibold text-sky-600 dark:text-sky-400">
+          {detail}
+        </p>
+      )}
       <div className="mt-2">{change}</div>
     </div>
   );
