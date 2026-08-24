@@ -1,6 +1,7 @@
 import type { AnalysisResult } from "../analysis.types";
 
 import {
+  ArrowRightIcon,
   CircleAlertIcon,
   CircleCheckIcon,
   CircleHelpIcon,
@@ -67,6 +68,112 @@ const projectionAnnualRate = (
     : -100;
 const goalLabel = (value: number) =>
   `${(value / 100_000_000).toLocaleString("ko-KR")}억`;
+
+const purchasePosition = (rangePosition: number) => {
+  if (rangePosition <= 20)
+    return {
+      label: "발에서 샀어요",
+      y: 87,
+      face: "♥‿♥",
+      bubble: "완전 잘 샀다!",
+      faceTone: "text-pink-400",
+    };
+  if (rangePosition <= 40)
+    return {
+      label: "무릎에서 샀어요",
+      y: 78,
+      face: "^‿^",
+      bubble: "제법 좋은데?",
+      faceTone: "text-emerald-300",
+    };
+  if (rangePosition <= 60)
+    return {
+      label: "배에서 샀어요",
+      y: 65,
+      face: "•ᴗ•",
+      bubble: "나쁘지 않아요",
+      faceTone: "text-amber-200",
+    };
+  if (rangePosition <= 80)
+    return {
+      label: "어깨에서 샀어요",
+      y: 49,
+      face: "•_•",
+      bubble: "…",
+      faceTone: "text-slate-200",
+    };
+  return {
+    label: "머리에서 샀어요",
+    y: 28,
+    face: "×﹏×",
+    bubble: "조금 비싸게 샀어요",
+    faceTone: "text-rose-300",
+  };
+};
+
+function PurchasePositionCharacter({
+  holding,
+}: {
+  holding: AnalysisResult["holdings"][number];
+}) {
+  const data = holding.purchasePosition;
+  const hasCalculatedPosition =
+    data && typeof data.tenYearPosition === "number";
+  const position = hasCalculatedPosition
+    ? purchasePosition(data.tenYearPosition)
+    : {
+        label: "위치 계산 전",
+        y: 65,
+        face: "•_•",
+        bubble: "다시 분석해 주세요",
+        faceTone: "text-slate-300",
+      };
+  const averagePrice =
+    holding.returnRate > -100
+      ? holding.currentPrice / (1 + holding.returnRate / 100)
+      : 0;
+  return (
+    <div className="mx-auto mt-6 w-full max-w-md min-w-0 overflow-hidden rounded-3xl border border-white/10 bg-[#171d21]">
+      <div className="px-6 pt-6 pb-3">
+        <p className="text-2xl font-black text-white">{holding.name}</p>
+        <p
+          className={`mt-2 text-xl font-bold ${holding.returnRate >= 0 ? "text-rose-400" : "text-blue-400"}`}
+        >
+          {holding.returnRate >= 0 ? "+" : ""}
+          {holding.returnRate.toFixed(2)}%
+        </p>
+        <p className="mt-3 text-sm text-white/55">
+          내 평균가 {price(averagePrice, holding.currency)}
+        </p>
+      </div>
+      <div className="relative h-[320px] w-full overflow-hidden bg-[#071018]">
+        <img
+          src="/images/purchase-position-human.png?v=2"
+          alt="매수 위치를 표시하는 둥근 사람 실루엣"
+          className="absolute inset-0 h-full w-full object-contain object-center"
+        />
+        <div
+          className={`absolute top-[27%] left-[37%] z-10 -translate-x-1/2 -translate-y-1/2 text-2xl font-black tracking-tighter ${position.faceTone}`}
+          aria-hidden="true"
+        >
+          {position.face}
+        </div>
+        <div className="absolute top-[12%] left-[54%] z-10 rounded-2xl rounded-bl-sm bg-white px-3 py-2 text-xs font-black whitespace-nowrap text-slate-900 shadow-xl">
+          {position.bubble}
+        </div>
+        <div
+          className="absolute right-5 left-[43%] z-10 flex -translate-y-1/2 items-center"
+          style={{ top: `${position.y}%` }}
+        >
+          <span className="min-w-7 flex-1 border-t-2 border-dashed border-white" />
+          <span className="rounded-full bg-white px-3 py-1.5 text-sm font-black whitespace-nowrap text-slate-900 shadow-lg">
+            {position.label}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function remainingPeriodLabel(month: number | null) {
   if (month === null) return "30년 내 도달이 어려워요";
@@ -1255,6 +1362,9 @@ export function AnalysisResultView({
   result: AnalysisResult;
   showAuthCta?: boolean;
 }) {
+  const [selectedPurchaseHolding, setSelectedPurchaseHolding] = useState<
+    AnalysisResult["holdings"][number] | null
+  >(null);
   const remainingToGoal = Math.max(0, result.goalAmount - result.currentValue);
   const targetLabel = goalLabel(result.goalAmount);
   const benchmarkComparison = result.benchmark
@@ -1272,17 +1382,17 @@ export function AnalysisResultView({
   const contributedBase = result.contributionScenarios.find(
     (scenario) => scenario.key === "base",
   );
+  const holdingsByReturn = [...result.holdings].sort(
+    (a, b) => b.returnRate - a.returnRate,
+  );
   const returnMedals = new Map<string, { icon: string; label: string }>(
-    [...result.holdings]
-      .sort((a, b) => b.returnRate - a.returnRate)
-      .slice(0, 3)
-      .map((holding, index) => [
-        `${holding.ticker}-${holding.name}`,
-        {
-          icon: ["🥇", "🥈", "🥉"][index],
-          label: `수익률 ${index + 1}위`,
-        },
-      ]),
+    holdingsByReturn.slice(0, 3).map((holding, index) => [
+      `${holding.ticker}-${holding.name}`,
+      {
+        icon: ["🥇", "🥈", "🥉"][index],
+        label: `수익률 ${index + 1}위`,
+      },
+    ]),
   );
 
   return (
@@ -1354,68 +1464,126 @@ export function AnalysisResultView({
         <div>
           <h3 className="text-lg font-black">종목별 수익률</h3>
           <p className="text-muted-foreground mt-1 text-xs">
-            입력한 평균 매수가와 현재가를 기준으로 계산했어요.
+            수익률이 높은 순서예요. 종목을 누르면 과거 가격 범위에서 내 평균
+            매수가의 위치를 확인할 수 있어요.
           </p>
         </div>
         <div className="mt-4 divide-y">
-          {result.holdings.map((holding) => {
+          {holdingsByReturn.map((holding) => {
             const isProfit = holding.profitKrw >= 0;
             const holdingKey = `${holding.ticker}-${holding.name}`;
             const medal = returnMedals.get(holdingKey);
             return (
-              <div
+              <button
                 key={holdingKey}
-                className="grid gap-3 py-4 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))] sm:items-center"
+                type="button"
+                onClick={() => setSelectedPurchaseHolding(holding)}
+                className="group hover:bg-muted/40 focus-visible:ring-ring -mx-3 block w-[calc(100%+1.5rem)] cursor-pointer rounded-xl px-3 py-6 text-left transition-colors first:pt-3 last:pb-3 focus-visible:ring-2 focus-visible:outline-none"
               >
-                <div className="min-w-0">
-                  <strong className="flex min-w-0 items-center gap-1.5">
-                    {medal && (
-                      <span
-                        className="shrink-0 text-lg"
-                        title={medal.label}
-                        aria-label={medal.label}
-                      >
-                        {medal.icon}
-                      </span>
-                    )}
-                    <span className="truncate">{holding.name}</span>
-                  </strong>
-                  <span className="text-muted-foreground text-xs">
-                    {holding.ticker} · 현재가{" "}
-                    {price(holding.currentPrice, holding.currency)}
-                  </span>
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))] sm:items-center">
+                  <div className="min-w-0">
+                    <strong className="flex min-w-0 items-center gap-1.5">
+                      {medal && (
+                        <span
+                          className="shrink-0 text-lg"
+                          title={medal.label}
+                          aria-label={medal.label}
+                        >
+                          {medal.icon}
+                        </span>
+                      )}
+                      <span className="truncate">{holding.name}</span>
+                    </strong>
+                    <span className="text-muted-foreground text-xs">
+                      {holding.ticker} · 현재가{" "}
+                      {price(holding.currentPrice, holding.currency)}
+                    </span>
+                    <span className="mt-1.5 flex items-center gap-1 text-[11px] font-bold text-emerald-500">
+                      매수 위치 보기
+                      <ArrowRightIcon className="size-3 transition-transform group-hover:translate-x-0.5" />
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">매수 원금</p>
+                    <p className="mt-0.5 font-bold">{won(holding.costKrw)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">평가손익</p>
+                    <p
+                      className={`mt-0.5 font-bold ${
+                        isProfit ? "text-red-500" : "text-blue-500"
+                      }`}
+                    >
+                      {isProfit ? "+" : ""}
+                      {won(holding.profitKrw)}
+                    </p>
+                  </div>
+                  <div className="sm:text-right">
+                    <p className="text-muted-foreground text-xs">수익률</p>
+                    <p
+                      className={`mt-0.5 text-lg font-black ${
+                        isProfit ? "text-red-500" : "text-blue-500"
+                      }`}
+                    >
+                      {holding.returnRate >= 0 ? "+" : ""}
+                      {holding.returnRate.toFixed(1)}%
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-muted-foreground text-xs">매수 원금</p>
-                  <p className="mt-0.5 font-bold">{won(holding.costKrw)}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-xs">평가손익</p>
-                  <p
-                    className={`mt-0.5 font-bold ${
-                      isProfit ? "text-red-500" : "text-blue-500"
-                    }`}
-                  >
-                    {isProfit ? "+" : ""}
-                    {won(holding.profitKrw)}
-                  </p>
-                </div>
-                <div className="sm:text-right">
-                  <p className="text-muted-foreground text-xs">수익률</p>
-                  <p
-                    className={`mt-0.5 text-lg font-black ${
-                      isProfit ? "text-red-500" : "text-blue-500"
-                    }`}
-                  >
-                    {holding.returnRate >= 0 ? "+" : ""}
-                    {holding.returnRate.toFixed(1)}%
-                  </p>
-                </div>
-              </div>
+              </button>
             );
           })}
         </div>
       </div>
+
+      <Dialog
+        open={selectedPurchaseHolding !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedPurchaseHolding(null);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] min-w-0 overflow-x-hidden overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>내 평균 매수 위치</DialogTitle>
+            <DialogDescription>
+              평균 매수가가 최근 최대 10년의 최저가와 최고가 사이에서 어느
+              높이인지 계산했어요.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedPurchaseHolding && (
+            <PurchasePositionCharacter holding={selectedPurchaseHolding} />
+          )}
+          {selectedPurchaseHolding?.purchasePosition &&
+          typeof selectedPurchaseHolding.purchasePosition.tenYearPosition ===
+            "number" ? (
+            <div className="bg-muted/50 grid gap-2 rounded-2xl p-4 text-xs leading-5">
+              <p>
+                <strong>장기 기준</strong> · 최근 최대 10년 가격 범위의{" "}
+                {selectedPurchaseHolding.purchasePosition.tenYearPosition.toFixed(
+                  1,
+                )}
+                % 높이
+              </p>
+              <p>
+                <strong>최근 기준</strong> · 최근 1년 가격 범위의{" "}
+                {selectedPurchaseHolding.purchasePosition.oneYearPosition.toFixed(
+                  1,
+                )}
+                % 높이
+              </p>
+              <p className="text-muted-foreground">
+                0%에 가까울수록 기간 내 최저가에, 100%에 가까울수록 최고가에
+                가까운 평균 매수가예요.
+              </p>
+            </div>
+          ) : (
+            <div className="text-muted-foreground rounded-2xl border border-dashed p-4 text-center text-sm">
+              이전 분석 기록에는 가격 범위 데이터가 없어요. 정확한 매수 위치를
+              표시하려면 홈에서 다시 분석해 주세요.
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <div className="mt-5 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-6 text-center sm:py-8">
         <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">

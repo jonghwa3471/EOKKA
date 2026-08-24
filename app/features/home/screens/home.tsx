@@ -12,7 +12,7 @@ import {
   TrendingUpIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Link, useLoaderData } from "react-router";
+import { Link, useLoaderData, useLocation, useNavigate } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
 import { Input } from "~/core/components/ui/input";
@@ -97,7 +97,8 @@ function CurrencyMatrixSpotlight({
     const draw = (now: number) => {
       context.clearRect(0, 0, width, height);
       trailRef.current = trailRef.current.filter(
-        (point) => now - point.time < Math.max(maxTrailLifetime, rippleLifetime),
+        (point) =>
+          now - point.time < Math.max(maxTrailLifetime, rippleLifetime),
       );
 
       const latestPoint = trailRef.current.at(-1);
@@ -155,8 +156,7 @@ function CurrencyMatrixSpotlight({
             if (distance > pointRadius) continue;
             const distanceFade = Math.pow(1 - distance / pointRadius, 1.7);
             const ageFade = Math.pow(1 - age, 1.8);
-            const alpha =
-              distanceFade * ageFade * speedBrightness * 0.92;
+            const alpha = distanceFade * ageFade * speedBrightness * 0.92;
             const key = `${column}:${row}`;
             const previous = cells.get(key);
             if (!previous || alpha > previous.alpha)
@@ -189,10 +189,7 @@ function CurrencyMatrixSpotlight({
             for (let row = minRow; row <= maxRow; row += 1) {
               const x = column * spacing + spacing / 2;
               const y = row * spacing + spacing / 2;
-              const distance = Math.hypot(
-                x - latestPoint.x,
-                y - latestPoint.y,
-              );
+              const distance = Math.hypot(x - latestPoint.x, y - latestPoint.y);
               const ringDistance = Math.abs(distance - rippleRadius);
               if (ringDistance > ringWidth) continue;
               const alpha =
@@ -317,6 +314,8 @@ function JackpotGoal() {
 
 export default function Home() {
   const { marketMode } = useLoaderData<typeof loader>();
+  const location = useLocation();
+  const navigate = useNavigate();
   const isGlobalTest = marketMode === "global-test";
   const [tab, setTab] = useState<"quick" | "saved">("quick");
   const [holdings, setHoldings] = useState<Holding[]>([emptyHolding(1)]);
@@ -340,10 +339,7 @@ export default function Home() {
       ? Math.hypot(event.clientX - latest.x, event.clientY - latest.y)
       : 0;
     const elapsed = latest ? Math.max(1, now - latest.time) : 16;
-    if (
-      !latest ||
-      distance > 4
-    ) {
+    if (!latest || distance > 4) {
       matrixTrailRef.current.push({
         x: event.clientX,
         y: event.clientY,
@@ -369,7 +365,18 @@ export default function Home() {
     window.localStorage.removeItem(ANALYSIS_STORAGE_KEY);
 
     try {
-      const storedDraft = window.sessionStorage.getItem(HOLDINGS_STORAGE_KEY);
+      const navigationDraft = (
+        location.state as {
+          portfolioDraft?: {
+            holdings?: Holding[];
+            targetEok?: string;
+            monthlyContribution?: string;
+          };
+        } | null
+      )?.portfolioDraft;
+      const storedDraft = navigationDraft
+        ? JSON.stringify(navigationDraft)
+        : window.sessionStorage.getItem(HOLDINGS_STORAGE_KEY);
       if (storedDraft) {
         const draft = JSON.parse(storedDraft) as {
           holdings?: Holding[];
@@ -440,7 +447,9 @@ export default function Home() {
     }
 
     setDraftLoaded(true);
-  }, [isGlobalTest, marketMode]);
+    if ((location.state as { portfolioDraft?: unknown } | null)?.portfolioDraft)
+      navigate(location.pathname, { replace: true, state: null });
+  }, [isGlobalTest, location.pathname, location.state, marketMode, navigate]);
 
   useEffect(() => {
     if (!draftLoaded) return;

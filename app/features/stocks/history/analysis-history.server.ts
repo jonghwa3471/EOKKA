@@ -29,12 +29,9 @@ function addDays(date: string, days: number) {
 }
 
 function goalMonthFor(result: AnalysisResult) {
-  const scenarios =
-    result.monthlyContribution > 0
-      ? result.contributionScenarios
-      : result.scenarios;
   return (
-    scenarios.find((scenario) => scenario.key === "base")?.goalMonth ?? null
+    result.scenarios.find((scenario) => scenario.key === "base")?.goalMonth ??
+    null
   );
 }
 
@@ -105,7 +102,7 @@ export async function saveDailyAnalysisSnapshot({
 }
 
 export async function getAnalysisHistory(userId: string) {
-  return db
+  const history = await db
     .select({
       id: analysisSnapshots.analysis_snapshot_id,
       savedOn: analysisSnapshots.saved_on,
@@ -123,6 +120,12 @@ export async function getAnalysisHistory(userId: string) {
       asc(analysisSnapshots.saved_on),
       asc(analysisSnapshots.analysis_snapshot_id),
     );
+
+  return history.map((item) => ({
+    ...item,
+    // 기존 저장 기록도 월 추가 투자금을 제외한 평균 시나리오로 표시합니다.
+    goalMonth: goalMonthFor(item.result),
+  }));
 }
 
 export async function getPreferredGoalAmount(userId: string) {

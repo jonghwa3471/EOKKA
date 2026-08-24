@@ -18,6 +18,16 @@ export interface AnalysisResult {
     valueKrw: number;
     profitKrw: number;
     returnRate: number;
+    purchasePosition?: {
+      tenYearPosition: number;
+      oneYearPosition: number;
+      tenYearObservations: number;
+      oneYearObservations: number;
+      tenYearLow: number;
+      tenYearHigh: number;
+      oneYearLow: number;
+      oneYearHigh: number;
+    };
   }>;
   cagr: {
     oneYear: number | null;

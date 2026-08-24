@@ -48,6 +48,15 @@ function quantile(values: Float64Array, percentile: number) {
   return sorted[Math.floor((sorted.length - 1) * percentile)];
 }
 
+function priceRangePosition(prices: number[], averagePrice: number) {
+  if (prices.length === 0) return 50;
+  const low = Math.min(...prices);
+  const high = Math.max(...prices);
+  if (high === low) return 50;
+  const position = ((averagePrice - low) / (high - low)) * 100;
+  return Math.round(Math.min(100, Math.max(0, position)) * 10) / 10;
+}
+
 function cagr(returns: number[], months: number) {
   if (returns.length < months) return null;
   const selected = returns.slice(-months);
@@ -280,6 +289,13 @@ export async function analyzePortfolio(
   const holdingResults = marketData.map(({ holding, stock, data }) => {
     const costRate = holding.currency === "USD" ? data.exchangeRate : 1;
     const valueRate = stock.currency === "USD" ? data.exchangeRate : 1;
+    const averagePriceInStockCurrency =
+      (holding.averagePrice * costRate) / valueRate;
+    const tenYearPrices = data.history
+      .slice(-120)
+      .map((point) => point.close)
+      .filter((price) => Number.isFinite(price) && price > 0);
+    const oneYearPrices = tenYearPrices.slice(-12);
     const cost = holding.averagePrice * holding.quantity * costRate;
     const value = data.currentPrice * holding.quantity * valueRate;
     return {
@@ -291,6 +307,22 @@ export async function analyzePortfolio(
       valueKrw: value,
       profitKrw: value - cost,
       returnRate: ((value - cost) / cost) * 100,
+      purchasePosition: {
+        tenYearPosition: priceRangePosition(
+          tenYearPrices,
+          averagePriceInStockCurrency,
+        ),
+        oneYearPosition: priceRangePosition(
+          oneYearPrices,
+          averagePriceInStockCurrency,
+        ),
+        tenYearObservations: tenYearPrices.length,
+        oneYearObservations: oneYearPrices.length,
+        tenYearLow: Math.min(...tenYearPrices),
+        tenYearHigh: Math.max(...tenYearPrices),
+        oneYearLow: Math.min(...oneYearPrices),
+        oneYearHigh: Math.max(...oneYearPrices),
+      },
       cost,
     };
   });

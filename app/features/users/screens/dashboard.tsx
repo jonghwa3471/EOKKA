@@ -1,5 +1,6 @@
 import type { Route } from "./+types/dashboard";
 
+import { inArray } from "drizzle-orm";
 import {
   ArrowDownRightIcon,
   ArrowRightIcon,
@@ -17,6 +18,7 @@ import {
 import { Form, Link, redirect } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
+import db from "~/core/db/drizzle-client.server";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
 import {
@@ -25,6 +27,7 @@ import {
   getPreferredGoalAmount,
   setPreferredGoalAmount,
 } from "~/features/stocks/history/analysis-history.server";
+import { stocks } from "~/features/stocks/schema";
 
 export const meta: Route.MetaFunction = () => [
   { title: `내 투자 대시보드 | ${import.meta.env.VITE_APP_NAME}` },
@@ -58,11 +61,58 @@ export async function loader({ request }: Route.LoaderArgs) {
   const history = Array.from(
     new Map(goalHistory.map((item) => [item.savedOn, item])).values(),
   );
+  const latestResult = history.at(-1)?.result;
+  const tickers = latestResult?.holdings.map((holding) => holding.ticker) ?? [];
+  const stockRows =
+    tickers.length > 0
+      ? await db.select().from(stocks).where(inArray(stocks.ticker, tickers))
+      : [];
+  const exchangeRate = latestResult?.exchangeRate ?? 1;
+  const updateDraft = latestResult
+    ? latestResult.holdings.flatMap((holding, index) => {
+        const stock = stockRows.find(
+          (item) =>
+            item.ticker === holding.ticker &&
+            item.currency === holding.currency,
+        );
+        if (!stock || holding.currentPrice <= 0) return [];
+        const valueRate = holding.currency === "USD" ? exchangeRate : 1;
+        const quantity = holding.valueKrw / (holding.currentPrice * valueRate);
+        if (!Number.isFinite(quantity) || quantity <= 0) return [];
+        const averagePrice = holding.costKrw / (quantity * valueRate);
+        if (!Number.isFinite(averagePrice) || averagePrice <= 0) return [];
+        return [
+          {
+            id: index + 1,
+            symbol: stock.name,
+            averagePrice: String(Math.round(averagePrice)),
+            currency: stock.currency as "KRW" | "USD",
+            quantity: String(Number(quantity.toFixed(6))),
+            selectedStock: {
+              stockId: stock.stock_id,
+              name: stock.name,
+              nameEn: stock.name_en,
+              ticker: stock.ticker,
+              country: stock.country as "KR" | "US",
+              exchange: stock.exchange as
+                | "KOSPI"
+                | "KOSDAQ"
+                | "NASDAQ"
+                | "NYSE"
+                | "AMEX",
+              currency: stock.currency as "KRW" | "USD",
+              securityType: stock.security_type as "STOCK" | "ETF" | "ETN",
+            },
+          },
+        ];
+      })
+    : [];
 
   return {
     history,
     goalOptions,
     preferredGoal,
+    updateDraft,
     name:
       user?.user_metadata.name ??
       user?.user_metadata.full_name ??
@@ -139,6 +189,13 @@ function Change({
     return <span className="text-muted-foreground text-xs">변화 없음</span>;
   const improved = inverse ? value < 0 : value > 0;
   const Icon = value > 0 ? ArrowUpRightIcon : ArrowDownRightIcon;
+  const direction = inverse
+    ? value < 0
+      ? "단축"
+      : "증가"
+    : value > 0
+      ? "상승"
+      : "하락";
   return (
     <span
       className={cn(
@@ -147,8 +204,8 @@ function Change({
       )}
     >
       <Icon className="size-3.5" />
-      전일 대비 {Math.abs(value).toFixed(suffix === "%p" ? 1 : 0)}
-      {suffix}
+      전일보다 {Math.abs(value).toFixed(suffix === "%p" ? 1 : 0)}
+      {suffix} {direction}
     </span>
   );
 }
@@ -246,8 +303,14 @@ function TrendChart({ history }: { history: History }) {
 }
 
 export default function Dashboard({ loaderData }: Route.ComponentProps) {
-  const { history, name, freeHistoryDays, goalOptions, preferredGoal } =
-    loaderData;
+  const {
+    history,
+    name,
+    freeHistoryDays,
+    goalOptions,
+    preferredGoal,
+    updateDraft,
+  } = loaderData;
   const latest = history.at(-1);
   const previous = history.at(-2);
 
@@ -319,7 +382,16 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             </p>
           </div>
           <Button asChild className="rounded-full">
-            <Link to="/">
+            <Link
+              to="/"
+              state={{
+                portfolioDraft: {
+                  holdings: updateDraft,
+                  targetEok: String(latest.goalAmount / 100_000_000),
+                  monthlyContribution: String(latest.monthlyContribution || ""),
+                },
+              }}
+            >
               <RefreshCwIcon /> 오늘 분석 업데이트
             </Link>
           </Button>
