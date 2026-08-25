@@ -4,12 +4,16 @@ import {
   ArrowRightIcon,
   BarChart3Icon,
   CheckIcon,
+  Clock3Icon,
   LoaderCircleIcon,
   LockKeyholeIcon,
+  PieChartIcon,
   PlusIcon,
   SparklesIcon,
+  TargetIcon,
   Trash2Icon,
   TrendingUpIcon,
+  TrophyIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLoaderData, useLocation, useNavigate } from "react-router";
@@ -23,6 +27,11 @@ import { cn } from "~/core/lib/utils";
 import type { AnalysisResult } from "~/features/stocks/analysis.types";
 import { AnalysisResultView } from "~/features/stocks/components/analysis-result";
 import { StockAutocomplete } from "~/features/stocks/components/stock-autocomplete";
+import {
+  getAnalysisHistory,
+  getPreferredGoalAmount,
+  seoulDate,
+} from "~/features/stocks/history/analysis-history.server";
 import { getStockMarketMode } from "~/features/stocks/market-mode.server";
 import type { StockSearchResult } from "~/features/stocks/types";
 
@@ -38,11 +47,125 @@ export async function loader({ request }: Route.LoaderArgs) {
     data: { user },
   } = await client.auth.getUser();
 
+  const [allHistory, savedPreferredGoal] = user
+    ? await Promise.all([
+        getAnalysisHistory(user.id),
+        getPreferredGoalAmount(user.id),
+      ])
+    : [[], null];
+  const goalOptions = [
+    ...new Set(allHistory.map((item) => item.goalAmount)),
+  ].sort((a, b) => a - b);
+  const preferredGoal =
+    (savedPreferredGoal && goalOptions.includes(savedPreferredGoal)
+      ? savedPreferredGoal
+      : goalOptions.includes(100_000_000)
+        ? 100_000_000
+        : goalOptions[0]) ?? null;
+  const goalHistory = preferredGoal
+    ? allHistory.filter((item) => item.goalAmount === preferredGoal)
+    : [];
+  const history = Array.from(
+    new Map(goalHistory.map((item) => [item.savedOn, item])).values(),
+  );
+  const latest = history.at(-1);
+  const previous = history.at(-2);
+  const latestMonth = latest?.savedOn.slice(0, 7);
+  const monthHistory = latestMonth
+    ? history.filter((item) => item.savedOn.startsWith(latestMonth))
+    : [];
+  const beforeMonth = latestMonth
+    ? history.filter((item) => item.savedOn < `${latestMonth}-01`).at(-1)
+    : undefined;
+  const monthBaseline = beforeMonth ?? monthHistory[0];
+  const baseScenario = latest?.result.scenarios.find(
+    (scenario) => scenario.key === "base",
+  );
+  const previousBaseScenario = previous?.result.scenarios.find(
+    (scenario) => scenario.key === "base",
+  );
+  const topHolding = latest
+    ? [...latest.result.holdings].sort((a, b) => b.valueKrw - a.valueKrw)[0]
+    : undefined;
+  const topHoldingWeight =
+    latest && topHolding && latest.currentValue > 0
+      ? (topHolding.valueKrw / latest.currentValue) * 100
+      : null;
+  const previousHoldingValues = new Map(
+    previous?.result.holdings.map((holding) => [
+      holding.ticker,
+      holding.valueKrw,
+    ]) ?? [],
+  );
+  const holdingChanges =
+    latest?.result.holdings
+      .filter((holding) => previousHoldingValues.has(holding.ticker))
+      .map((holding) => ({
+        name: holding.name,
+        change:
+          holding.valueKrw -
+          (previousHoldingValues.get(holding.ticker) ?? holding.valueKrw),
+      })) ?? [];
+  const dailyChange =
+    latest && previous
+      ? Math.round(latest.currentValue - previous.currentValue)
+      : null;
+  const leadingHolding = holdingChanges.length
+    ? [...holdingChanges].sort((a, b) =>
+        dailyChange !== null && dailyChange < 0
+          ? a.change - b.change
+          : b.change - a.change,
+      )[0]
+    : null;
+
   return {
     title: "억까 — 내 주식, 목표까지",
     subtitle: "보유 주식을 입력하고 목표까지 얼마나 남았는지 확인해보세요.",
     marketMode: getStockMarketMode(),
     isAuthenticated: user !== null,
+    moneyInsights:
+      latest && preferredGoal
+        ? {
+            goalAmount: preferredGoal,
+            latestSavedOn: latest.savedOn,
+            isLatestToday: latest.savedOn === seoulDate(),
+            dailyProfitChange: previous
+              ? Math.round(latest.currentValue - previous.currentValue)
+              : null,
+            monthlyProfitChange:
+              monthBaseline && monthBaseline.id !== latest.id
+                ? Math.round(latest.currentValue - monthBaseline.currentValue)
+                : null,
+            recordCount: history.length,
+            currentValue: latest.currentValue,
+            profit: latest.profit,
+            returnRate: latest.returnRate,
+            remainingAmount: Math.max(0, preferredGoal - latest.currentValue),
+            progressPercent: Math.min(
+              100,
+              (latest.currentValue / preferredGoal) * 100,
+            ),
+            goalMonth: baseScenario?.goalMonth ?? null,
+            goalMonthChange:
+              baseScenario?.goalMonth !== null &&
+              baseScenario?.goalMonth !== undefined &&
+              previousBaseScenario?.goalMonth !== null &&
+              previousBaseScenario?.goalMonth !== undefined
+                ? previousBaseScenario.goalMonth - baseScenario.goalMonth
+                : null,
+            profitableHoldingCount: latest.result.holdings.filter(
+              (holding) => holding.returnRate > 0,
+            ).length,
+            holdingCount: latest.result.holdings.length,
+            topHoldingName: topHolding?.name ?? null,
+            topHoldingWeight,
+            leadingHolding,
+            trend: history.slice(-7).map((item) => ({
+              savedOn: item.savedOn,
+              currentValue: item.currentValue,
+            })),
+          }
+        : null,
   };
 }
 
@@ -259,6 +382,518 @@ function formatKoreanMoney(amount: number) {
   return `${parts.join(" ")}원`;
 }
 
+type MoneyInsight = {
+  goalAmount: number;
+  latestSavedOn: string;
+  isLatestToday: boolean;
+  dailyProfitChange: number | null;
+  monthlyProfitChange: number | null;
+  recordCount: number;
+  currentValue: number;
+  profit: number;
+  returnRate: number;
+  remainingAmount: number;
+  progressPercent: number;
+  goalMonth: number | null;
+  goalMonthChange: number | null;
+  profitableHoldingCount: number;
+  holdingCount: number;
+  topHoldingName: string | null;
+  topHoldingWeight: number | null;
+  leadingHolding: { name: string; change: number } | null;
+  trend: Array<{ savedOn: string; currentValue: number }>;
+};
+
+function formatGoalPeriod(months: number | null) {
+  if (months === null) return "50년 안에는 예측하기 어려워요";
+  if (months <= 0) return "이미 목표를 달성했어요";
+  const years = Math.floor(months / 12);
+  const remainingMonths = months % 12;
+  return [
+    years ? `${years}년` : "",
+    remainingMonths ? `${remainingMonths}개월` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function koreanParticle(
+  word: string,
+  withBatchim: string,
+  withoutBatchim: string,
+) {
+  const lastCharacter = word.trim().at(-1);
+  if (!lastCharacter) return withoutBatchim;
+
+  const code = lastCharacter.charCodeAt(0);
+  if (code >= 0xac00 && code <= 0xd7a3) {
+    return (code - 0xac00) % 28 === 0 ? withoutBatchim : withBatchim;
+  }
+
+  if (/\d/.test(lastCharacter)) {
+    return ["0", "1", "3", "6", "7", "8"].includes(lastCharacter)
+      ? withBatchim
+      : withoutBatchim;
+  }
+
+  return withoutBatchim;
+}
+
+function GoalTrend({ points }: { points: MoneyInsight["trend"] }) {
+  if (points.length < 2) {
+    return (
+      <div className="text-muted-foreground flex h-28 items-center justify-center text-sm">
+        기록이 하나 더 쌓이면 흐름을 그려드려요.
+      </div>
+    );
+  }
+
+  const values = points.map((point) => point.currentValue);
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const range = Math.max(1, maximum - minimum);
+  const coordinates = points.map((point, index) => ({
+    x: (index / (points.length - 1)) * 100,
+    y: 36 - ((point.currentValue - minimum) / range) * 30,
+  }));
+  const line = coordinates.map((point) => `${point.x},${point.y}`).join(" ");
+
+  return (
+    <div>
+      <svg
+        viewBox="0 0 100 42"
+        role="img"
+        aria-label="최근 평가금액 변화"
+        className="h-28 w-full overflow-visible"
+        preserveAspectRatio="none"
+      >
+        <defs>
+          <linearGradient id="home-goal-trend" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="rgb(16 185 129)" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="rgb(16 185 129)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <polygon points={`0,42 ${line} 100,42`} fill="url(#home-goal-trend)" />
+        <polyline
+          points={line}
+          fill="none"
+          stroke="rgb(16 185 129)"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
+        {coordinates.map((point, index) => (
+          <circle
+            key={points[index].savedOn}
+            cx={point.x}
+            cy={point.y}
+            r="1.5"
+            fill="rgb(16 185 129)"
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+      </svg>
+      <div className="text-muted-foreground flex justify-between text-xs">
+        <span>{points[0].savedOn.slice(5).replace("-", ".")}</span>
+        <span>{points.at(-1)!.savedOn.slice(5).replace("-", ".")}</span>
+      </div>
+    </div>
+  );
+}
+
+const MONEY_METAPHORS = [
+  {
+    max: 10_000,
+    label: "커피 한 잔",
+    image: "/images/money-metaphors/coffee.png",
+  },
+  {
+    max: 50_000,
+    label: "치킨 한 마리",
+    image: "/images/money-metaphors/chicken.png",
+  },
+  {
+    max: 300_000,
+    label: "운동화 한 켤레",
+    image: "/images/money-metaphors/sneakers.png",
+  },
+  {
+    max: 500_000,
+    label: "무선 이어폰 한 세트",
+    image: "/images/money-metaphors/earbuds.png",
+  },
+  {
+    max: 1_000_000,
+    label: "태블릿 한 대",
+    image: "/images/money-metaphors/tablet.png",
+  },
+  {
+    max: 2_000_000,
+    label: "게임기 한 대",
+    image: "/images/money-metaphors/console.png",
+  },
+  {
+    max: 5_000_000,
+    label: "가까운 여행 한 번",
+    image: "/images/money-metaphors/travel.png",
+  },
+  {
+    max: 30_000_000,
+    label: "프리미엄 시계 하나",
+    image: "/images/money-metaphors/watch.png",
+  },
+  {
+    max: 100_000_000,
+    label: "자동차 한 대",
+    image: "/images/money-metaphors/car.png",
+  },
+  {
+    max: Number.POSITIVE_INFINITY,
+    label: "집 한 채",
+    image: "/images/money-metaphors/house.png",
+  },
+] as const;
+
+function moneyMetaphor(amount: number) {
+  const absoluteAmount = Math.abs(amount);
+  return (
+    MONEY_METAPHORS.find((metaphor) => absoluteAmount < metaphor.max) ??
+    MONEY_METAPHORS.at(-1)!
+  );
+}
+
+function ProfitMetaphorCard({
+  amount,
+  period,
+  periodLabel: customPeriodLabel,
+}: {
+  amount: number | null;
+  period: "daily" | "monthly";
+  periodLabel?: string;
+}) {
+  const periodLabel =
+    customPeriodLabel ?? (period === "daily" ? "오늘" : "이번 달");
+
+  if (amount === null) {
+    return (
+      <div className="bg-muted/35 flex min-h-56 flex-col justify-center rounded-2xl border border-dashed p-6 text-left">
+        <p className="text-muted-foreground text-xs font-bold tracking-[0.16em] uppercase">
+          {period === "daily" ? "Today" : "This month"}
+        </p>
+        <p className="mt-3 text-lg font-black">비교 기록이 하나 더 필요해요</p>
+        <p className="text-muted-foreground mt-2 text-sm leading-6">
+          다음 분석이 저장되면 {periodLabel} 손익을 친숙한 물건으로
+          바꿔드릴게요.
+        </p>
+      </div>
+    );
+  }
+
+  const metaphor = moneyMetaphor(amount);
+  const isGain = amount > 0;
+  const isFlat = amount === 0;
+  const message = isFlat
+    ? `${periodLabel}은 자산이 제자리예요`
+    : isGain
+      ? `${periodLabel} ${metaphor.label}값을 벌었어요!`
+      : `${periodLabel} ${metaphor.label}값을 날렸어요 ㅠㅠ`;
+
+  return (
+    <div
+      className={cn(
+        "relative min-h-56 overflow-hidden rounded-2xl border p-6 text-left",
+        isGain
+          ? "via-background border-red-500/20 bg-gradient-to-br from-red-500/10 to-amber-500/10"
+          : isFlat
+            ? "bg-muted/35"
+            : "via-background border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-sky-500/10",
+      )}
+    >
+      <div className="relative z-10 max-w-[68%]">
+        <p className="text-muted-foreground text-xs font-bold tracking-[0.16em] uppercase">
+          {period === "daily" ? "Today" : "This month"}
+        </p>
+        <p className="mt-3 text-xl leading-snug font-black text-balance sm:text-2xl">
+          {message}
+        </p>
+        <p
+          className={cn(
+            "mt-4 text-lg font-black tabular-nums",
+            isGain
+              ? "text-red-500"
+              : isFlat
+                ? "text-muted-foreground"
+                : "text-blue-500",
+          )}
+        >
+          {isGain ? "+" : amount < 0 ? "-" : ""}
+          {formatKoreanMoney(Math.abs(amount))}
+        </p>
+      </div>
+      <img
+        src={metaphor.image}
+        alt=""
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-5 -bottom-6 size-40 object-contain drop-shadow-2xl sm:size-48"
+      />
+    </div>
+  );
+}
+
+function MyEokkaSummary({ insight }: { insight: MoneyInsight }) {
+  const latestDate = new Intl.DateTimeFormat("ko-KR", {
+    month: "long",
+    day: "numeric",
+  }).format(new Date(`${insight.latestSavedOn}T12:00:00+09:00`));
+
+  return (
+    <div className="bg-card/90 rounded-3xl border p-5 text-left shadow-2xl shadow-black/5 backdrop-blur sm:p-8">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+        <div>
+          <p className="text-xs font-bold tracking-[0.18em] text-emerald-500 uppercase">
+            My EOKKA
+          </p>
+          <h2 className="mt-2 text-2xl font-black">내 돈의 오늘을 쉽게 봐요</h2>
+          <p className="text-muted-foreground mt-2 text-sm">
+            {formatKoreanMoney(insight.goalAmount)} 목표 · 최근{" "}
+            {insight.recordCount}개 기록 기준
+          </p>
+        </div>
+        <p className="text-muted-foreground text-xs">
+          {insight.isLatestToday ? "오늘 업데이트" : `${latestDate} 업데이트`}
+        </p>
+      </div>
+
+      <div className="mt-6 grid gap-3 sm:grid-cols-3">
+        <div className="bg-muted/25 rounded-2xl border p-5">
+          <p className="text-muted-foreground text-xs font-semibold">
+            현재 평가금액
+          </p>
+          <p className="mt-2 text-xl font-black tabular-nums">
+            {formatKoreanMoney(insight.currentValue)}
+          </p>
+        </div>
+        <div className="bg-muted/25 rounded-2xl border p-5">
+          <p className="text-muted-foreground text-xs font-semibold">
+            평가손익
+          </p>
+          <p
+            className={cn(
+              "mt-2 text-xl font-black tabular-nums",
+              insight.profit > 0
+                ? "text-red-500"
+                : insight.profit < 0
+                  ? "text-blue-500"
+                  : "text-muted-foreground",
+            )}
+          >
+            {insight.profit > 0 ? "+" : insight.profit < 0 ? "-" : ""}
+            {formatKoreanMoney(Math.abs(insight.profit))}
+          </p>
+        </div>
+        <div className="bg-muted/25 rounded-2xl border p-5">
+          <p className="text-muted-foreground text-xs font-semibold">
+            현재 수익률
+          </p>
+          <p
+            className={cn(
+              "mt-2 text-xl font-black tabular-nums",
+              insight.returnRate > 0
+                ? "text-red-500"
+                : insight.returnRate < 0
+                  ? "text-blue-500"
+                  : "text-muted-foreground",
+            )}
+          >
+            {insight.returnRate > 0 ? "+" : ""}
+            {insight.returnRate.toFixed(2)}%
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <ProfitMetaphorCard
+          amount={insight.dailyProfitChange}
+          period="daily"
+          periodLabel={insight.isLatestToday ? "오늘" : "최근 하루"}
+        />
+        <ProfitMetaphorCard
+          amount={insight.monthlyProfitChange}
+          period="monthly"
+        />
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
+        <section className="bg-muted/25 rounded-2xl border p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-muted-foreground flex items-center gap-2 text-xs font-bold tracking-[0.12em] uppercase">
+                <TargetIcon className="size-4 text-emerald-500" /> Goal progress
+              </p>
+              <p className="mt-3 text-2xl font-black sm:text-3xl">
+                {formatGoalPeriod(insight.goalMonth)}
+              </p>
+              <p className="text-muted-foreground mt-2 text-sm">
+                평균 시나리오 기준 목표 도달 예상 기간
+              </p>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="text-lg font-black text-emerald-500 tabular-nums">
+                {insight.progressPercent.toFixed(1)}%
+              </p>
+              <p className="text-muted-foreground mt-1 text-xs">목표 달성률</p>
+            </div>
+          </div>
+          <div className="bg-muted mt-5 h-2.5 overflow-hidden rounded-full">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400"
+              style={{ width: `${insight.progressPercent}%` }}
+            />
+          </div>
+          <div className="mt-4 flex flex-col justify-between gap-2 text-sm sm:flex-row">
+            <span className="text-muted-foreground">
+              현재 {formatKoreanMoney(insight.currentValue)}
+            </span>
+            <strong>
+              목표까지 {formatKoreanMoney(insight.remainingAmount)}
+            </strong>
+          </div>
+        </section>
+
+        <section className="bg-muted/25 rounded-2xl border p-5 sm:p-6">
+          <p className="text-muted-foreground flex items-center gap-2 text-xs font-bold tracking-[0.12em] uppercase">
+            <Clock3Icon className="size-4 text-emerald-500" /> Time change
+          </p>
+          {insight.goalMonthChange === null ? (
+            <>
+              <p className="mt-4 text-xl font-black">비교 기록이 필요해요</p>
+              <p className="text-muted-foreground mt-2 text-sm leading-6">
+                다음 기록부터 목표가 얼마나 가까워졌는지 알려드려요.
+              </p>
+            </>
+          ) : insight.goalMonthChange === 0 ? (
+            <>
+              <p className="mt-4 text-xl font-black">예상 기간이 그대로예요</p>
+              <p className="text-muted-foreground mt-2 text-sm">
+                이전 기록과 같은 예상 기간이에요.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="mt-4 text-xl leading-snug font-black">
+                목표가 {Math.abs(insight.goalMonthChange)}개월{" "}
+                <span
+                  className={
+                    insight.goalMonthChange > 0
+                      ? "text-red-500"
+                      : "text-blue-500"
+                  }
+                >
+                  {insight.goalMonthChange > 0 ? "가까워졌어요" : "멀어졌어요"}
+                </span>
+              </p>
+              <p className="text-muted-foreground mt-2 text-sm leading-6">
+                이전 분석의 평균 시나리오와 비교했어요.
+              </p>
+            </>
+          )}
+        </section>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <section className="bg-muted/25 rounded-2xl border p-5 sm:p-6">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-muted-foreground flex items-center gap-2 text-xs font-bold tracking-[0.12em] uppercase">
+                <TrophyIcon className="size-4 text-amber-500" /> Portfolio check
+              </p>
+              <h3 className="mt-2 text-lg font-black">
+                오늘의 포트폴리오 한눈에
+              </h3>
+            </div>
+            <PieChartIcon className="text-muted-foreground size-6" />
+          </div>
+          <div className="mt-5 space-y-3 text-sm">
+            <p>
+              <strong>
+                {insight.holdingCount}개 종목 중{" "}
+                {insight.profitableHoldingCount}개
+              </strong>
+              가 수익 구간이에요.
+            </p>
+            {insight.topHoldingName && insight.topHoldingWeight !== null && (
+              <p className="text-muted-foreground leading-6">
+                <strong className="text-foreground">
+                  {insight.topHoldingName}
+                </strong>
+                {koreanParticle(insight.topHoldingName, "이", "가")} 현재 자산의{" "}
+                <strong className="text-foreground">
+                  {insight.topHoldingWeight.toFixed(1)}%
+                </strong>
+                를 차지해요.
+              </p>
+            )}
+            {insight.leadingHolding && (
+              <p className="text-muted-foreground leading-6">
+                최근 변화에 가장 크게 영향을 준 종목은{" "}
+                <strong className="text-foreground">
+                  {insight.leadingHolding.name}
+                </strong>
+                {koreanParticle(insight.leadingHolding.name, "이에요", "예요")}
+                <span
+                  className={
+                    insight.leadingHolding.change >= 0
+                      ? "text-red-500"
+                      : "text-blue-500"
+                  }
+                >
+                  {" "}
+                  ({insight.leadingHolding.change >= 0 ? "+" : "-"}
+                  {formatKoreanMoney(Math.abs(insight.leadingHolding.change))})
+                </span>
+                .
+              </p>
+            )}
+          </div>
+        </section>
+
+        <section className="bg-muted/25 rounded-2xl border p-5 sm:p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-muted-foreground flex items-center gap-2 text-xs font-bold tracking-[0.12em] uppercase">
+                <BarChart3Icon className="size-4 text-emerald-500" /> Recent
+                records
+              </p>
+              <h3 className="mt-2 text-lg font-black">최근 자산 흐름</h3>
+            </div>
+            <span className="text-muted-foreground text-xs">
+              최근 {insight.trend.length}개
+            </span>
+          </div>
+          <div className="mt-3">
+            <GoalTrend points={insight.trend} />
+          </div>
+        </section>
+      </div>
+
+      <div className="mt-5 flex flex-col justify-between gap-3 border-t pt-5 sm:flex-row sm:items-center">
+        <p className="text-muted-foreground text-xs leading-5">
+          저장된 분석의 평가금액 변화를 비교한 값이에요. 매수·매도나 입출금이
+          있으면 실제 투자 수익과 차이가 날 수 있어요.
+        </p>
+        <div className="flex shrink-0">
+          <Button asChild>
+            <Link to="/dashboard">
+              대시보드 <ArrowRightIcon />
+            </Link>
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const emptyHolding = (id: number): Holding => ({
   id,
   symbol: "",
@@ -320,11 +955,14 @@ function JackpotGoal() {
 }
 
 export default function Home() {
-  const { marketMode, isAuthenticated } = useLoaderData<typeof loader>();
+  const { marketMode, isAuthenticated, moneyInsights } =
+    useLoaderData<typeof loader>();
   const location = useLocation();
   const navigate = useNavigate();
   const isGlobalTest = marketMode === "global-test";
-  const [tab, setTab] = useState<"quick" | "saved">("quick");
+  const [tab, setTab] = useState<"quick" | "saved">(() =>
+    isAuthenticated ? "saved" : "quick",
+  );
   const [holdings, setHoldings] = useState<Holding[]>([emptyHolding(1)]);
   const [targetEok, setTargetEok] = useState("1");
   const [monthlyContribution, setMonthlyContribution] = useState("");
@@ -646,7 +1284,7 @@ export default function Home() {
               >
                 {[
                   ["quick", "빠른 분석"],
-                  ["saved", "나의 억까"],
+                  ["saved", "오늘의 억까"],
                 ].map(([value, label]) => (
                   <button
                     key={value}
@@ -1039,6 +1677,29 @@ export default function Home() {
                     </p>
                   )}
                 </form>
+              </div>
+            ) : isAuthenticated && moneyInsights ? (
+              <MyEokkaSummary insight={moneyInsights} />
+            ) : isAuthenticated ? (
+              <div className="bg-card/90 rounded-3xl border p-8 text-center shadow-2xl shadow-black/5 backdrop-blur sm:p-12">
+                <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-500">
+                  <BarChart3Icon className="size-7" />
+                </div>
+                <h2 className="mt-5 text-2xl font-black">
+                  첫 분석을 기다리고 있어요
+                </h2>
+                <p className="text-muted-foreground mx-auto mt-3 max-w-md text-sm leading-6">
+                  분석 기록이 쌓이면 오늘과 이번 달의 손익을 커피·치킨·여행 같은
+                  익숙한 물건으로 바꿔 보여드려요.
+                </p>
+                <Button
+                  type="button"
+                  size="lg"
+                  className="mt-6"
+                  onClick={() => setTab("quick")}
+                >
+                  첫 분석 시작하기
+                </Button>
               </div>
             ) : (
               <div className="bg-card/90 rounded-3xl border p-8 text-center shadow-2xl shadow-black/5 backdrop-blur sm:p-12">

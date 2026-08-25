@@ -127,6 +127,29 @@ export async function getAnalysisHistory(userId: string) {
   }));
 }
 
+export async function deleteAnalysisSnapshot({
+  userId,
+  snapshotId,
+}: {
+  userId: string;
+  snapshotId: number;
+}) {
+  await db
+    .delete(analysisSnapshots)
+    .where(
+      and(
+        eq(analysisSnapshots.user_id, userId),
+        eq(analysisSnapshots.analysis_snapshot_id, snapshotId),
+      ),
+    );
+}
+
+export async function deleteAllAnalysisSnapshots(userId: string) {
+  await db
+    .delete(analysisSnapshots)
+    .where(eq(analysisSnapshots.user_id, userId));
+}
+
 export async function getPreferredGoalAmount(userId: string) {
   const [profile] = await db
     .select({ goalAmount: profiles.preferred_goal_amount })
