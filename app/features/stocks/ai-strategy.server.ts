@@ -204,6 +204,11 @@ export async function generateAiStrategy(
       ((result.currentValue / result.goalAmount) * 100).toFixed(1),
     ),
     totalReturnRatePercent: Number(result.returnRate.toFixed(1)),
+    investmentPeriodMonths: result.investmentPeriodMonths ?? null,
+    annualizedReturnRatePercent:
+      result.annualizedReturnRate == null
+        ? null
+        : Number(result.annualizedReturnRate.toFixed(1)),
     averageScenarioGoalPeriod: period(base?.goalMonth ?? null),
     monthlyContributionWon: result.monthlyContribution,
     goalPeriodWithMonthlyContribution:
@@ -243,6 +248,7 @@ export async function generateAiStrategy(
           "당신은 EOKKA의 포트폴리오 분석 해설자입니다.",
           "반드시 제공된 계산 결과만 해석하고 가격, 뉴스, 재무 상태, 미래 수익률을 새로 만들지 마세요.",
           "목표 기간과 기간 단축 수치는 입력 데이터의 값을 그대로 사용하세요.",
+          "누적 수익률을 평가할 때 투자 기간과 연환산 수익률이 제공되었다면 반드시 함께 고려하고, 짧은 기간의 성과를 장기 실력으로 단정하지 마세요.",
           "개별 종목을 단정적으로 매수·매도하라고 지시하지 마세요.",
           "holdingAlias는 실제 종목명을 가린 익명 식별자이므로 응답에 그대로 사용하세요.",
           "종목별 과거 수익률만으로 우수 종목을 판정하지 말고 매수 위치, 비중 쏠림, 손익 방향과 변동 위험을 함께 설명하세요.",

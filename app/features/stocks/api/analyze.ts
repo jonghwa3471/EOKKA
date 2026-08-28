@@ -18,6 +18,7 @@ const inputSchema = z
   .object({
     goalAmount: z.number().int().min(100_000_000).max(100_000_000_000),
     monthlyContribution: z.number().int().min(0).max(1_000_000_000).default(0),
+    investmentPeriodMonths: z.number().int().min(1).max(1_200),
     holdings: z
       .array(
         z

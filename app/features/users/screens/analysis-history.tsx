@@ -1,13 +1,18 @@
 import type { Route } from "./+types/analysis-history";
 
 import {
+  AwardIcon,
   CalendarDaysIcon,
   ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ChevronUpIcon,
   Clock3Icon,
+  PieChartIcon,
+  SparklesIcon,
   TargetIcon,
+  TrendingDownIcon,
+  TrendingUpIcon,
   Trash2Icon,
 } from "lucide-react";
 import { useState } from "react";
@@ -96,7 +101,18 @@ function wonLabel(value: number) {
 
 type AnalysisRecord = Awaited<ReturnType<typeof getAnalysisHistory>>[number];
 
-function SavedAnalysisResult({ record }: { record: AnalysisRecord }) {
+type DailyHoldingMove = {
+  name: string;
+  returnRate: number;
+};
+
+function SavedAnalysisResult({
+  record,
+  dailyMovements,
+}: {
+  record: AnalysisRecord;
+  dailyMovements: DailyHoldingMove[];
+}) {
   const [showDetails, setShowDetails] = useState(false);
   const progress = Math.min(
     100,
@@ -152,7 +168,9 @@ function SavedAnalysisResult({ record }: { record: AnalysisRecord }) {
         <div className="bg-muted/55 mt-5 rounded-2xl p-4">
           <div className="flex items-center justify-between gap-3 text-xs font-bold">
             <span>목표 진행 상황</span>
-            <span>{goalLabel(record.goalAmount)}</span>
+            <span>
+              {progress.toFixed(1)}% · {goalLabel(record.goalAmount)}
+            </span>
           </div>
           <div className="bg-muted mt-3 h-2 overflow-hidden rounded-full">
             <div
@@ -164,6 +182,12 @@ function SavedAnalysisResult({ record }: { record: AnalysisRecord }) {
             {holdings.join(" · ")}
           </p>
         </div>
+
+        <DailyAnalysisInsights
+          record={record}
+          progress={progress}
+          dailyMovements={dailyMovements}
+        />
       </div>
 
       <div className="mt-5 flex justify-center">
@@ -193,6 +217,209 @@ function SavedAnalysisResult({ record }: { record: AnalysisRecord }) {
         </div>
       )}
     </>
+  );
+}
+
+function DailyAnalysisInsights({
+  record,
+  progress,
+  dailyMovements,
+}: {
+  record: AnalysisRecord;
+  progress: number;
+  dailyMovements: DailyHoldingMove[];
+}) {
+  const holdings = record.result.holdings;
+  const topWeightHolding = [...holdings].sort(
+    (a, b) => b.valueKrw - a.valueKrw,
+  )[0];
+  const bestPerformer = [...holdings].sort(
+    (a, b) => b.returnRate - a.returnRate,
+  )[0];
+  const weakestPerformer = [...holdings].sort(
+    (a, b) => a.returnRate - b.returnRate,
+  )[0];
+  const dailyWinner = [...dailyMovements].sort(
+    (a, b) => b.returnRate - a.returnRate,
+  )[0];
+  const dailyLoser = [...dailyMovements].sort(
+    (a, b) => a.returnRate - b.returnRate,
+  )[0];
+  const topWeight =
+    topWeightHolding && record.currentValue > 0
+      ? (topWeightHolding.valueKrw / record.currentValue) * 100
+      : 0;
+  const investmentStyle = record.result.investmentStyle;
+  const cagr =
+    record.result.cagr.oneYear ??
+    record.result.cagr.threeYear ??
+    record.result.cagr.fiveYear ??
+    record.result.cagr.available;
+
+  const goalMessage =
+    progress >= 100
+      ? "목표선을 이미 통과했어요. 다음 목표를 정해도 좋아요."
+      : progress >= 50
+        ? "절반을 넘었어요. 복리의 힘이 더 눈에 띄기 시작하는 구간이에요."
+        : progress >= 20
+          ? "목표의 5분의 1을 넘었어요. 지금의 흐름을 꾸준히 쌓아가요."
+          : "아직 출발 구간이에요. 작은 상승도 목표 거리에는 분명한 변화예요.";
+
+  return (
+    <section className="mt-5 border-t pt-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-bold text-violet-500">
+            <SparklesIcon className="size-4" /> THIS DAY&apos;S INSIGHT
+          </div>
+          <h4 className="mt-1 text-lg font-black">이날의 포트폴리오 인사이트</h4>
+          <p className="text-muted-foreground mt-1 text-sm">
+            {record.savedOn.replaceAll("-", ".")}에 저장된 분석 결과만 바탕으로
+            정리했어요.
+          </p>
+        </div>
+        {investmentStyle && (
+          <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs font-bold text-violet-600 dark:text-violet-300">
+            {investmentStyle.title}
+          </span>
+        )}
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <DailyInsightCard
+          icon={PieChartIcon}
+          eyebrow="포트폴리오 중심축"
+          title={topWeightHolding?.name ?? "종목 정보 없음"}
+          value={topWeightHolding ? `${topWeight.toFixed(1)}%` : "—"}
+          detail={
+            topWeightHolding
+              ? `이날 평가금액 중 가장 큰 비중을 차지했어요.`
+              : "보유 종목 정보가 없어요."
+          }
+          tone="violet"
+        />
+        <DailyInsightCard
+          icon={AwardIcon}
+          eyebrow="수익률 리더"
+          title={bestPerformer?.name ?? "종목 정보 없음"}
+          value={
+            bestPerformer
+              ? `${bestPerformer.returnRate >= 0 ? "+" : ""}${bestPerformer.returnRate.toFixed(1)}%`
+              : "—"
+          }
+          detail="이날 보유 종목 가운데 수익률이 가장 높았어요."
+          tone="rose"
+        />
+        <DailyInsightCard
+          icon={TrendingDownIcon}
+          eyebrow="수익률 꼴등"
+          title={weakestPerformer?.name ?? "종목 정보 없음"}
+          value={
+            weakestPerformer
+              ? `${weakestPerformer.returnRate >= 0 ? "+" : ""}${weakestPerformer.returnRate.toFixed(1)}%`
+              : "—"
+          }
+          detail="이날 보유 종목 가운데 수익률이 가장 낮았어요."
+          tone="blue"
+        />
+        <DailyInsightCard
+          icon={TargetIcon}
+          eyebrow="목표와의 거리"
+          title={progress >= 100 ? "목표 달성" : `${progress.toFixed(1)}% 진행`}
+          value={durationLabel(record.goalMonth)}
+          detail={goalMessage}
+          tone="emerald"
+        />
+        <DailyInsightCard
+          icon={TrendingUpIcon}
+          eyebrow="당일 상승 1위"
+          title={dailyWinner?.name ?? "비교 기록이 더 필요해요"}
+          value={
+            dailyWinner
+              ? `${dailyWinner.returnRate >= 0 ? "+" : ""}${dailyWinner.returnRate.toFixed(1)}%`
+              : "—"
+          }
+          detail={
+            dailyWinner
+              ? "직전 저장 기록과 비교한 해당 종목의 당일 가격 변화예요."
+              : "같은 목표의 직전 분석 기록이 있어야 계산할 수 있어요."
+          }
+          tone="rose"
+        />
+        <DailyInsightCard
+          icon={TrendingDownIcon}
+          eyebrow="당일 하락 1위"
+          title={dailyLoser?.name ?? "비교 기록이 더 필요해요"}
+          value={
+            dailyLoser ? `${dailyLoser.returnRate.toFixed(1)}%` : "—"
+          }
+          detail={
+            dailyLoser
+              ? "직전 저장 기록과 비교한 해당 종목의 당일 가격 변화예요."
+              : "같은 목표의 직전 분석 기록이 있어야 계산할 수 있어요."
+          }
+          tone="blue"
+        />
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <div className="bg-muted/45 rounded-2xl border p-4 text-sm leading-6">
+          <div className="flex items-center gap-2 font-black">
+            <TrendingUpIcon className="size-4 text-emerald-500" />
+            이날의 흐름 한 줄
+          </div>
+          <p className="text-muted-foreground mt-2">
+            {cagr === null
+              ? "충분한 과거 가격 데이터가 쌓이면 장기 수익 흐름도 함께 비교할 수 있어요."
+              : `이 포트폴리오의 확보된 과거 수익 흐름은 연 ${cagr.toFixed(1)}% 수준이에요. 미래 수익을 보장하는 값은 아니지만, 목표 시나리오의 출발점으로 활용돼요.`}
+          </p>
+        </div>
+        <div className="bg-muted/45 rounded-2xl border p-4 text-sm leading-6">
+          <div className="flex items-center gap-2 font-black">
+            <SparklesIcon className="size-4 text-violet-500" />
+            투자 성향 메모
+          </div>
+          <p className="text-muted-foreground mt-2">
+            {investmentStyle?.description ??
+              "저장된 종목 구성으로 투자 성향을 계산하는 중이에요."}
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DailyInsightCard({
+  icon: Icon,
+  eyebrow,
+  title,
+  value,
+  detail,
+  tone,
+}: {
+  icon: typeof SparklesIcon;
+  eyebrow: string;
+  title: string;
+  value: string;
+  detail: string;
+  tone: "emerald" | "rose" | "blue" | "violet";
+}) {
+  const tones = {
+    emerald: "border-emerald-500/20 bg-emerald-500/[0.06] text-emerald-500",
+    rose: "border-rose-500/20 bg-rose-500/[0.06] text-rose-500",
+    blue: "border-blue-500/20 bg-blue-500/[0.06] text-blue-500",
+    violet: "border-violet-500/20 bg-violet-500/[0.06] text-violet-500",
+  } as const;
+
+  return (
+    <div className={cn("rounded-2xl border p-4", tones[tone])}>
+      <div className="flex items-center gap-2 text-xs font-bold">
+        <Icon className="size-3.5" /> {eyebrow}
+      </div>
+      <p className="text-foreground mt-4 truncate font-black">{title}</p>
+      <p className="mt-1 text-xl font-black tabular-nums">{value}</p>
+      <p className="text-muted-foreground mt-3 text-xs leading-5">{detail}</p>
+    </div>
   );
 }
 
@@ -244,7 +471,44 @@ export async function loader({ request }: Route.LoaderArgs) {
     dayRecords[0] ??
     null;
 
-  return { history, availableDates, selectedDate, month, dayRecords, selected };
+  const previousSameGoal = selected
+    ? [...history]
+        .reverse()
+        .find(
+          (item) =>
+            item.goalAmount === selected.goalAmount &&
+            item.savedOn < selected.savedOn,
+        )
+    : null;
+  const previousPrices = new Map(
+    previousSameGoal?.result.holdings.map((holding) => [
+      holding.ticker,
+      holding.currentPrice,
+    ]) ?? [],
+  );
+  const dailyMovements = selected
+    ? selected.result.holdings.flatMap((holding) => {
+        const previousPrice = previousPrices.get(holding.ticker);
+        if (!previousPrice || previousPrice <= 0) return [];
+        return [
+          {
+            name: holding.name,
+            returnRate:
+              ((holding.currentPrice - previousPrice) / previousPrice) * 100,
+          },
+        ];
+      })
+    : [];
+
+  return {
+    history,
+    availableDates,
+    selectedDate,
+    month,
+    dayRecords,
+    selected,
+    dailyMovements,
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -291,7 +555,14 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function AnalysisHistory({ loaderData }: Route.ComponentProps) {
-  const { availableDates, selectedDate, month, dayRecords, selected } =
+  const {
+    availableDates,
+    selectedDate,
+    month,
+    dayRecords,
+    selected,
+    dailyMovements,
+  } =
     loaderData;
   const dates = calendarDates(month);
   const available = new Set(availableDates);
@@ -533,7 +804,11 @@ export default function AnalysisHistory({ loaderData }: Route.ComponentProps) {
                 기준일 {selected.result.asOf}
               </span>
             </div>
-            <SavedAnalysisResult key={selected.id} record={selected} />
+            <SavedAnalysisResult
+              key={selected.id}
+              record={selected}
+              dailyMovements={dailyMovements}
+            />
           </section>
         )}
       </div>

@@ -3,10 +3,12 @@ export interface AnalysisResult {
   marketMode: "domestic" | "global-test";
   goalAmount: number;
   monthlyContribution: number;
+  investmentPeriodMonths?: number;
   totalCost: number;
   currentValue: number;
   profit: number;
   returnRate: number;
+  annualizedReturnRate?: number | null;
   priceBasis: "raw_close" | "adjusted_close";
   exchangeRate: number | null;
   holdings: Array<{

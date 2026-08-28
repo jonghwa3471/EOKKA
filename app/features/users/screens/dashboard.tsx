@@ -22,11 +22,18 @@ import {
   TargetIcon,
   TimerResetIcon,
   TrendingUpIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Form, Link, redirect, useLocation } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "~/core/components/ui/tooltip";
 import db from "~/core/db/drizzle-client.server";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
@@ -289,6 +296,12 @@ function calculateHistoryInsights(history: History) {
       holding.valueKrw,
     ]) ?? [],
   );
+  const weeklyFirstPrices = new Map(
+    weeklyFirst?.result.holdings.map((holding) => [
+      holding.ticker,
+      holding.currentPrice,
+    ]) ?? [],
+  );
   const weeklyHoldingChanges = latest.result.holdings
     .filter((holding) => weeklyFirstHoldings.has(holding.ticker))
     .map((holding) => ({
@@ -305,6 +318,20 @@ function calculateHistoryInsights(history: History) {
     [...weeklyHoldingChanges]
       .filter((holding) => holding.change < 0)
       .sort((a, b) => a.change - b.change)[0] ?? null;
+  const weeklyReturnRankings = latest.result.holdings
+    .flatMap((holding) => {
+      const previousPrice = weeklyFirstPrices.get(holding.ticker);
+      if (!previousPrice || previousPrice <= 0) return [];
+      return [
+        {
+          name: holding.name,
+          returnRate:
+            ((holding.currentPrice - previousPrice) / previousPrice) * 100,
+        },
+      ];
+    })
+    .sort((a, b) => b.returnRate - a.returnRate)
+    .slice(0, 3);
   const weeklyDramaticChange =
     [...weeklyChanges].sort(
       (a, b) => Math.abs(b.asset) - Math.abs(a.asset),
@@ -356,6 +383,7 @@ function calculateHistoryInsights(history: History) {
       changes: weeklyChanges,
       winner: weeklyWinner,
       loser: weeklyLoser,
+      returnRankings: weeklyReturnRankings,
       dramaticChange: weeklyDramaticChange,
       recovery: weeklyRecovery,
       upCount: weeklyUpCount,
@@ -477,13 +505,58 @@ function useRevealOncePerVisit<T extends Element>() {
   return { ref, isRevealed };
 }
 
-function TrendChart({ history }: { history: History }) {
+type TrendSeries = "actual" | "expected" | "market";
+
+function TrendChart({
+  history,
+  dimmedSeries,
+}: {
+  history: History;
+  dimmedSeries: TrendSeries[];
+}) {
   const { ref: chartRef, isRevealed } = useRevealOncePerVisit<HTMLDivElement>();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [zoom, setZoom] = useState(1);
 
   const width = 900;
-  const height = 280;
+  const height = 330;
   const padding = { top: 28, right: 24, bottom: 45, left: 24 };
-  const values = history.map((item) => item.currentValue);
+  const first = history[0];
+  const startTime = new Date(`${first.savedOn}T00:00:00Z`).getTime();
+  const projectionValue = (
+    savedOn: string,
+    key: "base" | "market",
+  ): number | null => {
+    const elapsedDays = Math.max(
+      0,
+      (new Date(`${savedOn}T00:00:00Z`).getTime() - startTime) / 86_400_000,
+    );
+    const elapsedMonth = elapsedDays / 30.4375;
+    const points = first.result.chart.flatMap((point) => {
+      const value = point[key];
+      return value === null ? [] : [{ month: point.month, value }];
+    });
+    if (points.length === 0) return null;
+    const nextIndex = points.findIndex((point) => point.month >= elapsedMonth);
+    if (nextIndex <= 0) return points[Math.max(0, nextIndex)].value;
+    if (nextIndex === -1) return points.at(-1)!.value;
+    const previous = points[nextIndex - 1];
+    const next = points[nextIndex];
+    const ratio =
+      (elapsedMonth - previous.month) / (next.month - previous.month || 1);
+    return previous.value + (next.value - previous.value) * ratio;
+  };
+  const records = history.map((item) => ({
+    item,
+    expected: projectionValue(item.savedOn, "base"),
+    market: projectionValue(item.savedOn, "market"),
+  }));
+  const values = records.flatMap(({ item, expected, market }) => [
+    item.currentValue,
+    ...(expected === null ? [] : [expected]),
+    ...(market === null ? [] : [market]),
+  ]);
   const min = Math.min(...values);
   const max = Math.max(...values);
   const span = Math.max(1, max - min);
@@ -496,101 +569,317 @@ function TrendChart({ history }: { history: History }) {
   const y = (value: number) =>
     padding.top +
     (1 - (value - min) / span) * (height - padding.top - padding.bottom);
-  const points = history.map(
-    (item, index) => `${x(index)},${y(item.currentValue)}`,
+  const visibleRecords = records.map((record, index) => ({
+    ...record,
+    index,
+  }));
+  const actualPoints = visibleRecords.map(
+    ({ item, index }) => `${x(index)},${y(item.currentValue)}`,
   );
-  const area = `${padding.left},${height - padding.bottom} ${points.join(" ")} ${x(history.length - 1)},${height - padding.bottom}`;
+  const expectedPoints = visibleRecords.flatMap(({ expected, index }) =>
+    expected === null ? [] : [`${x(index)},${y(expected)}`],
+  );
+  const marketPoints = visibleRecords.flatMap(({ market, index }) =>
+    market === null ? [] : [`${x(index)},${y(market)}`],
+  );
+  const area = `${x(visibleRecords[0].index)},${height - padding.bottom} ${actualPoints.join(" ")} ${x(visibleRecords.at(-1)!.index)},${height - padding.bottom}`;
+  const hovered = hoveredIndex === null ? null : records[hoveredIndex];
+  const hoverX = hoveredIndex === null ? null : x(hoveredIndex);
+  const tooltipHeight = hovered?.market === null ? 76 : 94;
+  const seriesOpacity = (series: TrendSeries) =>
+    dimmedSeries.includes(series) ? 0.16 : 1;
+  const updateZoom = (nextZoom: number, anchorRatio = 0.5) => {
+    const clampedZoom = Math.min(6, Math.max(1, nextZoom));
+    const container = scrollRef.current;
+    const contentRatio = container
+      ? (container.scrollLeft + anchorRatio * container.clientWidth) /
+        Math.max(1, container.scrollWidth)
+      : anchorRatio;
+    setZoom(clampedZoom);
+    setHoveredIndex(null);
+    window.requestAnimationFrame(() => {
+      const updatedContainer = scrollRef.current;
+      if (!updatedContainer) return;
+      updatedContainer.scrollLeft = Math.max(
+        0,
+        contentRatio * updatedContainer.scrollWidth -
+          anchorRatio * updatedContainer.clientWidth,
+      );
+    });
+  };
 
   return (
-    <div ref={chartRef} className="overflow-x-auto">
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="h-[280px] w-full min-w-[680px]"
-        role="img"
-        aria-label="최근 30개 포트폴리오 평가금액 추이"
+    <div ref={chartRef} className="flex h-full min-h-0 flex-col">
+      <div className="mb-2 flex justify-end">
+        <div className="bg-background flex items-center gap-1 rounded-full border p-1 shadow-sm">
+          <button
+            type="button"
+            className="hover:bg-muted flex size-8 items-center justify-center rounded-full disabled:opacity-35"
+            aria-label="차트 축소"
+            disabled={zoom <= 1.01}
+            onClick={() => updateZoom(zoom / 1.5)}
+          >
+            <ZoomOutIcon className="size-4" />
+          </button>
+          <span className="text-muted-foreground min-w-10 text-center text-[11px] font-bold">
+            {zoom.toFixed(1)}×
+          </span>
+          <button
+            type="button"
+            className="hover:bg-muted flex size-8 items-center justify-center rounded-full disabled:opacity-35"
+            aria-label="차트 확대"
+            disabled={zoom >= 5.99}
+            onClick={() => updateZoom(zoom * 1.5)}
+          >
+            <ZoomInIcon className="size-4" />
+          </button>
+        </div>
+      </div>
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain"
       >
-        <defs>
-          <linearGradient id="dashboard-area" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#10b981" stopOpacity="0.32" />
-            <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        {[0, 0.5, 1].map((ratio) => {
-          const lineY =
-            padding.top + ratio * (height - padding.top - padding.bottom);
-          return (
-            <line
-              key={ratio}
-              x1={padding.left}
-              x2={width - padding.right}
-              y1={lineY}
-              y2={lineY}
-              stroke="currentColor"
-              className="text-border"
-              strokeDasharray="5 7"
-            />
-          );
-        })}
-        <polygon
-          points={area}
-          fill="url(#dashboard-area)"
-          style={{
-            opacity: isRevealed ? 1 : 0,
-            transition: "opacity 700ms ease-out 300ms",
-          }}
-        />
-        <polyline
-          points={points.join(" ")}
-          fill="none"
-          stroke="#10b981"
-          strokeWidth="5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          pathLength="1"
-          style={{
-            strokeDasharray: 1,
-            strokeDashoffset: isRevealed ? 0 : 1,
-            transition: "stroke-dashoffset 1000ms cubic-bezier(0.4, 0, 0.2, 1)",
-          }}
-        />
-        {history.map((item, index) => (
-          <g key={item.id}>
-            <circle
-              cx={x(index)}
-              cy={y(item.currentValue)}
-              r="7"
-              fill="#10b981"
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          className="h-full min-h-[280px] max-w-none"
+          style={{ width: `${zoom * 100}%` }}
+          role="img"
+          aria-label="실제 평가금액과 최초 예상 및 시장 기준의 비교 추이"
+        >
+          <defs>
+            <linearGradient id="dashboard-area" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#10b981" stopOpacity="0.32" />
+              <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {[0, 0.5, 1].map((ratio) => {
+            const lineY =
+              padding.top + ratio * (height - padding.top - padding.bottom);
+            return (
+              <line
+                key={ratio}
+                x1={padding.left}
+                x2={width - padding.right}
+                y1={lineY}
+                y2={lineY}
+                stroke="currentColor"
+                className="text-border"
+                strokeDasharray="5 7"
+              />
+            );
+          })}
+          <polygon
+            points={area}
+            fill="url(#dashboard-area)"
+            style={{
+              opacity: isRevealed ? seriesOpacity("actual") : 0,
+              transition: "opacity 700ms ease-out 300ms",
+            }}
+          />
+          {marketPoints.length > 0 && (
+            <polyline
+              points={marketPoints.join(" ")}
+              fill="none"
+              stroke="#a78bfa"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray="8 7"
+              pathLength="1"
               style={{
-                opacity: isRevealed ? 1 : 0,
-                transform: isRevealed ? "scale(1)" : "scale(0)",
-                transformBox: "fill-box",
-                transformOrigin: "center",
-                transition: `opacity 220ms ease-out ${650 + index * 90}ms, transform 300ms ease-out ${650 + index * 90}ms`,
+                opacity: isRevealed ? seriesOpacity("market") * 0.9 : 0,
+                transition: "opacity 700ms ease-out 180ms",
               }}
             />
-            <circle
-              cx={x(index)}
-              cy={y(item.currentValue)}
-              r="3"
-              fill="white"
-              style={{
-                opacity: isRevealed ? 1 : 0,
-                transition: `opacity 200ms ease-out ${720 + index * 90}ms`,
-              }}
-            />
-            <text
-              x={x(index)}
-              y={height - 14}
-              textAnchor="middle"
-              fill="currentColor"
-              className="text-muted-foreground text-[13px]"
-            >
-              {Number(item.savedOn.slice(5, 7))}/
-              {Number(item.savedOn.slice(8, 10))}
-            </text>
-          </g>
-        ))}
-      </svg>
+          )}
+          <polyline
+            points={expectedPoints.join(" ")}
+            fill="none"
+            stroke="#f59e0b"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            pathLength="1"
+            style={{
+              opacity: seriesOpacity("expected"),
+              strokeDasharray: 1,
+              strokeDashoffset: isRevealed ? 0 : 1,
+              transition: "stroke-dashoffset 900ms ease-out 100ms",
+            }}
+          />
+          <polyline
+            points={actualPoints.join(" ")}
+            fill="none"
+            stroke="#10b981"
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            pathLength="1"
+            style={{
+              opacity: seriesOpacity("actual"),
+              strokeDasharray: 1,
+              strokeDashoffset: isRevealed ? 0 : 1,
+              transition:
+                "stroke-dashoffset 1000ms cubic-bezier(0.4, 0, 0.2, 1)",
+            }}
+          />
+          {history.map((item, index) => (
+            <g key={item.id}>
+              <circle
+                cx={x(index)}
+                cy={y(item.currentValue)}
+                r="7"
+                fill="#10b981"
+                style={{
+                  opacity: isRevealed ? seriesOpacity("actual") : 0,
+                  transform: isRevealed ? "scale(1)" : "scale(0)",
+                  transformBox: "fill-box",
+                  transformOrigin: "center",
+                  transition: `opacity 220ms ease-out ${650 + index * 90}ms, transform 300ms ease-out ${650 + index * 90}ms`,
+                }}
+              />
+              <circle
+                cx={x(index)}
+                cy={y(item.currentValue)}
+                r="3"
+                fill="white"
+                style={{
+                  opacity: isRevealed ? seriesOpacity("actual") : 0,
+                  transition: `opacity 200ms ease-out ${720 + index * 90}ms`,
+                }}
+              />
+              <text
+                x={x(index)}
+                y={height - 14}
+                textAnchor="middle"
+                fill="currentColor"
+                className="text-muted-foreground text-[13px]"
+              >
+                {(index === 0 ||
+                  index === history.length - 1 ||
+                  index % Math.max(1, Math.ceil(history.length / 6)) === 0) && (
+                  <>
+                    {Number(item.savedOn.slice(5, 7))}/
+                    {Number(item.savedOn.slice(8, 10))}
+                  </>
+                )}
+              </text>
+            </g>
+          ))}
+          <rect
+            x={padding.left}
+            y={padding.top}
+            width={width - padding.left - padding.right}
+            height={height - padding.top - padding.bottom}
+            fill="transparent"
+            onMouseMove={(event) => {
+              const rect =
+                event.currentTarget.ownerSVGElement!.getBoundingClientRect();
+              const svgX = ((event.clientX - rect.left) / rect.width) * width;
+              const ratio =
+                (Math.min(width - padding.right, Math.max(padding.left, svgX)) -
+                  padding.left) /
+                (width - padding.left - padding.right);
+              setHoveredIndex(
+                history.length === 1
+                  ? 0
+                  : Math.min(
+                      history.length - 1,
+                      Math.max(0, Math.round(ratio * (history.length - 1))),
+                    ),
+              );
+            }}
+            onMouseLeave={() => setHoveredIndex(null)}
+          />
+          {hovered && hoverX !== null && (
+            <g pointerEvents="none">
+              <line
+                x1={hoverX}
+                x2={hoverX}
+                y1={padding.top}
+                y2={height - padding.bottom}
+                className="stroke-muted-foreground"
+                strokeDasharray="3 4"
+                opacity=".55"
+              />
+              <circle
+                cx={hoverX}
+                cy={y(hovered.item.currentValue)}
+                r="5"
+                fill="#10b981"
+                stroke="white"
+                strokeWidth="2"
+              />
+              {hovered.expected !== null && (
+                <circle
+                  cx={hoverX}
+                  cy={y(hovered.expected)}
+                  r="4"
+                  fill="#f59e0b"
+                  stroke="white"
+                  strokeWidth="1.5"
+                />
+              )}
+              {hovered.market !== null && (
+                <circle
+                  cx={hoverX}
+                  cy={y(hovered.market)}
+                  r="4"
+                  fill="#a78bfa"
+                  stroke="white"
+                  strokeWidth="1.5"
+                />
+              )}
+              <g
+                transform={`translate(${hoverX > width - 225 ? hoverX - 212 : hoverX + 12}, ${padding.top + 8})`}
+              >
+                <rect
+                  width="200"
+                  height={tooltipHeight}
+                  rx="12"
+                  className="fill-background stroke-border"
+                  strokeWidth="1"
+                />
+                <text
+                  x="12"
+                  y="20"
+                  className="fill-foreground text-[11px] font-bold"
+                >
+                  {hovered.item.savedOn}
+                </text>
+                <text
+                  x="12"
+                  y="41"
+                  fill="#10b981"
+                  className="text-[11px] font-semibold"
+                >
+                  실제 평가금액 · {won.format(hovered.item.currentValue)}원
+                </text>
+                {hovered.expected !== null && (
+                  <text
+                    x="12"
+                    y="59"
+                    fill="#f59e0b"
+                    className="text-[11px] font-semibold"
+                  >
+                    최초 예상 · {won.format(hovered.expected)}원
+                  </text>
+                )}
+                {hovered.market !== null && (
+                  <text
+                    x="12"
+                    y="77"
+                    fill="#a78bfa"
+                    className="text-[11px] font-semibold"
+                  >
+                    시장 기준 · {won.format(hovered.market)}원
+                  </text>
+                )}
+              </g>
+            </g>
+          )}
+        </svg>
+      </div>
     </div>
   );
 }
@@ -617,11 +906,255 @@ function GoalJourney({ progress }: { progress: number }) {
   );
 }
 
+function shiftDate(value: string, amount: number) {
+  const date = new Date(`${value}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + amount);
+  return date.toISOString().slice(0, 10);
+}
+
+function profitTileTone(change: number | null, intensity: number) {
+  if (change === null || Math.abs(change) < 1) {
+    return "border-border/70 bg-muted/70 hover:bg-muted";
+  }
+  const gainTones = [
+    "border-rose-300/60 bg-rose-300/55 hover:bg-rose-300/75 dark:border-rose-800 dark:bg-rose-950/70",
+    "border-rose-400/70 bg-rose-400/65 hover:bg-rose-400/85 dark:border-rose-700 dark:bg-rose-900/75",
+    "border-rose-500/80 bg-rose-500/75 hover:bg-rose-500/90 dark:border-rose-600 dark:bg-rose-800/80",
+    "border-rose-600 bg-rose-600 hover:bg-rose-500 dark:border-rose-500 dark:bg-rose-700",
+  ];
+  const lossTones = [
+    "border-blue-300/60 bg-blue-300/55 hover:bg-blue-300/75 dark:border-blue-800 dark:bg-blue-950/70",
+    "border-blue-400/70 bg-blue-400/65 hover:bg-blue-400/85 dark:border-blue-700 dark:bg-blue-900/75",
+    "border-blue-500/80 bg-blue-500/75 hover:bg-blue-500/90 dark:border-blue-600 dark:bg-blue-800/80",
+    "border-blue-600 bg-blue-600 hover:bg-blue-500 dark:border-blue-500 dark:bg-blue-700",
+  ];
+  return (change > 0 ? gainTones : lossTones)[
+    Math.min(3, Math.max(0, intensity - 1))
+  ];
+}
+
+function ProfitContributionGrid({ history }: { history: History }) {
+  const records = history;
+  const latestDate = records.at(-1)?.savedOn;
+  if (!latestDate) return null;
+
+  const availableYears = [
+    ...new Set(records.map((item) => Number(item.savedOn.slice(0, 4)))),
+  ].sort((a, b) => b - a);
+  const [selectedYear, setSelectedYear] = useState(availableYears[0]);
+
+  const recordsWithChanges = records.map((item, index) => {
+    const previous = records[index - 1];
+    return {
+      item,
+      previous,
+      profitChange: previous ? item.profit - previous.profit : null,
+      returnChange: previous ? item.returnRate - previous.returnRate : null,
+    };
+  });
+  const recordByDate = new Map(
+    recordsWithChanges.map((record) => [record.item.savedOn, record]),
+  );
+  const magnitudes = recordsWithChanges
+    .flatMap(({ profitChange }) =>
+      profitChange === null || Math.abs(profitChange) < 1
+        ? []
+        : [Math.abs(profitChange)],
+    )
+    .sort((a, b) => a - b);
+  const intensityFor = (change: number | null) => {
+    if (change === null || Math.abs(change) < 1 || magnitudes.length === 0) {
+      return 0;
+    }
+    const rank = magnitudes.findIndex((value) => value >= Math.abs(change));
+    const percentile = (Math.max(0, rank) + 1) / magnitudes.length;
+    return Math.min(4, Math.max(1, Math.ceil(percentile * 4)));
+  };
+  const yearStart = `${selectedYear}-01-01`;
+  const yearEnd = `${selectedYear}-12-31`;
+  const startWeekday = new Date(`${yearStart}T12:00:00Z`).getUTCDay();
+  const calendarStart = shiftDate(yearStart, -startWeekday);
+  const endWeekday = new Date(`${yearEnd}T12:00:00Z`).getUTCDay();
+  const calendarEnd = shiftDate(yearEnd, 6 - endWeekday);
+  const calendarDays =
+    Math.round(
+      (new Date(`${calendarEnd}T12:00:00Z`).getTime() -
+        new Date(`${calendarStart}T12:00:00Z`).getTime()) /
+        86_400_000,
+    ) + 1;
+  const dates = Array.from({ length: calendarDays }, (_, index) =>
+    shiftDate(calendarStart, index),
+  );
+  const monthMarkers = Array.from({ length: 12 }, (_, monthIndex) => {
+    const date = `${selectedYear}-${String(monthIndex + 1).padStart(2, "0")}-01`;
+    const offset = Math.round(
+      (new Date(`${date}T12:00:00Z`).getTime() -
+        new Date(`${calendarStart}T12:00:00Z`).getTime()) /
+        86_400_000,
+    );
+    return { month: monthIndex + 1, week: Math.floor(offset / 7) };
+  });
+
+  return (
+    <div className="bg-card rounded-3xl border p-5 shadow-sm md:p-7">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <div className="flex size-10 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-500">
+              <ChartNoAxesCombinedIcon className="size-5" />
+            </div>
+            <div>
+              <h2 className="font-black">연도별 손익 흐름</h2>
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                {selectedYear}년 · 직전 저장 기록 대비 평가손익 변화
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <label
+            className="text-muted-foreground text-xs font-bold"
+            htmlFor="profit-grid-year"
+          >
+            연도
+          </label>
+          <select
+            id="profit-grid-year"
+            value={selectedYear}
+            onChange={(event) => setSelectedYear(Number(event.target.value))}
+            className="bg-background h-9 rounded-xl border px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500/40"
+          >
+            {availableYears.map((year) => (
+              <option key={year} value={year}>
+                {year}년
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="mt-6 overflow-x-auto pb-2">
+        <div className="min-w-[760px]">
+          <div className="relative ml-9 h-5">
+            {monthMarkers.map(({ month, week }) => (
+              <span
+                key={month}
+                className="text-muted-foreground absolute text-[10px] font-bold"
+                style={{ left: `${week * 14}px` }}
+              >
+                {month}월
+              </span>
+            ))}
+          </div>
+          <div className="flex items-start gap-2">
+            <div className="text-muted-foreground grid h-[90px] w-7 shrink-0 grid-rows-7 text-[9px] font-semibold">
+              <span />
+              <span className="self-center">월</span>
+              <span />
+              <span className="self-center">수</span>
+              <span />
+              <span className="self-center">금</span>
+              <span />
+            </div>
+            <div className="grid w-max grid-flow-col grid-rows-7 gap-[3px]">
+              {dates.map((date) => {
+                const isSelectedYear = date.startsWith(String(selectedYear));
+                const record = recordByDate.get(date);
+                const change = record?.profitChange ?? null;
+                const intensity = intensityFor(change);
+                const tileClass = cn(
+                  "size-[11px] rounded-[3px] border transition duration-200",
+                  !isSelectedYear
+                    ? "border-transparent bg-transparent"
+                    : record
+                      ? profitTileTone(change, intensity)
+                      : "border-border/40 bg-muted/35 hover:bg-muted/55",
+                );
+                const month = Number(date.slice(5, 7));
+                const day = Number(date.slice(8, 10));
+
+                return (
+                  <Tooltip key={date}>
+                    <TooltipTrigger asChild>
+                      {record && isSelectedYear ? (
+                        <Link
+                          to={`/dashboard/history?month=${date.slice(0, 7)}&date=${date}`}
+                          className={tileClass}
+                          aria-label={`${month}월 ${day}일 분석 기록 보기`}
+                        />
+                      ) : isSelectedYear ? (
+                        <span
+                          className={tileClass}
+                          aria-label={`${month}월 ${day}일 분석 기록 없음`}
+                        />
+                      ) : (
+                        <span className={tileClass} aria-hidden="true" />
+                      )}
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="top"
+                      sideOffset={8}
+                      className="max-w-64 p-3"
+                    >
+                      <p className="font-black">
+                        {date.replaceAll("-", ".")}{" "}
+                        {record ? "분석" : "기록 없음"}
+                      </p>
+                      {record && change !== null ? (
+                        <div className="mt-1.5 space-y-1 text-[11px]">
+                          <p>
+                            평가손익 {change >= 0 ? "+" : "-"}
+                            {formatWon(Math.abs(change))}
+                          </p>
+                          <p>
+                            수익률 {record.returnChange! >= 0 ? "+" : ""}
+                            {record.returnChange!.toFixed(1)}%p
+                          </p>
+                          <p className="opacity-70">
+                            {record.previous?.savedOn === shiftDate(date, -1)
+                              ? "전일 기록과 비교했어요."
+                              : "직전 저장 기록과 비교했어요."}
+                          </p>
+                        </div>
+                      ) : record ? (
+                        <p className="mt-1.5 text-[11px] opacity-70">
+                          비교할 이전 기록이 없는 첫 분석이에요.
+                        </p>
+                      ) : (
+                        <p className="mt-1.5 text-[11px] opacity-70">
+                          이 날짜에는 저장된 분석이 없어요.
+                        </p>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })}
+            </div>
+          </div>
+          <div className="text-muted-foreground mt-4 flex items-center justify-end gap-1.5 text-[10px] font-semibold">
+            <span>손해</span>
+            <span className="size-3 rounded-[3px] bg-blue-600" />
+            <span className="size-3 rounded-[3px] bg-blue-300/70 dark:bg-blue-950" />
+            <span className="bg-muted size-3 rounded-[3px] border" />
+            <span className="size-3 rounded-[3px] bg-rose-300/70 dark:bg-rose-950" />
+            <span className="size-3 rounded-[3px] bg-rose-600" />
+            <span>수익</span>
+          </div>
+        </div>
+      </div>
+      <p className="text-muted-foreground mt-4 text-xs leading-5">
+        추가 매수·매도나 보유 수량 변경이 있었다면 평가손익 변화에도 함께 반영될
+        수 있어요. 타일을 누르면 해당 날짜의 분석 기록으로 이동해요.
+      </p>
+    </div>
+  );
+}
+
 function recordDate(value: string) {
   return value.slice(5).replace("-", ".");
 }
 
-function HistoricalInsights({ history }: { history: History }) {
+export function HistoricalInsights({ history }: { history: History }) {
   const insight = calculateHistoryInsights(history);
   const transitions = insight.changes.length;
   const risingRatio = transitions
@@ -743,6 +1276,8 @@ function HistoricalInsights({ history }: { history: History }) {
           이번 주 기록 {insight.weekly.history.length}개
         </span>
       </div>
+
+      <WeeklyReturnPodium rankings={insight.weekly.returnRankings} />
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <WeeklyAwardCard
@@ -977,6 +1512,152 @@ function HistoricalInsights({ history }: { history: History }) {
   );
 }
 
+function WeeklyReturnPodium({
+  rankings,
+}: {
+  rankings: Array<{ name: string; returnRate: number }>;
+}) {
+  const { ref, isRevealed } = useRevealOncePerVisit<HTMLElement>();
+  const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    if (
+      !isRevealed ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void import("canvas-confetti").then(({ default: confetti }) => {
+        const canvas = confettiCanvasRef.current;
+        if (cancelled || !canvas) return;
+
+        const fireConfetti = confetti.create(canvas, {
+          resize: true,
+          useWorker: true,
+          disableForReducedMotion: true,
+        });
+        const burst = (x: number, particleCount: number) =>
+          fireConfetti({
+            particleCount,
+            spread: 62,
+            startVelocity: 28,
+            gravity: 1.08,
+            scalar: 0.82,
+            ticks: 150,
+            origin: { x, y: 0.78 },
+            colors: ["#fbbf24", "#f97316", "#2dd4bf", "#a78bfa", "#fef3c7"],
+          });
+
+        burst(0.42, 34);
+        burst(0.5, 46);
+        burst(0.58, 34);
+      });
+    }, 180);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [isRevealed, ref]);
+
+  const podiums = [
+    {
+      place: 2,
+      label: "2ND",
+      rank: rankings[1],
+      className:
+        "order-1 min-h-28 bg-gradient-to-b from-slate-300/90 to-slate-500/90 text-slate-950 dark:from-slate-300 dark:to-slate-500",
+    },
+    {
+      place: 1,
+      label: "1ST",
+      rank: rankings[0],
+      className:
+        "order-2 min-h-40 bg-gradient-to-b from-amber-300 via-amber-400 to-amber-600 text-amber-950 shadow-[0_0_42px_-15px_rgba(251,191,36,0.95)]",
+    },
+    {
+      place: 3,
+      label: "3RD",
+      rank: rankings[2],
+      className:
+        "order-3 min-h-20 bg-gradient-to-b from-orange-300/90 to-orange-700/90 text-orange-950 dark:from-orange-300 dark:to-orange-700",
+    },
+  ];
+
+  return (
+    <section
+      ref={ref}
+      className="relative mt-5 overflow-hidden rounded-3xl border border-amber-500/20 bg-[radial-gradient(ellipse_at_top,_rgba(245,158,11,0.16),transparent_62%)] p-4 sm:p-6"
+    >
+      <canvas
+        ref={confettiCanvasRef}
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-10 size-full"
+      />
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-black tracking-[0.16em] text-amber-500 uppercase">
+            <CrownIcon className="size-4" /> PODIUM
+          </div>
+          <h4 className="mt-2 text-lg font-black">이번 주 수익률 TOP 3</h4>
+          <p className="text-muted-foreground mt-1 text-sm">
+            이번 주 첫 기록과 최신 기록의 종목별 현재가를 비교했어요.
+          </p>
+        </div>
+        <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-600 dark:text-amber-300">
+          {rankings.length ? `${rankings.length}개 순위 산정` : "비교 준비 중"}
+        </span>
+      </div>
+
+      <div className="mx-auto mt-7 grid max-w-2xl grid-cols-3 items-end gap-2 sm:gap-3">
+        {podiums.map(({ place, label, rank, className }) => (
+          <div
+            key={place}
+            className="flex min-w-0 flex-col items-center text-center"
+          >
+            <div className="mb-2 flex min-h-12 flex-col justify-end">
+              {place === 1 && (
+                <CrownIcon className="mx-auto mb-1 size-5 text-amber-400" />
+              )}
+              <p className="truncate px-1 text-sm font-black sm:text-base">
+                {rank?.name ?? "—"}
+              </p>
+              <p
+                className={cn(
+                  "mt-0.5 text-xs font-bold tabular-nums",
+                  rank && rank.returnRate >= 0
+                    ? "text-rose-500"
+                    : "text-blue-500",
+                )}
+              >
+                {rank
+                  ? `${rank.returnRate >= 0 ? "+" : ""}${rank.returnRate.toFixed(1)}%`
+                  : "비교 기록 필요"}
+              </p>
+            </div>
+            <div
+              className={cn(
+                "relative flex w-full items-end justify-center rounded-t-2xl border border-white/20 px-2 pt-8 pb-3 sm:pb-4",
+                className,
+              )}
+            >
+              <span className="absolute top-2 left-1/2 -translate-x-1/2 text-[10px] font-black tracking-[0.18em] opacity-70">
+                {label}
+              </span>
+              <span className="text-2xl font-black tabular-nums sm:text-3xl">
+                {place}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function InsightStat({
   icon: Icon,
   label,
@@ -1062,6 +1743,13 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
     preferredGoal,
     updateDraft,
   } = loaderData;
+  const [dimmedTrendSeries, setDimmedTrendSeries] = useState<TrendSeries[]>([]);
+  const toggleTrendSeries = (series: TrendSeries) =>
+    setDimmedTrendSeries((current) =>
+      current.includes(series)
+        ? current.filter((item) => item !== series)
+        : [...current, series],
+    );
   const latest = history.at(-1);
   const previous = history.at(-2);
 
@@ -1146,6 +1834,14 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                   holdings: updateDraft,
                   targetEok: String(latest.goalAmount / 100_000_000),
                   monthlyContribution: String(latest.monthlyContribution || ""),
+                  investmentYears: latest.result.investmentPeriodMonths
+                    ? String(
+                        Math.floor(latest.result.investmentPeriodMonths / 12),
+                      )
+                    : "",
+                  investmentMonths: latest.result.investmentPeriodMonths
+                    ? String(latest.result.investmentPeriodMonths % 12)
+                    : "",
                 },
               }}
             >
@@ -1228,7 +1924,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
         </section>
 
         <section className="mt-5 grid gap-5 xl:grid-cols-[1.65fr_1fr]">
-          <div className="bg-card rounded-3xl border p-5 shadow-sm md:p-7">
+          <div className="bg-card flex min-h-[430px] flex-col rounded-3xl border p-5 shadow-sm md:p-7">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="text-muted-foreground text-sm font-semibold">
@@ -1236,12 +1932,54 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                 </p>
                 <h2 className="mt-1 text-xl font-black">내 자산 성장 추이</h2>
               </div>
-              <div className="flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-500">
-                <span className="size-2 rounded-full bg-emerald-500" /> 평가금액
+              <div className="flex flex-wrap items-center gap-1 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => toggleTrendSeries("actual")}
+                  aria-pressed={!dimmedTrendSeries.includes("actual")}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-full px-3 py-1.5 transition",
+                    dimmedTrendSeries.includes("actual")
+                      ? "bg-muted text-emerald-500 opacity-40 hover:opacity-65"
+                      : "bg-emerald-500/15 text-emerald-500 ring-1 ring-emerald-500/30",
+                  )}
+                >
+                  <span className="size-2 rounded-full bg-emerald-500" /> 실제
+                  평가금액
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleTrendSeries("expected")}
+                  aria-pressed={!dimmedTrendSeries.includes("expected")}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-full px-3 py-1.5 transition",
+                    dimmedTrendSeries.includes("expected")
+                      ? "bg-muted text-amber-500 opacity-40 hover:opacity-65"
+                      : "bg-amber-500/15 text-amber-500 ring-1 ring-amber-500/30",
+                  )}
+                >
+                  <span className="h-0.5 w-4 bg-amber-500" /> 최초 예상
+                </button>
+                {history[0]?.result.benchmark && (
+                  <button
+                    type="button"
+                    onClick={() => toggleTrendSeries("market")}
+                    aria-pressed={!dimmedTrendSeries.includes("market")}
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-full px-3 py-1.5 transition",
+                      dimmedTrendSeries.includes("market")
+                        ? "bg-muted text-violet-500 opacity-40 hover:opacity-65"
+                        : "bg-violet-500/15 text-violet-500 ring-1 ring-violet-500/30",
+                    )}
+                  >
+                    <span className="w-4 border-t-2 border-dashed border-violet-500" />
+                    시장 기준
+                  </button>
+                )}
               </div>
             </div>
-            <div className="mt-4">
-              <TrendChart history={history} />
+            <div className="mt-4 min-h-0 flex-1">
+              <TrendChart history={history} dimmedSeries={dimmedTrendSeries} />
             </div>
           </div>
 
@@ -1277,9 +2015,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
           </div>
         </section>
 
-        <HistoricalInsights history={history} />
-
-        <section className="mt-5 grid gap-5 lg:grid-cols-[1fr_1.15fr]">
+        <section className="mt-5 space-y-5">
           <div className="bg-card rounded-3xl border p-6 shadow-sm md:p-7">
             <div className="flex items-center gap-3">
               <div className="flex size-11 items-center justify-center rounded-2xl bg-violet-500/15 text-violet-500">
@@ -1288,7 +2024,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
               <div>
                 <h2 className="font-black">일별 분석 기록</h2>
                 <p className="text-muted-foreground text-xs">
-                  날짜별 마지막 분석을 대표 기록으로 표시
+                  날짜별 마지막 분석을 최대 {historyLimit}개까지 표시
                 </p>
               </div>
             </div>
@@ -1298,11 +2034,12 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                 <span className="text-right">수익률</span>
                 <span className="text-right">목표 기간</span>
               </div>
-              <div className="divide-y">
+              <div className="max-h-[480px] divide-y overflow-y-auto pr-2 [scrollbar-gutter:stable]">
                 {history
-                  .map((item, index) => ({
+                  .slice(-historyLimit)
+                  .map((item, index, records) => ({
                     item,
-                    previous: history[index - 1],
+                    previous: records[index - 1],
                   }))
                   .reverse()
                   .map(({ item, previous }) => {
@@ -1348,6 +2085,8 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
               </div>
             </div>
           </div>
+
+          <ProfitContributionGrid history={history} />
 
           <div className="via-card relative overflow-hidden rounded-3xl border border-amber-400/30 bg-gradient-to-br from-amber-400/15 to-violet-500/10 p-6 shadow-sm md:p-8">
             <CrownIcon className="absolute -top-5 -right-5 size-32 rotate-12 text-amber-400/10" />

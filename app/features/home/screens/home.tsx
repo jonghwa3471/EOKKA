@@ -16,7 +16,13 @@ import {
   TrophyIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Link, useLoaderData, useLocation, useNavigate } from "react-router";
+import {
+  Link,
+  useLoaderData,
+  useLocation,
+  useNavigate,
+  useRevalidator,
+} from "react-router";
 
 import { Button } from "~/core/components/ui/button";
 import { Input } from "~/core/components/ui/input";
@@ -180,6 +186,7 @@ type Holding = {
 
 const HOLDINGS_STORAGE_KEY = "eokka:portfolio-draft:v1";
 const ANALYSIS_STORAGE_KEY = "eokka:portfolio-analysis:v7";
+const HOME_TAB_STORAGE_KEY = "eokka:home-tab:v1";
 const GOAL_PRESETS = [1, 10, 100];
 const MONTHLY_CONTRIBUTION_MAX = 1_000_000_000;
 const MONTHLY_CONTRIBUTION_PRESETS = [10_000, 50_000, 100_000];
@@ -959,13 +966,19 @@ export default function Home() {
     useLoaderData<typeof loader>();
   const location = useLocation();
   const navigate = useNavigate();
+  const revalidator = useRevalidator();
   const isGlobalTest = marketMode === "global-test";
+  const hasPortfolioDraft = Boolean(
+    (location.state as { portfolioDraft?: unknown } | null)?.portfolioDraft,
+  );
   const [tab, setTab] = useState<"quick" | "saved">(() =>
-    isAuthenticated ? "saved" : "quick",
+    isAuthenticated && !hasPortfolioDraft ? "saved" : "quick",
   );
   const [holdings, setHoldings] = useState<Holding[]>([emptyHolding(1)]);
   const [targetEok, setTargetEok] = useState("1");
   const [monthlyContribution, setMonthlyContribution] = useState("");
+  const [investmentYears, setInvestmentYears] = useState("");
+  const [investmentMonths, setInvestmentMonths] = useState("");
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -975,6 +988,12 @@ export default function Home() {
   const [draftLoaded, setDraftLoaded] = useState(false);
   const matrixCanvasRef = useRef<HTMLCanvasElement>(null);
   const matrixTrailRef = useRef<CurrencyTrailPoint[]>([]);
+
+  const selectTab = (nextTab: "quick" | "saved") => {
+    setTab(nextTab);
+    if (isAuthenticated)
+      window.sessionStorage.setItem(HOME_TAB_STORAGE_KEY, nextTab);
+  };
 
   const moveMatrixSpotlight = (event: React.PointerEvent<HTMLElement>) => {
     if (event.pointerType === "touch") return;
@@ -1005,6 +1024,17 @@ export default function Home() {
   }, [isAnalyzing]);
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      window.sessionStorage.removeItem(HOME_TAB_STORAGE_KEY);
+      return;
+    }
+    if (hasPortfolioDraft) return;
+
+    const storedTab = window.sessionStorage.getItem(HOME_TAB_STORAGE_KEY);
+    if (storedTab === "quick" || storedTab === "saved") setTab(storedTab);
+  }, [hasPortfolioDraft, isAuthenticated]);
+
+  useEffect(() => {
     // 이전 버전에서 장기 저장한 입력값은 남기지 않습니다.
     window.localStorage.removeItem(HOLDINGS_STORAGE_KEY);
     window.localStorage.removeItem(ANALYSIS_STORAGE_KEY);
@@ -1016,9 +1046,17 @@ export default function Home() {
             holdings?: Holding[];
             targetEok?: string;
             monthlyContribution?: string;
+            investmentYears?: string;
+            investmentMonths?: string;
           };
         } | null
       )?.portfolioDraft;
+      if (navigationDraft) {
+        setTab("quick");
+        if (isAuthenticated) {
+          window.sessionStorage.setItem(HOME_TAB_STORAGE_KEY, "quick");
+        }
+      }
       const storedDraft = navigationDraft
         ? JSON.stringify(navigationDraft)
         : window.sessionStorage.getItem(HOLDINGS_STORAGE_KEY);
@@ -1027,6 +1065,8 @@ export default function Home() {
           holdings?: Holding[];
           targetEok?: string;
           monthlyContribution?: string;
+          investmentYears?: string;
+          investmentMonths?: string;
         };
 
         if (
@@ -1065,6 +1105,18 @@ export default function Home() {
           Number(draft.monthlyContribution || 0) <= 1_000_000_000
         )
           setMonthlyContribution(draft.monthlyContribution);
+        if (
+          typeof draft.investmentYears === "string" &&
+          /^\d*$/.test(draft.investmentYears) &&
+          Number(draft.investmentYears || 0) <= 100
+        )
+          setInvestmentYears(draft.investmentYears);
+        if (
+          typeof draft.investmentMonths === "string" &&
+          /^\d*$/.test(draft.investmentMonths) &&
+          Number(draft.investmentMonths || 0) <= 11
+        )
+          setInvestmentMonths(draft.investmentMonths);
       }
     } catch {
       window.sessionStorage.removeItem(HOLDINGS_STORAGE_KEY);
@@ -1100,9 +1152,22 @@ export default function Home() {
     if (!draftLoaded) return;
     window.sessionStorage.setItem(
       HOLDINGS_STORAGE_KEY,
-      JSON.stringify({ holdings, targetEok, monthlyContribution }),
+      JSON.stringify({
+        holdings,
+        targetEok,
+        monthlyContribution,
+        investmentYears,
+        investmentMonths,
+      }),
     );
-  }, [draftLoaded, holdings, monthlyContribution, targetEok]);
+  }, [
+    draftLoaded,
+    holdings,
+    investmentMonths,
+    investmentYears,
+    monthlyContribution,
+    targetEok,
+  ]);
 
   const updateHolding = (
     id: number,
@@ -1161,12 +1226,16 @@ export default function Home() {
     setHoldings([emptyHolding(1)]);
     setTargetEok("1");
     setMonthlyContribution("");
+    setInvestmentYears("");
+    setInvestmentMonths("");
     setAnalysis(null);
     setAnalysisError("");
   };
 
   const targetAmount = Number(targetEok) * 100_000_000;
   const monthlyContributionAmount = Number(monthlyContribution || 0);
+  const investmentPeriodMonths =
+    Number(investmentYears || 0) * 12 + Number(investmentMonths || 0);
   const updateMonthlyContribution = (value: string) => {
     const digits = value.replace(/\D/g, "").slice(0, 10);
     if (!digits) {
@@ -1192,6 +1261,9 @@ export default function Home() {
     Number.isInteger(monthlyContributionAmount) &&
     monthlyContributionAmount >= 0 &&
     monthlyContributionAmount <= MONTHLY_CONTRIBUTION_MAX &&
+    Number.isInteger(investmentPeriodMonths) &&
+    investmentPeriodMonths >= 1 &&
+    investmentPeriodMonths <= 1_200 &&
     holdings.every(
       ({ selectedStock, averagePrice, quantity }) =>
         selectedStock && Number(averagePrice) > 0 && Number(quantity) > 0,
@@ -1208,6 +1280,7 @@ export default function Home() {
         body: JSON.stringify({
           goalAmount: targetAmount,
           monthlyContribution: monthlyContributionAmount,
+          investmentPeriodMonths,
           holdings: holdings.map((holding) => ({
             stockId: holding.selectedStock!.stockId,
             averagePrice: Number(holding.averagePrice),
@@ -1223,6 +1296,7 @@ export default function Home() {
         throw new Error("error" in body ? body.error : "분석에 실패했습니다.");
       setAnalysis(body);
       window.sessionStorage.setItem(ANALYSIS_STORAGE_KEY, JSON.stringify(body));
+      if (isAuthenticated) void revalidator.revalidate();
     } catch (error) {
       setAnalysisError(
         error instanceof Error ? error.message : "분석에 실패했습니다.",
@@ -1291,7 +1365,7 @@ export default function Home() {
                     type="button"
                     role="tab"
                     aria-selected={tab === value}
-                    onClick={() => setTab(value as typeof tab)}
+                    onClick={() => selectTab(value as typeof tab)}
                     className={cn(
                       "rounded-lg px-5 py-2.5 text-sm font-semibold transition-all",
                       tab === value
@@ -1508,51 +1582,128 @@ export default function Home() {
                   </div>
 
                   <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 sm:p-5">
-                    <Label htmlFor="target-amount" className="font-bold">
-                      몇 억을 목표로 하나요?
-                    </Label>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      1억부터 1,000억까지 원하는 목표를 입력할 수 있어요.
-                    </p>
-                    <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-                      <div className="relative sm:w-44">
-                        <Input
-                          id="target-amount"
-                          type="text"
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                          value={targetEok}
-                          onChange={(event) =>
-                            setTargetEok(
-                              event.target.value.replace(/\D/g, "").slice(0, 4),
-                            )
-                          }
-                          className="bg-background h-11 pr-9 text-right text-base font-bold"
-                          aria-describedby="target-amount-unit"
-                        />
-                        <span
-                          id="target-amount-unit"
-                          className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm"
-                        >
-                          억
-                        </span>
+                    <div>
+                      <Label htmlFor="investment-years" className="font-bold">
+                        주식 투자를 시작한 지 얼마나 됐나요?
+                      </Label>
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        현재 누적 수익률을 대략적인 연평균 수익률로 환산하는 데
+                        사용해요.
+                      </p>
+                      <div className="mt-3 flex max-w-sm items-center gap-2">
+                        <div className="relative flex-1">
+                          <Input
+                            id="investment-years"
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            value={investmentYears}
+                            onChange={(event) => {
+                              const value = event.target.value
+                                .replace(/\D/g, "")
+                                .slice(0, 3);
+                              setInvestmentYears(
+                                value
+                                  ? String(Math.min(Number(value), 100))
+                                  : "",
+                              );
+                            }}
+                            placeholder="예: 3"
+                            className="bg-background h-11 pr-9 text-right font-bold tabular-nums"
+                          />
+                          <span className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm">
+                            년
+                          </span>
+                        </div>
+                        <div className="relative flex-1">
+                          <Input
+                            id="investment-months"
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            value={investmentMonths}
+                            onChange={(event) => {
+                              const value = event.target.value
+                                .replace(/\D/g, "")
+                                .slice(0, 2);
+                              setInvestmentMonths(
+                                value
+                                  ? String(Math.min(Number(value), 11))
+                                  : "",
+                              );
+                            }}
+                            placeholder="예: 6"
+                            aria-label="추가 투자 개월 수"
+                            className="bg-background h-11 pr-12 text-right font-bold tabular-nums"
+                          />
+                          <span className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm">
+                            개월
+                          </span>
+                        </div>
                       </div>
-                      <div className="grid flex-1 grid-cols-3 gap-2">
-                        {GOAL_PRESETS.map((goal) => (
-                          <button
-                            key={goal}
-                            type="button"
-                            onClick={() => setTargetEok(String(goal))}
-                            className={cn(
-                              "h-11 rounded-lg border text-sm font-semibold transition-colors",
-                              targetEok === String(goal)
-                                ? "border-emerald-500 bg-emerald-500 text-white"
-                                : "bg-background hover:border-emerald-500/50",
-                            )}
+                      {investmentPeriodMonths > 0 &&
+                        investmentPeriodMonths <= 1_200 && (
+                          <p className="mt-2 text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                            투자 기간 약{" "}
+                            {Math.floor(investmentPeriodMonths / 12) > 0
+                              ? `${Math.floor(investmentPeriodMonths / 12)}년 `
+                              : ""}
+                            {investmentPeriodMonths % 12 > 0
+                              ? `${investmentPeriodMonths % 12}개월`
+                              : ""}
+                          </p>
+                        )}
+                    </div>
+
+                    <div className="mt-5 border-t border-emerald-500/15 pt-5">
+                      <Label htmlFor="target-amount" className="font-bold">
+                        몇 억을 목표로 하나요?
+                      </Label>
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        1억부터 1,000억까지 원하는 목표를 입력할 수 있어요.
+                      </p>
+                      <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                        <div className="relative sm:w-44">
+                          <Input
+                            id="target-amount"
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            value={targetEok}
+                            onChange={(event) =>
+                              setTargetEok(
+                                event.target.value
+                                  .replace(/\D/g, "")
+                                  .slice(0, 4),
+                              )
+                            }
+                            className="bg-background h-11 pr-9 text-right text-base font-bold"
+                            aria-describedby="target-amount-unit"
+                          />
+                          <span
+                            id="target-amount-unit"
+                            className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm"
                           >
-                            {goal}억
-                          </button>
-                        ))}
+                            억
+                          </span>
+                        </div>
+                        <div className="grid flex-1 grid-cols-3 gap-2">
+                          {GOAL_PRESETS.map((goal) => (
+                            <button
+                              key={goal}
+                              type="button"
+                              onClick={() => setTargetEok(String(goal))}
+                              className={cn(
+                                "h-11 rounded-lg border text-sm font-semibold transition-colors",
+                                targetEok === String(goal)
+                                  ? "border-emerald-500 bg-emerald-500 text-white"
+                                  : "bg-background hover:border-emerald-500/50",
+                              )}
+                            >
+                              {goal}억
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
                     <div className="mt-5 border-t border-emerald-500/15 pt-5">
@@ -1696,7 +1847,7 @@ export default function Home() {
                   type="button"
                   size="lg"
                   className="mt-6"
-                  onClick={() => setTab("quick")}
+                  onClick={() => selectTab("quick")}
                 >
                   첫 분석 시작하기
                 </Button>

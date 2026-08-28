@@ -37,6 +37,8 @@ export default function DashboardLayout({ loaderData }: Route.ComponentProps) {
   const { pathname } = useLocation();
   const pageTitle = pathname.startsWith("/account/")
     ? "프로필 설정"
+    : pathname.startsWith("/dashboard/insights")
+      ? "투자 인사이트"
     : pathname.startsWith("/dashboard/history")
       ? "분석 기록"
       : "내 투자 대시보드";

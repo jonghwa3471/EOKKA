@@ -20,6 +20,7 @@ const SIMULATION_MONTHS = 600;
 export interface AnalysisInput {
   goalAmount: number;
   monthlyContribution: number;
+  investmentPeriodMonths: number;
   holdings: Array<{
     stockId: number;
     averagePrice: number;
@@ -241,6 +242,12 @@ export async function analyzePortfolio(
     input.monthlyContribution > 1_000_000_000
   )
     throw new Error("월 추가 투자금은 0원 이상 10억원 이하로 입력해 주세요.");
+  if (
+    !Number.isInteger(input.investmentPeriodMonths) ||
+    input.investmentPeriodMonths < 1 ||
+    input.investmentPeriodMonths > 1_200
+  )
+    throw new Error("투자 기간은 1개월 이상 100년 이하로 입력해 주세요.");
   if (!input.holdings.length || input.holdings.length > 10)
     throw new Error("분석할 종목은 1개 이상 10개 이하로 입력해 주세요.");
   if (
@@ -697,6 +704,12 @@ export async function analyzePortfolio(
     100;
   const profit = currentValue - totalCost;
   const returnRate = (profit / totalCost) * 100;
+  const annualizedReturnRate =
+    currentValue > 0 && totalCost > 0
+      ? ((currentValue / totalCost) ** (12 / input.investmentPeriodMonths) -
+          1) *
+        100
+      : null;
   const baseGoal = scenarios[1].goalMonth;
   const benchmarkComparison = (() => {
     if (!benchmark) return null;
@@ -727,10 +740,12 @@ export async function analyzePortfolio(
     marketMode,
     goalAmount: input.goalAmount,
     monthlyContribution: input.monthlyContribution,
+    investmentPeriodMonths: input.investmentPeriodMonths,
     totalCost,
     currentValue,
     profit,
     returnRate,
+    annualizedReturnRate,
     priceBasis: marketData[0].data.priceBasis,
     exchangeRate:
       marketData.find(({ stock }) => stock.country === "US")?.data
