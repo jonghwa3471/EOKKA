@@ -3,12 +3,19 @@ export interface AnalysisResult {
   marketMode: "domestic" | "global-test";
   goalAmount: number;
   monthlyContribution: number;
-  investmentPeriodMonths?: number;
+  investmentPeriodMonths?: number | null;
   totalCost: number;
   currentValue: number;
   profit: number;
   returnRate: number;
   annualizedReturnRate?: number | null;
+  personalReturnAdjustment?: {
+    historicalAnnualReturn: number;
+    personalAnnualizedReturn: number | null;
+    confidenceWeight: number;
+    cappedExcessReturn: number;
+    appliedAnnualAdjustment: number;
+  };
   priceBasis: "raw_close" | "adjusted_close";
   exchangeRate: number | null;
   holdings: Array<{
@@ -52,6 +59,9 @@ export interface AnalysisResult {
     percentile: number;
     goalMonth: number | null;
     shortenedByMonths: number | null;
+    valueAt10Years?: number;
+    valueAt30Years?: number;
+    valueAt50Years?: number;
   }>;
   chart: Array<{
     month: number;
@@ -66,6 +76,11 @@ export interface AnalysisResult {
     goalMonth: number | null;
     valueAt10Years: number;
     cagr: number | null;
+    investmentPeriodCagr?: number | null;
+    componentAnnualReturns?: Array<{
+      label: string;
+      annualReturn: number | null;
+    }>;
   } | null;
   probability: {
     tenYears: number;

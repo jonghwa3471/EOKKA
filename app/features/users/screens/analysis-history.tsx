@@ -11,9 +11,9 @@ import {
   PieChartIcon,
   SparklesIcon,
   TargetIcon,
+  Trash2Icon,
   TrendingDownIcon,
   TrendingUpIcon,
-  Trash2Icon,
 } from "lucide-react";
 import { useState } from "react";
 import { Form, Link, redirect } from "react-router";
@@ -213,7 +213,11 @@ function SavedAnalysisResult({
 
       {showDetails && (
         <div className="mt-7">
-          <AnalysisResultView result={record.result} showAuthCta={false} />
+          <AnalysisResultView
+            result={record.result}
+            showAuthCta={false}
+            showHistoryContributionDetails
+          />
         </div>
       )}
     </>
@@ -272,7 +276,9 @@ function DailyAnalysisInsights({
           <div className="flex items-center gap-2 text-sm font-bold text-violet-500">
             <SparklesIcon className="size-4" /> THIS DAY&apos;S INSIGHT
           </div>
-          <h4 className="mt-1 text-lg font-black">이날의 포트폴리오 인사이트</h4>
+          <h4 className="mt-1 text-lg font-black">
+            이날의 포트폴리오 인사이트
+          </h4>
           <p className="text-muted-foreground mt-1 text-sm">
             {record.savedOn.replaceAll("-", ".")}에 저장된 분석 결과만 바탕으로
             정리했어요.
@@ -350,9 +356,7 @@ function DailyAnalysisInsights({
           icon={TrendingDownIcon}
           eyebrow="당일 하락 1위"
           title={dailyLoser?.name ?? "비교 기록이 더 필요해요"}
-          value={
-            dailyLoser ? `${dailyLoser.returnRate.toFixed(1)}%` : "—"
-          }
+          value={dailyLoser ? `${dailyLoser.returnRate.toFixed(1)}%` : "—"}
           detail={
             dailyLoser
               ? "직전 저장 기록과 비교한 해당 종목의 당일 가격 변화예요."
@@ -562,8 +566,7 @@ export default function AnalysisHistory({ loaderData }: Route.ComponentProps) {
     dayRecords,
     selected,
     dailyMovements,
-  } =
-    loaderData;
+  } = loaderData;
   const dates = calendarDates(month);
   const available = new Set(availableDates);
   const previousMonth = shiftMonth(month, -1);

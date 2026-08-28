@@ -19,6 +19,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "~/core/components/ui/dialog";
+import { cn } from "~/core/lib/utils";
 
 import { InvestmentCharacterCard } from "./investment-character-card";
 
@@ -28,6 +29,7 @@ const colors = {
   optimistic: "#0ea5e9",
   market: "#a78bfa",
 };
+type ScenarioSeries = keyof typeof colors;
 const allocationColors = [
   "#10b981",
   "#0ea5e9",
@@ -899,9 +901,13 @@ function AnalysisMethodDialog({ result }: { result: AnalysisResult }) {
             <h3 className="font-bold">3. 미래 경로 5,000개 생성</h3>
             <p className="text-muted-foreground mt-1">
               과거 월별 흐름을 6개월 단위 블록으로 다시 조합해 최대 50년까지
-              5,000개의 미래 자산 경로를 만듭니다. 입력한 월 추가 투자금이
-              있다면 매월 수익률을 적용한 뒤 같은 금액을 현재 포트폴리오
-              비중으로 투자한다고 가정해 별도 경로를 계산합니다.
+              5,000개의 미래 자산 경로를 만듭니다. 투자 기간이 6개월 이상이면
+              현재 손익으로 계산한 개인 연환산 수익률과 포트폴리오의 과거 연평균
+              수익률 차이를 ±10%p로 제한한 뒤, 투자 기간에 따라 5~25%만
+              반영합니다. 따라서 미래 경로의 연 수익률 조정폭은 최대
+              ±2.5%p입니다. 입력한 월 추가 투자금이 있다면 매월 수익률을 적용한
+              뒤 같은 금액을 현재 포트폴리오 비중으로 투자한다고 가정해 별도
+              경로를 계산합니다.
             </p>
           </section>
 
@@ -982,7 +988,13 @@ function AnalysisMethodDialog({ result }: { result: AnalysisResult }) {
   );
 }
 
-function ScenarioChart({ result }: { result: AnalysisResult }) {
+function ScenarioChart({
+  result,
+  dimmedSeries,
+}: {
+  result: AnalysisResult;
+  dimmedSeries: ScenarioSeries[];
+}) {
   const { ref, isRevealed } = useChartRevealOnce<HTMLDivElement>();
   const goal = result.goalAmount;
   const [hoverMonth, setHoverMonth] = useState<number | null>(null);
@@ -1010,6 +1022,8 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
     left + (month / endMonth) * (width - left - right);
   const y = (value: number) =>
     top + (1 - Math.min(value, max) / max) * (height - top - bottom);
+  const seriesOpacity = (series: ScenarioSeries) =>
+    dimmedSeries.includes(series) ? 0.14 : 1;
   type ScenarioKey = "conservative" | "base" | "optimistic";
   const scenarioPoints = (key: ScenarioKey) => {
     const goalMonth = result.scenarios.find(
@@ -1067,11 +1081,14 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
     hoverMonth === null
       ? []
       : result.scenarios.flatMap((scenario) => {
+          if (dimmedSeries.includes(scenario.key)) return [];
           const value = valueAtMonth(scenario.key, hoverMonth);
           return value === null ? [] : [{ scenario, value }];
         });
   const marketTooltipValue =
-    hoverMonth === null ? null : marketValueAtMonth(hoverMonth);
+    hoverMonth === null || dimmedSeries.includes("market")
+      ? null
+      : marketValueAtMonth(hoverMonth);
 
   return (
     <div ref={ref} className="overflow-x-auto">
@@ -1135,6 +1152,7 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
             strokeLinejoin="round"
             pathLength="1"
             style={{
+              opacity: seriesOpacity(key),
               strokeDasharray: 1,
               strokeDashoffset: isRevealed ? 0 : 1,
               transition: `stroke-dashoffset 1100ms cubic-bezier(0.4, 0, 0.2, 1) ${index * 120}ms`,
@@ -1154,6 +1172,7 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
             strokeLinejoin="round"
             pathLength="1"
             style={{
+              opacity: seriesOpacity("market"),
               strokeDasharray: "0.025 0.018",
               strokeDashoffset: isRevealed ? 0 : 1,
               transition: "stroke-dashoffset 1200ms ease-out 300ms",
@@ -1171,6 +1190,7 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
                   fill={colors[scenario.key]}
                   stroke="white"
                   strokeWidth="2"
+                  opacity={seriesOpacity(scenario.key)}
                 />
                 <text
                   x={x(scenario.goalMonth)}
@@ -1178,6 +1198,7 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
                   textAnchor="middle"
                   fill={colors[scenario.key]}
                   className="text-[11px] font-bold"
+                  opacity={seriesOpacity(scenario.key)}
                 >
                   달성!
                 </text>
@@ -1194,6 +1215,7 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
                 fill={colors.market}
                 stroke="white"
                 strokeWidth="2"
+                opacity={seriesOpacity("market")}
               />
               <text
                 x={x(result.benchmark.goalMonth)}
@@ -1201,6 +1223,7 @@ function ScenarioChart({ result }: { result: AnalysisResult }) {
                 textAnchor="middle"
                 fill={colors.market}
                 className="text-[11px] font-bold"
+                opacity={seriesOpacity("market")}
               >
                 시장
               </text>
@@ -1801,15 +1824,27 @@ function CompoundGrowthChart({ result }: { result: AnalysisResult }) {
 export function AnalysisResultView({
   result,
   showAuthCta = true,
+  showHistoryContributionDetails = false,
 }: {
   result: AnalysisResult;
   showAuthCta?: boolean;
+  showHistoryContributionDetails?: boolean;
 }) {
   const { ref: metricsRef, isRevealed: areMetricsRevealed } =
     useChartRevealOnce<HTMLDivElement>();
   const [selectedPurchaseHolding, setSelectedPurchaseHolding] = useState<
     AnalysisResult["holdings"][number] | null
   >(null);
+  const [dimmedScenarioSeries, setDimmedScenarioSeries] = useState<
+    ScenarioSeries[]
+  >([]);
+  const toggleScenarioSeries = (series: ScenarioSeries) => {
+    setDimmedScenarioSeries((current) =>
+      current.includes(series)
+        ? current.filter((item) => item !== series)
+        : [...current, series],
+    );
+  };
   const remainingToGoal = Math.max(0, result.goalAmount - result.currentValue);
   const targetLabel = goalLabel(result.goalAmount);
   const benchmarkComparison = result.benchmark
@@ -1830,6 +1865,26 @@ export function AnalysisResultView({
   const holdingsByReturn = [...result.holdings].sort(
     (a, b) => b.returnRate - a.returnRate,
   );
+  const marketAnnualReturn = result.benchmark?.investmentPeriodCagr ?? null;
+  const annualReturnDifference =
+    result.annualizedReturnRate == null || marketAnnualReturn == null
+      ? null
+      : result.annualizedReturnRate - marketAnnualReturn;
+  const annualReturnComparison = (() => {
+    if (result.annualizedReturnRate == null) return "투자 기간 입력 필요";
+    if (!result.benchmark) return "시장 비교 데이터 없음";
+    if (marketAnnualReturn == null) return "같은 기간의 시장 데이터가 부족해요";
+    if (annualReturnDifference === null) return undefined;
+    if (Math.abs(annualReturnDifference) < 0.05)
+      return `${result.benchmark.label}과 비슷해요`;
+    return `${result.benchmark.label}보다 ${Math.abs(annualReturnDifference).toFixed(1)}%p ${annualReturnDifference > 0 ? "높아요" : "낮아요"}`;
+  })();
+  const benchmarkComponentReturns =
+    result.benchmark?.componentAnnualReturns?.map(({ label, annualReturn }) =>
+      annualReturn === null
+        ? `${label} 데이터 부족`
+        : `${label} ${annualReturn >= 0 ? "+" : ""}${annualReturn.toFixed(1)}%`,
+    ) ?? null;
   const returnMedals = new Map<string, { icon: string; label: string }>(
     holdingsByReturn.slice(0, 3).map((holding, index) => [
       `${holding.ticker}-${holding.name}`,
@@ -1873,7 +1928,10 @@ export function AnalysisResultView({
 
       <PortfolioAllocation result={result} />
 
-      <div ref={metricsRef} className="mt-6 grid gap-3 sm:grid-cols-4">
+      <div
+        ref={metricsRef}
+        className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+      >
         {[
           { label: "매수 원금", value: won(result.totalCost) },
           { label: "현재 평가금액", value: won(result.currentValue) },
@@ -1893,32 +1951,89 @@ export function AnalysisResultView({
               `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`,
             tone: result.returnRate >= 0 ? "profit" : "loss",
           },
-        ].map(({ label, value, rollingValue, rollingFormat, tone }, index) => (
-          <div key={label} className="bg-muted/40 rounded-2xl p-4">
-            <p className="text-muted-foreground text-xs">{label}</p>
-            <strong
-              className={`mt-1 block text-lg ${
-                tone === "profit"
-                  ? "text-red-500"
-                  : tone === "loss"
-                    ? "text-blue-500"
-                    : ""
-              }`}
-            >
-              {typeof rollingValue === "number" && rollingFormat ? (
-                <RollingNumber
-                  value={rollingValue}
-                  isActive={areMetricsRevealed}
-                  delay={index * 100}
-                  format={rollingFormat}
-                />
-              ) : (
-                value
+          {
+            label: "내 연평균 수익률",
+            value:
+              result.annualizedReturnRate == null
+                ? "기간 입력 필요"
+                : `${result.annualizedReturnRate >= 0 ? "+" : ""}${result.annualizedReturnRate.toFixed(1)}%`,
+            rollingValue: result.annualizedReturnRate ?? undefined,
+            rollingFormat:
+              result.annualizedReturnRate == null
+                ? undefined
+                : (value: number) =>
+                    `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`,
+            tone:
+              result.annualizedReturnRate == null
+                ? undefined
+                : result.annualizedReturnRate >= 0
+                  ? "profit"
+                  : "loss",
+            detail: annualReturnComparison,
+            subdetails: benchmarkComponentReturns,
+          },
+        ].map(
+          (
+            {
+              label,
+              value,
+              rollingValue,
+              rollingFormat,
+              tone,
+              detail,
+              subdetails,
+            },
+            index,
+          ) => (
+            <div
+              key={label}
+              className={cn(
+                "bg-muted/40 rounded-2xl p-4",
+                label === "내 연평균 수익률" && "sm:col-span-2 lg:col-span-4",
               )}
-            </strong>
-          </div>
-        ))}
+            >
+              <p className="text-muted-foreground text-xs">{label}</p>
+              <strong
+                className={`mt-1 block text-lg ${
+                  tone === "profit"
+                    ? "text-red-500"
+                    : tone === "loss"
+                      ? "text-blue-500"
+                      : ""
+                }`}
+              >
+                {typeof rollingValue === "number" && rollingFormat ? (
+                  <RollingNumber
+                    value={rollingValue}
+                    isActive={areMetricsRevealed}
+                    delay={index * 100}
+                    format={rollingFormat}
+                  />
+                ) : (
+                  value
+                )}
+              </strong>
+              {detail && (
+                <p className="text-muted-foreground mt-1.5 text-[11px] leading-4">
+                  {detail}
+                </p>
+              )}
+              {subdetails?.map((subdetail) => (
+                <p
+                  key={subdetail}
+                  className="mt-1 text-[11px] leading-4 font-semibold text-emerald-600 dark:text-emerald-400"
+                >
+                  {subdetail}
+                </p>
+              ))}
+            </div>
+          ),
+        )}
       </div>
+      <p className="text-muted-foreground mt-2 text-[11px] leading-5">
+        현재 수익률은 매수 이후의 누적 수익률이고, 내 연평균 수익률은 입력한
+        투자 기간을 기준으로 연복리 환산한 참고값이에요.
+      </p>
 
       <div className="mt-5 rounded-2xl border p-5">
         <div>
@@ -2063,6 +2178,14 @@ export function AnalysisResultView({
         <p className="text-muted-foreground mt-2 text-sm font-medium">
           현재 평가금액 기준 {won(remainingToGoal)} 남았어요
         </p>
+        {showHistoryContributionDetails &&
+          result.monthlyContribution > 0 &&
+          contributedBase && (
+            <p className="mt-2 text-sm font-bold text-sky-600 dark:text-sky-400">
+              매월 {compactWon(result.monthlyContribution)} 투자 시{" "}
+              {remainingPeriodLabel(contributedBase.goalMonth)}
+            </p>
+          )}
       </div>
 
       {result.monthlyContribution > 0 && contributedBase && (
@@ -2148,27 +2271,55 @@ export function AnalysisResultView({
       <div className="mt-7 rounded-2xl border p-3 sm:p-5">
         <div className="mb-3 flex flex-wrap gap-4 text-xs font-semibold">
           {result.scenarios.map((scenario) => (
-            <span key={scenario.key} className="flex items-center gap-1.5">
+            <button
+              key={scenario.key}
+              type="button"
+              onClick={() => toggleScenarioSeries(scenario.key)}
+              aria-pressed={!dimmedScenarioSeries.includes(scenario.key)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 transition",
+                dimmedScenarioSeries.includes(scenario.key)
+                  ? "bg-muted opacity-40 hover:opacity-65"
+                  : "ring-1",
+              )}
+              style={
+                dimmedScenarioSeries.includes(scenario.key)
+                  ? { color: colors[scenario.key] }
+                  : {
+                      color: colors[scenario.key],
+                      backgroundColor: `${colors[scenario.key]}18`,
+                      boxShadow: `inset 0 0 0 1px ${colors[scenario.key]}38`,
+                    }
+              }
+            >
               <i
                 className="size-2.5 rounded-full"
                 style={{ backgroundColor: colors[scenario.key] }}
               />
-              <span style={{ color: colors[scenario.key] }}>
-                {scenario.label}
-              </span>
-            </span>
+              <span>{scenario.label}</span>
+            </button>
           ))}
           {result.benchmark && (
-            <span className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => toggleScenarioSeries("market")}
+              aria-pressed={!dimmedScenarioSeries.includes("market")}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-violet-500 transition",
+                dimmedScenarioSeries.includes("market")
+                  ? "bg-muted opacity-40 hover:opacity-65"
+                  : "bg-violet-500/15 ring-1 ring-violet-500/30",
+              )}
+            >
               <i
                 className="h-0 w-4 border-t-2 border-dashed"
                 style={{ borderColor: colors.market }}
               />
-              <span style={{ color: colors.market }}>시장 기준</span>
-            </span>
+              <span>시장 기준</span>
+            </button>
           )}
         </div>
-        <ScenarioChart result={result} />
+        <ScenarioChart result={result} dimmedSeries={dimmedScenarioSeries} />
         {result.benchmark && (
           <>
             <div className="bg-muted/40 mt-3 flex flex-col gap-2 rounded-xl px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
@@ -2249,6 +2400,19 @@ export function AnalysisResultView({
               <p className="mt-2 text-xl font-black">
                 {goalDurationLabel(scenario.goalMonth)}
               </p>
+              {showHistoryContributionDetails &&
+                result.monthlyContribution > 0 &&
+                (() => {
+                  const contributed = result.contributionScenarios.find(
+                    (item) => item.key === scenario.key,
+                  );
+                  return contributed ? (
+                    <p className="mt-2 text-xs leading-5 font-semibold text-sky-600 dark:text-sky-400">
+                      매월 {compactWon(result.monthlyContribution)} 투자 시{" "}
+                      {goalDurationLabel(contributed.goalMonth)}
+                    </p>
+                  ) : null;
+                })()}
             </div>
           ))}
           {result.benchmark && (
@@ -2309,6 +2473,25 @@ export function AnalysisResultView({
                     ).toFixed(1)}
                     %
                   </p>
+                  {showHistoryContributionDetails &&
+                    result.monthlyContribution > 0 &&
+                    (() => {
+                      const contributed = result.contributionScenarios.find(
+                        (item) => item.key === scenario.key,
+                      );
+                      const contributionValue =
+                        period.valueKey === "valueAt10Years"
+                          ? contributed?.valueAt10Years
+                          : period.valueKey === "valueAt30Years"
+                            ? contributed?.valueAt30Years
+                            : contributed?.valueAt50Years;
+                      return typeof contributionValue === "number" ? (
+                        <p className="mt-2 border-t border-sky-500/15 pt-2 text-[11px] leading-5 font-semibold text-sky-600 dark:text-sky-400">
+                          매월 {compactWon(result.monthlyContribution)} 투자 시{" "}
+                          {compactWon(contributionValue)}
+                        </p>
+                      ) : null;
+                    })()}
                 </div>
               ))}
             </div>

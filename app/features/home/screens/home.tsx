@@ -25,6 +25,7 @@ import {
 } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
+import { Checkbox } from "~/core/components/ui/checkbox";
 import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
 import i18next from "~/core/lib/i18next.server";
@@ -979,6 +980,7 @@ export default function Home() {
   const [monthlyContribution, setMonthlyContribution] = useState("");
   const [investmentYears, setInvestmentYears] = useState("");
   const [investmentMonths, setInvestmentMonths] = useState("");
+  const [investmentPeriodUnknown, setInvestmentPeriodUnknown] = useState(false);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -1048,6 +1050,7 @@ export default function Home() {
             monthlyContribution?: string;
             investmentYears?: string;
             investmentMonths?: string;
+            investmentPeriodUnknown?: boolean;
           };
         } | null
       )?.portfolioDraft;
@@ -1067,6 +1070,7 @@ export default function Home() {
           monthlyContribution?: string;
           investmentYears?: string;
           investmentMonths?: string;
+          investmentPeriodUnknown?: boolean;
         };
 
         if (
@@ -1117,6 +1121,11 @@ export default function Home() {
           Number(draft.investmentMonths || 0) <= 11
         )
           setInvestmentMonths(draft.investmentMonths);
+        if (draft.investmentPeriodUnknown === true) {
+          setInvestmentPeriodUnknown(true);
+          setInvestmentYears("");
+          setInvestmentMonths("");
+        }
       }
     } catch {
       window.sessionStorage.removeItem(HOLDINGS_STORAGE_KEY);
@@ -1158,12 +1167,14 @@ export default function Home() {
         monthlyContribution,
         investmentYears,
         investmentMonths,
+        investmentPeriodUnknown,
       }),
     );
   }, [
     draftLoaded,
     holdings,
     investmentMonths,
+    investmentPeriodUnknown,
     investmentYears,
     monthlyContribution,
     targetEok,
@@ -1228,14 +1239,16 @@ export default function Home() {
     setMonthlyContribution("");
     setInvestmentYears("");
     setInvestmentMonths("");
+    setInvestmentPeriodUnknown(false);
     setAnalysis(null);
     setAnalysisError("");
   };
 
   const targetAmount = Number(targetEok) * 100_000_000;
   const monthlyContributionAmount = Number(monthlyContribution || 0);
-  const investmentPeriodMonths =
-    Number(investmentYears || 0) * 12 + Number(investmentMonths || 0);
+  const investmentPeriodMonths = investmentPeriodUnknown
+    ? null
+    : Number(investmentYears || 0) * 12 + Number(investmentMonths || 0);
   const updateMonthlyContribution = (value: string) => {
     const digits = value.replace(/\D/g, "").slice(0, 10);
     if (!digits) {
@@ -1261,9 +1274,11 @@ export default function Home() {
     Number.isInteger(monthlyContributionAmount) &&
     monthlyContributionAmount >= 0 &&
     monthlyContributionAmount <= MONTHLY_CONTRIBUTION_MAX &&
-    Number.isInteger(investmentPeriodMonths) &&
-    investmentPeriodMonths >= 1 &&
-    investmentPeriodMonths <= 1_200 &&
+    (investmentPeriodUnknown ||
+      (Number.isInteger(investmentPeriodMonths) &&
+        investmentPeriodMonths !== null &&
+        investmentPeriodMonths >= 1 &&
+        investmentPeriodMonths <= 1_200)) &&
     holdings.every(
       ({ selectedStock, averagePrice, quantity }) =>
         selectedStock && Number(averagePrice) > 0 && Number(quantity) > 0,
@@ -1598,6 +1613,7 @@ export default function Home() {
                             inputMode="numeric"
                             pattern="[0-9]*"
                             value={investmentYears}
+                            disabled={investmentPeriodUnknown}
                             onChange={(event) => {
                               const value = event.target.value
                                 .replace(/\D/g, "")
@@ -1622,6 +1638,7 @@ export default function Home() {
                             inputMode="numeric"
                             pattern="[0-9]*"
                             value={investmentMonths}
+                            disabled={investmentPeriodUnknown}
                             onChange={(event) => {
                               const value = event.target.value
                                 .replace(/\D/g, "")
@@ -1641,7 +1658,29 @@ export default function Home() {
                           </span>
                         </div>
                       </div>
-                      {investmentPeriodMonths > 0 &&
+                      <div className="mt-3 flex items-start gap-2.5">
+                        <Checkbox
+                          id="investment-period-unknown"
+                          checked={investmentPeriodUnknown}
+                          onCheckedChange={(checked) => {
+                            const isUnknown = checked === true;
+                            setInvestmentPeriodUnknown(isUnknown);
+                            if (isUnknown) {
+                              setInvestmentYears("");
+                              setInvestmentMonths("");
+                            }
+                          }}
+                          className="mt-0.5"
+                        />
+                        <Label
+                          htmlFor="investment-period-unknown"
+                          className="text-muted-foreground cursor-pointer text-sm leading-5 font-medium"
+                        >
+                          1개월 미만이거나 투자 기간을 잘 모르겠어요
+                        </Label>
+                      </div>
+                      {investmentPeriodMonths !== null &&
+                        investmentPeriodMonths > 0 &&
                         investmentPeriodMonths <= 1_200 && (
                           <p className="mt-2 text-sm font-bold text-emerald-600 dark:text-emerald-400">
                             투자 기간 약{" "}

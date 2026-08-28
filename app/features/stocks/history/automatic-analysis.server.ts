@@ -147,7 +147,10 @@ export async function runAutomaticPortfolioAnalysis(): Promise<AutomaticAnalysis
       const input: AnalysisInput = {
         goalAmount: snapshot.goalAmount,
         monthlyContribution: snapshot.monthlyContribution,
-        investmentPeriodMonths: snapshot.result.investmentPeriodMonths ?? 12,
+        investmentPeriodMonths:
+          snapshot.result.investmentPeriodMonths === undefined
+            ? 12
+            : snapshot.result.investmentPeriodMonths,
         holdings,
       };
       const result = await analyzePortfolio(input);

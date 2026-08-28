@@ -209,6 +209,22 @@ export async function generateAiStrategy(
       result.annualizedReturnRate == null
         ? null
         : Number(result.annualizedReturnRate.toFixed(1)),
+    scenarioPersonalReturnAdjustment: result.personalReturnAdjustment
+      ? {
+          historicalAnnualReturnPercent: Number(
+            result.personalReturnAdjustment.historicalAnnualReturn.toFixed(1),
+          ),
+          confidenceWeightPercent: Number(
+            (result.personalReturnAdjustment.confidenceWeight * 100).toFixed(0),
+          ),
+          cappedExcessReturnPercentPoint: Number(
+            result.personalReturnAdjustment.cappedExcessReturn.toFixed(1),
+          ),
+          appliedAnnualAdjustmentPercentPoint: Number(
+            result.personalReturnAdjustment.appliedAnnualAdjustment.toFixed(2),
+          ),
+        }
+      : null,
     averageScenarioGoalPeriod: period(base?.goalMonth ?? null),
     monthlyContributionWon: result.monthlyContribution,
     goalPeriodWithMonthlyContribution:

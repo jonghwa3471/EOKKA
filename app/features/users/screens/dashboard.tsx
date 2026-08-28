@@ -685,7 +685,6 @@ function TrendChart({
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeDasharray="8 7"
-              pathLength="1"
               style={{
                 opacity: isRevealed ? seriesOpacity("market") * 0.9 : 0,
                 transition: "opacity 700ms ease-out 180ms",
@@ -1792,6 +1791,13 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
     latest.returnRate,
     previous?.returnRate ?? null,
   );
+  const annualizedReturnRate = latest.result.annualizedReturnRate ?? null;
+  const previousAnnualizedReturnRate =
+    previous?.result.annualizedReturnRate ?? null;
+  const annualizedReturnChange = difference(
+    annualizedReturnRate,
+    previousAnnualizedReturnRate,
+  );
   const periodChange = difference(
     latest.goalMonth,
     previous?.goalMonth ?? null,
@@ -1842,6 +1848,8 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                   investmentMonths: latest.result.investmentPeriodMonths
                     ? String(latest.result.investmentPeriodMonths % 12)
                     : "",
+                  investmentPeriodUnknown:
+                    latest.result.investmentPeriodMonths == null,
                 },
               }}
             >
@@ -1878,7 +1886,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
 
         <section
           className={cn(
-            "grid gap-4 md:grid-cols-2 xl:grid-cols-4",
+            "grid gap-4 md:grid-cols-2 xl:grid-cols-5",
             goalOptions.length > 1 ? "mt-5" : "mt-7",
           )}
         >
@@ -1896,6 +1904,31 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
               latest.returnRate >= 0 ? "text-rose-500" : "text-blue-500"
             }
             change={<Change value={returnChange} suffix="%p" />}
+          />
+          <SummaryCard
+            icon={ChartNoAxesCombinedIcon}
+            label="총 연평균 수익률"
+            value={
+              annualizedReturnRate === null
+                ? "기간 입력 필요"
+                : formatRate(annualizedReturnRate)
+            }
+            valueClass={
+              annualizedReturnRate === null
+                ? "text-muted-foreground"
+                : annualizedReturnRate >= 0
+                  ? "text-rose-500"
+                  : "text-blue-500"
+            }
+            change={
+              annualizedReturnRate === null ? (
+                <span className="text-muted-foreground text-xs">
+                  투자 기간을 입력해 주세요
+                </span>
+              ) : (
+                <Change value={annualizedReturnChange} suffix="%p" />
+              )
+            }
           />
           <SummaryCard
             icon={Clock3Icon}
@@ -2051,7 +2084,6 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                       item.goalMonth,
                       previous?.goalMonth ?? null,
                     );
-
                     return (
                       <div
                         key={item.id}

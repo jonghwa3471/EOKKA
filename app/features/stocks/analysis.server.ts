@@ -11,6 +11,7 @@ import {
 } from "./kis-client.server";
 import { getMarketData } from "./market-data.server";
 import { getStockMarketMode } from "./market-mode.server";
+import { calculatePersonalReturnAdjustment } from "./scenario-adjustment";
 import { stocks } from "./schema";
 
 const PATHS = 5_000;
@@ -20,7 +21,7 @@ const SIMULATION_MONTHS = 600;
 export interface AnalysisInput {
   goalAmount: number;
   monthlyContribution: number;
-  investmentPeriodMonths: number;
+  investmentPeriodMonths: number | null;
   holdings: Array<{
     stockId: number;
     averagePrice: number;
@@ -178,6 +179,7 @@ function simulatePaths(
   seed: number,
   longTermAnnualReturn: number,
   monthlyContribution = 0,
+  personalMonthlyLogAdjustment = 0,
 ) {
   const logReturns = returns.map((rate) => Math.log1p(rate));
   const rawHistoricalMonthlyDrift =
@@ -216,7 +218,9 @@ function simulatePaths(
         historicalMonthlyDrift * driftWeight +
         longTermMonthlyDrift * (1 - driftWeight);
       const projectedLogReturn =
-        monthlyDrift + residual * residualVolatilityWeight(month);
+        monthlyDrift +
+        personalMonthlyLogAdjustment +
+        residual * residualVolatilityWeight(month);
       value = Math.max(
         0,
         value * Math.exp(projectedLogReturn) + monthlyContribution,
@@ -243,9 +247,10 @@ export async function analyzePortfolio(
   )
     throw new Error("월 추가 투자금은 0원 이상 10억원 이하로 입력해 주세요.");
   if (
-    !Number.isInteger(input.investmentPeriodMonths) ||
-    input.investmentPeriodMonths < 1 ||
-    input.investmentPeriodMonths > 1_200
+    input.investmentPeriodMonths !== null &&
+    (!Number.isInteger(input.investmentPeriodMonths) ||
+      input.investmentPeriodMonths < 1 ||
+      input.investmentPeriodMonths > 1_200)
   )
     throw new Error("투자 기간은 1개월 이상 100년 이하로 입력해 주세요.");
   if (!input.holdings.length || input.holdings.length > 10)
@@ -354,6 +359,31 @@ export async function analyzePortfolio(
   const volatility = annualizedVolatility(portfolioReturns);
   const historicalGrowth =
     cagr(portfolioReturns, Math.min(60, portfolioReturns.length)) ?? 0;
+  const profit = currentValue - totalCost;
+  const returnRate = (profit / totalCost) * 100;
+  const annualizedReturnRate =
+    currentValue > 0 && totalCost > 0 && input.investmentPeriodMonths !== null
+      ? ((currentValue / totalCost) ** (12 / input.investmentPeriodMonths) -
+          1) *
+        100
+      : null;
+  const rawSimulationMonthlyDrift =
+    portfolioReturns.reduce((sum, rate) => sum + Math.log1p(rate), 0) /
+    portfolioReturns.length;
+  const cappedSimulationMonthlyDrift = Math.min(
+    Math.log1p(0.2) / 12,
+    Math.max(Math.log1p(-0.1) / 12, rawSimulationMonthlyDrift),
+  );
+  const {
+    adjustment: personalReturnAdjustment,
+    monthlyLogAdjustment: personalMonthlyLogAdjustment,
+  } = calculatePersonalReturnAdjustment({
+    investmentPeriodMonths: input.investmentPeriodMonths,
+    personalAnnualizedReturn: annualizedReturnRate,
+    historicalAnnualReturn: historicalGrowth,
+    simulationHistoricalAnnualReturn:
+      Math.expm1(cappedSimulationMonthlyDrift * 12) * 100,
+  });
   const concentration = weights.reduce((sum, weight) => sum + weight ** 2, 0);
   const effectiveHoldings = concentration > 0 ? 1 / concentration : 1;
   const largestWeight = Math.max(0, ...weights) * 100;
@@ -518,6 +548,8 @@ export async function analyzePortfolio(
     input.goalAmount,
     ids.reduce((sum, id) => sum + id, 2_026),
     expectedLongTermReturn,
+    0,
+    personalMonthlyLogAdjustment,
   );
 
   const benchmarkWeights = new Map<KisBenchmarkKind, number>();
@@ -613,6 +645,20 @@ export async function analyzePortfolio(
         goalMonth: benchmarkGoalMonth,
         valueAt10Years: quantile(benchmarkValues[120], 0.5),
         cagr: cagr(benchmarkReturns, benchmarkReturns.length),
+        investmentPeriodCagr:
+          input.investmentPeriodMonths === null
+            ? null
+            : cagr(benchmarkReturns, input.investmentPeriodMonths),
+        componentAnnualReturns: components.map(({ name, history }) => ({
+          label: name,
+          annualReturn:
+            input.investmentPeriodMonths === null
+              ? null
+              : cagr(
+                  [...monthlyReturnMap(history).values()],
+                  input.investmentPeriodMonths,
+                ),
+        })),
       };
     }
   } catch (error) {
@@ -620,6 +666,69 @@ export async function analyzePortfolio(
   }
 
   const investmentStyle = buildInvestmentStyle(benchmarkHistoricalReturns);
+
+  const scenarioConfig = [
+    ["conservative", "보수적", 0.2] as const,
+    ["base", "평균", 0.5] as const,
+    ["optimistic", "낙관적", 0.8] as const,
+  ];
+  const buildScenarios = (scenarioValues: Float64Array[]) =>
+    scenarioConfig.map(([key, label, percentile]) => {
+      let goalMonth: number | null = null;
+      for (let month = 0; month <= GOAL_MONTHS; month++) {
+        if (quantile(scenarioValues[month], percentile) >= input.goalAmount) {
+          goalMonth = month;
+          break;
+        }
+      }
+      const valueAt10Years = quantile(scenarioValues[120], percentile);
+      const valueAt30Years = quantile(scenarioValues[360], percentile);
+      const valueAt50Years = quantile(scenarioValues[600], percentile);
+
+      return {
+        key,
+        label,
+        percentile,
+        goalMonth,
+        valueAt10Years,
+        valueAt30Years,
+        valueAt50Years,
+      };
+    });
+  const scenarios = buildScenarios(valuesByMonth);
+
+  const contributionAnalysis = input.monthlyContribution
+    ? (() => {
+        const { valuesByMonth: contributionValues } = simulatePaths(
+          portfolioReturns,
+          currentValue,
+          input.goalAmount,
+          ids.reduce((sum, id) => sum + id, 2_026),
+          expectedLongTermReturn,
+          input.monthlyContribution,
+          personalMonthlyLogAdjustment,
+        );
+
+        const contributedScenarios = buildScenarios(contributionValues);
+        return contributedScenarios.map((scenario, index) => {
+          const baselineGoalMonth = scenarios[index].goalMonth;
+          return {
+            key: scenario.key,
+            label: scenario.label,
+            percentile: scenario.percentile,
+            goalMonth: scenario.goalMonth,
+            valueAt10Years: scenario.valueAt10Years,
+            valueAt30Years: scenario.valueAt30Years,
+            valueAt50Years: scenario.valueAt50Years,
+            shortenedByMonths:
+              scenario.goalMonth !== null && baselineGoalMonth !== null
+                ? Math.max(0, baselineGoalMonth - scenario.goalMonth)
+                : null,
+          };
+        });
+      })()
+    : null;
+  const contributionScenarios = contributionAnalysis ?? [];
 
   const chart = [];
   for (let month = 0; month <= GOAL_MONTHS; month += 6) {
@@ -632,85 +741,16 @@ export async function analyzePortfolio(
     });
   }
 
-  const scenarioConfig = [
-    ["conservative", "보수적", 0.2] as const,
-    ["base", "평균", 0.5] as const,
-    ["optimistic", "낙관적", 0.8] as const,
-  ];
-  const scenarios = scenarioConfig.map(([key, label, percentile]) => {
-    let goalMonth: number | null = null;
-    for (let month = 0; month <= GOAL_MONTHS; month++) {
-      if (quantile(valuesByMonth[month], percentile) >= input.goalAmount) {
-        goalMonth = month;
-        break;
-      }
-    }
-    const valueAt10Years = quantile(valuesByMonth[120], percentile);
-    const valueAt30Years = quantile(valuesByMonth[360], percentile);
-    const valueAt50Years = quantile(valuesByMonth[600], percentile);
-
-    return {
-      key,
-      label,
-      percentile,
-      goalMonth,
-      valueAt10Years,
-      valueAt30Years,
-      valueAt50Years,
-    };
-  });
-
-  const contributionScenarios = input.monthlyContribution
-    ? (() => {
-        const { valuesByMonth: contributionValues } = simulatePaths(
-          portfolioReturns,
-          currentValue,
-          input.goalAmount,
-          ids.reduce((sum, id) => sum + id, 2_026),
-          expectedLongTermReturn,
-          input.monthlyContribution,
-        );
-
-        return scenarioConfig.map(([key, label, percentile], index) => {
-          let goalMonth: number | null = null;
-          for (let month = 0; month <= GOAL_MONTHS; month++) {
-            if (
-              quantile(contributionValues[month], percentile) >=
-              input.goalAmount
-            ) {
-              goalMonth = month;
-              break;
-            }
-          }
-          const baselineGoalMonth = scenarios[index].goalMonth;
-          return {
-            key,
-            label,
-            percentile,
-            goalMonth,
-            shortenedByMonths:
-              goalMonth !== null && baselineGoalMonth !== null
-                ? Math.max(0, baselineGoalMonth - goalMonth)
-                : null,
-          };
-        });
-      })()
-    : [];
-
   const probabilityAt = (months: number) =>
     (Array.from(goalMonths).filter((month) => month >= 0 && month <= months)
       .length /
       PATHS) *
     100;
-  const profit = currentValue - totalCost;
-  const returnRate = (profit / totalCost) * 100;
-  const annualizedReturnRate =
-    currentValue > 0 && totalCost > 0
-      ? ((currentValue / totalCost) ** (12 / input.investmentPeriodMonths) -
-          1) *
-        100
-      : null;
   const baseGoal = scenarios[1].goalMonth;
+  const investmentPeriodDescription =
+    input.investmentPeriodMonths === null
+      ? null
+      : periodLabel(input.investmentPeriodMonths);
   const benchmarkComparison = (() => {
     if (!benchmark) return null;
     if (baseGoal === null && benchmark.goalMonth === null)
@@ -746,6 +786,7 @@ export async function analyzePortfolio(
     profit,
     returnRate,
     annualizedReturnRate,
+    personalReturnAdjustment,
     priceBasis: marketData[0].data.priceBasis,
     exchangeRate:
       marketData.find(({ stock }) => stock.country === "US")?.data
@@ -795,6 +836,11 @@ export async function analyzePortfolio(
           ]
         : []),
       ...(benchmarkComparison ? [benchmarkComparison] : []),
+      personalReturnAdjustment.confidenceWeight === 0
+        ? investmentPeriodDescription === null
+          ? "투자 기간을 입력하지 않아 개인 연환산 수익률은 미래 시나리오에 반영하지 않았습니다."
+          : "투자 기간이 6개월 미만이라 개인 연환산 수익률은 미래 시나리오에 반영하지 않았습니다."
+        : `투자 기간 ${investmentPeriodDescription}의 신뢰 가중치 ${(personalReturnAdjustment.confidenceWeight * 100).toFixed(0)}%를 적용해 개인 성과를 미래 경로의 연 수익률에 ${personalReturnAdjustment.appliedAnnualAdjustment >= 0 ? "+" : ""}${personalReturnAdjustment.appliedAnnualAdjustment.toFixed(2)}%p 제한적으로 반영했습니다.`,
       `20년 안에 ${goalLabel(input.goalAmount)}을 넘은 시뮬레이션 비율은 ${probabilityAt(240).toFixed(1)}%입니다.`,
       marketMode === "domestic"
         ? "금융위원회 공공데이터의 종가를 사용하므로 액면분할·병합 같은 기업행사가 과거 수익률에 영향을 줄 수 있습니다."
