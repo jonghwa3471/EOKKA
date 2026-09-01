@@ -63,6 +63,10 @@ export interface AnalysisResult {
     valueAt30Years?: number;
     valueAt50Years?: number;
   }>;
+  contributionChart?: Array<{
+    month: number;
+    base: number;
+  }>;
   chart: Array<{
     month: number;
     conservative: number;

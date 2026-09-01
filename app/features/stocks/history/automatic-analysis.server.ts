@@ -141,6 +141,7 @@ export async function runAutomaticPortfolioAnalysis(): Promise<AutomaticAnalysis
             averagePrice,
             quantity,
             currency: holding.currency,
+            costKrw: holding.costKrw,
           };
         },
       );

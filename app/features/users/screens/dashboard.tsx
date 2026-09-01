@@ -10,6 +10,7 @@ import {
   CalendarDaysIcon,
   ChartNoAxesCombinedIcon,
   Clock3Icon,
+  CoinsIcon,
   CrownIcon,
   FlameIcon,
   HeartCrackIcon,
@@ -104,6 +105,7 @@ export async function loader({ request }: Route.LoaderArgs) {
             averagePrice: String(Math.round(averagePrice)),
             currency: stock.currency as "KRW" | "USD",
             quantity: String(Number(quantity.toFixed(6))),
+            costKrw: holding.costKrw,
             selectedStock: {
               stockId: stock.stock_id,
               name: stock.name,
@@ -198,6 +200,7 @@ function calculateHistoryInsights(history: History) {
   const changes = history.slice(1).map((item, index) => ({
     savedOn: item.savedOn,
     asset: item.currentValue - history[index].currentValue,
+    profit: item.profit - history[index].profit,
     returnRate: item.returnRate - history[index].returnRate,
   }));
   const increasingChanges = changes.filter((change) => change.asset > 0);
@@ -276,15 +279,7 @@ function calculateHistoryInsights(history: History) {
         86_400_000,
     ),
   );
-  const latestTimestamp = new Date(
-    `${latest.savedOn}T12:00:00+09:00`,
-  ).getTime();
-  const weekStartTimestamp = latestTimestamp - 6 * 86_400_000;
-  const weeklyHistory = history.filter(
-    (item) =>
-      new Date(`${item.savedOn}T12:00:00+09:00`).getTime() >=
-      weekStartTimestamp,
-  );
+  const weeklyHistory = history;
   const weeklyFirst = weeklyHistory[0];
   const weeklyChanges = weeklyHistory.slice(1).map((item, index) => ({
     savedOn: item.savedOn,
@@ -318,20 +313,24 @@ function calculateHistoryInsights(history: History) {
     [...weeklyHoldingChanges]
       .filter((holding) => holding.change < 0)
       .sort((a, b) => a.change - b.change)[0] ?? null;
-  const weeklyReturnRankings = latest.result.holdings
-    .flatMap((holding) => {
-      const previousPrice = weeklyFirstPrices.get(holding.ticker);
-      if (!previousPrice || previousPrice <= 0) return [];
-      return [
-        {
-          name: holding.name,
-          returnRate:
-            ((holding.currentPrice - previousPrice) / previousPrice) * 100,
-        },
-      ];
-    })
-    .sort((a, b) => b.returnRate - a.returnRate)
-    .slice(0, 3);
+  const weeklyReturnRankings =
+    weeklyHistory.length < 2
+      ? []
+      : latest.result.holdings
+          .flatMap((holding) => {
+            const previousPrice = weeklyFirstPrices.get(holding.ticker);
+            if (!previousPrice || previousPrice <= 0) return [];
+            return [
+              {
+                name: holding.name,
+                returnRate:
+                  ((holding.currentPrice - previousPrice) / previousPrice) *
+                  100,
+              },
+            ];
+          })
+          .sort((a, b) => b.returnRate - a.returnRate)
+          .slice(0, 3);
   const weeklyDramaticChange =
     [...weeklyChanges].sort(
       (a, b) => Math.abs(b.asset) - Math.abs(a.asset),
@@ -375,7 +374,11 @@ function calculateHistoryInsights(history: History) {
     concentrationChange,
     elapsedDays,
     totalAssetChange: latest.currentValue - first.currentValue,
-    totalReturnRateChange: latest.returnRate - first.returnRate,
+    totalProfitChange: changes.reduce((sum, change) => sum + change.profit, 0),
+    totalReturnRateChange: changes.reduce(
+      (sum, change) => sum + change.returnRate,
+      0,
+    ),
     holdingCountChange:
       latest.result.holdings.length - first.result.holdings.length,
     weekly: {
@@ -396,10 +399,12 @@ function Change({
   value,
   suffix,
   inverse = false,
+  showDailyPrefix = true,
 }: {
   value: number | null;
   suffix: string;
   inverse?: boolean;
+  showDailyPrefix?: boolean;
 }) {
   if (value === null || value === 0)
     return <span className="text-muted-foreground text-xs">변화 없음</span>;
@@ -424,7 +429,8 @@ function Change({
       )}
     >
       <Icon className="size-3.5" />
-      전일보다 {formattedValue} {direction}
+      {showDailyPrefix && "전일보다 "}
+      {formattedValue} {direction}
     </span>
   );
 }
@@ -1153,28 +1159,54 @@ function recordDate(value: string) {
   return value.slice(5).replace("-", ".");
 }
 
-export function HistoricalInsights({ history }: { history: History }) {
+export function HistoricalInsights({
+  history,
+  previousHistory = [],
+  period = "weekly",
+  rangeLabel,
+}: {
+  history: History;
+  previousHistory?: History;
+  period?: "weekly" | "monthly";
+  rangeLabel?: string;
+}) {
   const insight = calculateHistoryInsights(history);
+  const isWeekly = period === "weekly";
+  const periodLabel = isWeekly ? "주간" : "월간";
   const transitions = insight.changes.length;
   const risingRatio = transitions
     ? (insight.upCount / transitions) * 100
     : null;
-  const assetImproved = insight.totalAssetChange >= 0;
+  const profitImproved = insight.totalProfitChange >= 0;
+  const previousLatest = previousHistory.at(-1) ?? null;
+  const previousPeriodLabel = isWeekly ? "지난주" : "지난달";
+  const currentPeriodLabel = isWeekly ? "이번 주" : "이번 달";
+  const previousAssetChange = previousLatest
+    ? insight.latest.currentValue - previousLatest.currentValue
+    : null;
+  const previousReturnChange = previousLatest
+    ? insight.latest.returnRate - previousLatest.returnRate
+    : null;
+  const previousGoalChange = previousLatest
+    ? difference(insight.latest.goalMonth, previousLatest.goalMonth)
+    : null;
 
   return (
     <section className="bg-card mt-5 rounded-3xl border p-5 shadow-sm md:p-7">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="flex items-center gap-2 text-sm font-bold text-emerald-500">
-            <ActivityIcon className="size-4" /> ALL RECORDS INSIGHT
+            <ActivityIcon className="size-4" /> {period.toUpperCase()} INSIGHT
           </div>
           <h2 className="mt-2 text-2xl font-black">
-            전체 기록에서 발견한 투자 흐름
+            {periodLabel} 기록에서 발견한 투자 흐름
           </h2>
           <p className="text-muted-foreground mt-2 text-sm leading-6">
-            {insight.first.savedOn}부터 {insight.latest.savedOn}까지 저장된{" "}
+            {rangeLabel
+              ? `${rangeLabel} 중 저장된 `
+              : `${insight.first.savedOn}부터 ${insight.latest.savedOn}까지의 `}
             <strong className="text-foreground">{history.length}개 기록</strong>
-            을 모두 비교했어요.
+            을 비교했어요.
           </p>
         </div>
         <div className="bg-muted/50 rounded-2xl px-4 py-3 text-sm">
@@ -1183,19 +1215,64 @@ export function HistoricalInsights({ history }: { history: History }) {
         </div>
       </div>
 
+      <div className="mt-4 rounded-2xl border bg-violet-500/5 p-4 md:p-5">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm font-black">{previousPeriodLabel}와 비교</p>
+          <span className="text-muted-foreground text-xs">
+            {previousLatest
+              ? `${previousLatest.savedOn} → ${insight.latest.savedOn}`
+              : `${previousPeriodLabel} 비교 기록 없음`}
+          </span>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="bg-background/70 rounded-xl border p-3">
+            <p className="text-muted-foreground text-xs">평가금액</p>
+            <div className="mt-2 font-black">
+              <Change
+                value={previousAssetChange}
+                suffix="원"
+                showDailyPrefix={false}
+              />
+            </div>
+          </div>
+          <div className="bg-background/70 rounded-xl border p-3">
+            <p className="text-muted-foreground text-xs">수익률</p>
+            <div className="mt-2 font-black">
+              <Change
+                value={previousReturnChange}
+                suffix="%p"
+                showDailyPrefix={false}
+              />
+            </div>
+          </div>
+          <div className="bg-background/70 rounded-xl border p-3">
+            <p className="text-muted-foreground text-xs">목표 도달 기간</p>
+            <div className="mt-2 font-black">
+              <Change
+                value={previousGoalChange}
+                suffix="개월"
+                inverse
+                showDailyPrefix={false}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div
         className={cn(
           "mt-6 rounded-2xl border p-5",
-          assetImproved
+          profitImproved
             ? "border-rose-500/20 bg-rose-500/5"
             : "border-blue-500/20 bg-blue-500/5",
         )}
       >
         <p className="text-lg leading-8 font-black md:text-xl">
-          첫 기록보다 평가금액이{" "}
-          <span className={assetImproved ? "text-rose-500" : "text-blue-500"}>
-            {formatWon(Math.abs(insight.totalAssetChange))}{" "}
-            {assetImproved ? "늘었고" : "줄었고"}
+          {currentPeriodLabel}에는 평가손익이{" "}
+          <span className={profitImproved ? "text-rose-500" : "text-blue-500"}>
+            {insight.totalProfitChange === 0
+              ? "변동 없었고"
+              : `${formatWon(Math.abs(insight.totalProfitChange))} ${profitImproved ? "늘었고" : "줄었고"}`}
           </span>
           , 수익률은{" "}
           <span
@@ -1205,8 +1282,9 @@ export function HistoricalInsights({ history }: { history: History }) {
                 : "text-blue-500"
             }
           >
-            {Math.abs(insight.totalReturnRateChange).toFixed(1)}%p{" "}
-            {insight.totalReturnRateChange >= 0 ? "높아졌어요" : "낮아졌어요"}
+            {insight.totalReturnRateChange === 0
+              ? "변동 없었어요"
+              : `${Math.abs(insight.totalReturnRateChange).toFixed(1)}%p ${insight.totalReturnRateChange > 0 ? "높아졌어요" : "낮아졌어요"}`}
           </span>
           .
         </p>
@@ -1264,24 +1342,29 @@ export function HistoricalInsights({ history }: { history: History }) {
       <div className="mt-8 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="flex items-center gap-2 text-sm font-bold text-amber-500">
-            <PartyPopperIcon className="size-4" /> WEEKLY AWARDS
+            <PartyPopperIcon className="size-4" /> {period.toUpperCase()} AWARDS
           </div>
-          <h3 className="mt-2 text-xl font-black">이번 주 포트폴리오 시상식</h3>
+          <h3 className="mt-2 text-xl font-black">
+            {periodLabel} 포트폴리오 시상식
+          </h3>
           <p className="text-muted-foreground mt-1 text-sm">
-            최신 기록일을 포함한 최근 7일의 변화를 재미있게 정리했어요.
+            이 {periodLabel}에 저장된 기록의 변화를 재미있게 정리했어요.
           </p>
         </div>
         <span className="text-muted-foreground text-xs">
-          이번 주 기록 {insight.weekly.history.length}개
+          {periodLabel} 기록 {insight.weekly.history.length}개
         </span>
       </div>
 
-      <WeeklyReturnPodium rankings={insight.weekly.returnRankings} />
+      <WeeklyReturnPodium
+        rankings={insight.weekly.returnRankings}
+        periodLabel={periodLabel}
+      />
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <WeeklyAwardCard
           icon={AwardIcon}
-          eyebrow="이번 주 수익 기여 1위"
+          eyebrow={`${periodLabel} 수익 기여 1위`}
           title={insight.weekly.winner?.name ?? "아직 주인공을 찾는 중이에요"}
           value={
             insight.weekly.winner
@@ -1293,8 +1376,8 @@ export function HistoricalInsights({ history }: { history: History }) {
         />
         <WeeklyAwardCard
           icon={HeartCrackIcon}
-          eyebrow="이번 주 손실 기여 1위"
-          title={insight.weekly.loser?.name ?? "이번 주는 방어에 성공했어요"}
+          eyebrow={`${periodLabel} 손실 기여 1위`}
+          title={insight.weekly.loser?.name ?? "이 기간에는 방어에 성공했어요"}
           value={
             insight.weekly.loser
               ? `-${formatWon(Math.abs(insight.weekly.loser.change))}`
@@ -1305,7 +1388,7 @@ export function HistoricalInsights({ history }: { history: History }) {
         />
         <WeeklyAwardCard
           icon={FlameIcon}
-          eyebrow="이번 주 가장 요동친 날"
+          eyebrow={`${periodLabel} 가장 요동친 날`}
           title={
             insight.weekly.dramaticChange
               ? `${recordDate(insight.weekly.dramaticChange.savedOn)}의 포트폴리오`
@@ -1321,7 +1404,7 @@ export function HistoricalInsights({ history }: { history: History }) {
         />
         <WeeklyAwardCard
           icon={TrendingUpIcon}
-          eyebrow="이번 주 초록불 확률"
+          eyebrow={`${periodLabel} 초록불 확률`}
           title={
             insight.weekly.changes.length
               ? `${insight.weekly.changes.length}번 중 ${insight.weekly.upCount}번 상승`
@@ -1332,24 +1415,24 @@ export function HistoricalInsights({ history }: { history: History }) {
               ? `${((insight.weekly.upCount / insight.weekly.changes.length) * 100).toFixed(0)}%`
               : "—"
           }
-          description="최근 7일의 연속된 저장 기록 사이에서 상승한 비율이에요."
+          description={`이 ${periodLabel}의 연속된 저장 기록 사이에서 상승한 비율이에요.`}
           tone="emerald"
         />
         <WeeklyAwardCard
           icon={TimerResetIcon}
-          eyebrow="이번 주 저점 회복"
+          eyebrow={`${periodLabel} 저점 회복`}
           title={
             insight.weekly.recovery > 0
               ? "저점에서 이만큼 되찾았어요"
-              : "최신 기록이 이번 주 저점이에요"
+              : `최신 기록이 ${periodLabel} 저점이에요`
           }
           value={formatWon(insight.weekly.recovery)}
-          description="이번 주 가장 낮았던 평가금액과 최신 기록을 비교했어요."
+          description={`${periodLabel} 가장 낮았던 평가금액과 최신 기록을 비교했어요.`}
           tone="violet"
         />
         <WeeklyAwardCard
           icon={TargetIcon}
-          eyebrow="이번 주 목표 시간 여행"
+          eyebrow={`${periodLabel} 목표 시간 여행`}
           title={
             insight.weekly.goalMonthChange === null
               ? "목표 기간을 비교하기 어려워요"
@@ -1366,7 +1449,7 @@ export function HistoricalInsights({ history }: { history: History }) {
                 ? "변화 없음"
                 : `${Math.abs(insight.weekly.goalMonthChange)}개월 ${insight.weekly.goalMonthChange > 0 ? "단축" : "증가"}`
           }
-          description="이번 주 첫 기록과 최신 기록의 평균 시나리오를 비교했어요."
+          description={`${periodLabel} 첫 기록과 최신 기록의 평균 시나리오를 비교했어요.`}
           tone="emerald"
         />
       </div>
@@ -1504,8 +1587,8 @@ export function HistoricalInsights({ history }: { history: History }) {
 
       <p className="text-muted-foreground mt-5 text-xs leading-5">
         평가금액 변화에는 시세뿐 아니라 추가 매수·매도와 보유 수량 변경도 함께
-        반영될 수 있어요. 이 영역은 선택한 기준 목표에 저장된 기록 전체를 분석한
-        참고 정보예요.
+        반영될 수 있어요. 이 영역은 선택한 기준 목표의 {periodLabel} 기록을
+        분석한 참고 정보예요.
       </p>
     </section>
   );
@@ -1513,8 +1596,10 @@ export function HistoricalInsights({ history }: { history: History }) {
 
 function WeeklyReturnPodium({
   rankings,
+  periodLabel,
 }: {
   rankings: Array<{ name: string; returnRate: number }>;
+  periodLabel: "주간" | "월간";
 }) {
   const { ref, isRevealed } = useRevealOncePerVisit<HTMLElement>();
   const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -1522,6 +1607,7 @@ function WeeklyReturnPodium({
   useEffect(() => {
     if (
       !isRevealed ||
+      rankings.length === 0 ||
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
     ) {
       return;
@@ -1560,7 +1646,7 @@ function WeeklyReturnPodium({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [isRevealed, ref]);
+  }, [isRevealed, rankings.length, ref]);
 
   const podiums = [
     {
@@ -1591,19 +1677,23 @@ function WeeklyReturnPodium({
       ref={ref}
       className="relative mt-5 overflow-hidden rounded-3xl border border-amber-500/20 bg-[radial-gradient(ellipse_at_top,_rgba(245,158,11,0.16),transparent_62%)] p-4 sm:p-6"
     >
-      <canvas
-        ref={confettiCanvasRef}
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-10 size-full"
-      />
+      {rankings.length > 0 && (
+        <canvas
+          ref={confettiCanvasRef}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-10 size-full"
+        />
+      )}
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-xs font-black tracking-[0.16em] text-amber-500 uppercase">
             <CrownIcon className="size-4" /> PODIUM
           </div>
-          <h4 className="mt-2 text-lg font-black">이번 주 수익률 TOP 3</h4>
+          <h4 className="mt-2 text-lg font-black">
+            {periodLabel} 수익률 TOP 3
+          </h4>
           <p className="text-muted-foreground mt-1 text-sm">
-            이번 주 첫 기록과 최신 기록의 종목별 현재가를 비교했어요.
+            {periodLabel} 첫 기록과 최신 기록의 종목별 현재가를 비교했어요.
           </p>
         </div>
         <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-600 dark:text-amber-300">
@@ -1611,48 +1701,63 @@ function WeeklyReturnPodium({
         </span>
       </div>
 
-      <div className="mx-auto mt-7 grid max-w-2xl grid-cols-3 items-end gap-2 sm:gap-3">
-        {podiums.map(({ place, label, rank, className }) => (
-          <div
-            key={place}
-            className="flex min-w-0 flex-col items-center text-center"
-          >
-            <div className="mb-2 flex min-h-12 flex-col justify-end">
-              {place === 1 && (
-                <CrownIcon className="mx-auto mb-1 size-5 text-amber-400" />
-              )}
-              <p className="truncate px-1 text-sm font-black sm:text-base">
-                {rank?.name ?? "—"}
-              </p>
-              <p
+      {rankings.length === 0 ? (
+        <div className="bg-background/65 mt-7 rounded-2xl border border-dashed border-amber-500/25 px-5 py-9 text-center">
+          <div className="text-4xl" aria-hidden="true">
+            🏁
+          </div>
+          <h5 className="mt-4 text-base font-black">
+            아직 순위를 정할 수 없어요
+          </h5>
+          <p className="text-muted-foreground mx-auto mt-2 max-w-md text-sm leading-6">
+            이 {periodLabel}에 분석 기록이 두 개 이상 쌓이면, 처음과 최신
+            기록에서 함께 보유한 종목의 수익률을 비교해 TOP 3를 선정할게요.
+          </p>
+        </div>
+      ) : (
+        <div className="mx-auto mt-7 grid max-w-2xl grid-cols-3 items-end gap-2 sm:gap-3">
+          {podiums.map(({ place, label, rank, className }) => (
+            <div
+              key={place}
+              className="flex min-w-0 flex-col items-center text-center"
+            >
+              <div className="mb-2 flex min-h-12 flex-col justify-end">
+                {place === 1 && (
+                  <CrownIcon className="mx-auto mb-1 size-5 text-amber-400" />
+                )}
+                <p className="truncate px-1 text-sm font-black sm:text-base">
+                  {rank?.name ?? "—"}
+                </p>
+                <p
+                  className={cn(
+                    "mt-0.5 text-xs font-bold tabular-nums",
+                    rank && rank.returnRate >= 0
+                      ? "text-rose-500"
+                      : "text-blue-500",
+                  )}
+                >
+                  {rank
+                    ? `${rank.returnRate >= 0 ? "+" : ""}${rank.returnRate.toFixed(1)}%`
+                    : "비교 종목 부족"}
+                </p>
+              </div>
+              <div
                 className={cn(
-                  "mt-0.5 text-xs font-bold tabular-nums",
-                  rank && rank.returnRate >= 0
-                    ? "text-rose-500"
-                    : "text-blue-500",
+                  "relative flex w-full items-end justify-center rounded-t-2xl border border-white/20 px-2 pt-8 pb-3 sm:pb-4",
+                  className,
                 )}
               >
-                {rank
-                  ? `${rank.returnRate >= 0 ? "+" : ""}${rank.returnRate.toFixed(1)}%`
-                  : "비교 기록 필요"}
-              </p>
+                <span className="absolute top-2 left-1/2 -translate-x-1/2 text-[10px] font-black tracking-[0.18em] opacity-70">
+                  {label}
+                </span>
+                <span className="text-2xl font-black tabular-nums sm:text-3xl">
+                  {place}
+                </span>
+              </div>
             </div>
-            <div
-              className={cn(
-                "relative flex w-full items-end justify-center rounded-t-2xl border border-white/20 px-2 pt-8 pb-3 sm:pb-4",
-                className,
-              )}
-            >
-              <span className="absolute top-2 left-1/2 -translate-x-1/2 text-[10px] font-black tracking-[0.18em] opacity-70">
-                {label}
-              </span>
-              <span className="text-2xl font-black tabular-nums sm:text-3xl">
-                {place}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -1791,6 +1896,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
     latest.returnRate,
     previous?.returnRate ?? null,
   );
+  const profitChange = difference(latest.profit, previous?.profit ?? null);
   const annualizedReturnRate = latest.result.annualizedReturnRate ?? null;
   const previousAnnualizedReturnRate =
     previous?.result.annualizedReturnRate ?? null;
@@ -1886,7 +1992,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
 
         <section
           className={cn(
-            "grid gap-4 md:grid-cols-2 xl:grid-cols-5",
+            "grid gap-4 md:grid-cols-2 xl:grid-cols-6",
             goalOptions.length > 1 ? "mt-5" : "mt-7",
           )}
         >
@@ -1895,6 +2001,13 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             label="현재 평가금액"
             value={formatWon(latest.currentValue)}
             change={<Change value={assetChange} suffix="원" />}
+          />
+          <SummaryCard
+            icon={CoinsIcon}
+            label="현재 평가손익"
+            value={formatWon(latest.profit)}
+            valueClass={latest.profit >= 0 ? "text-rose-500" : "text-blue-500"}
+            change={<Change value={profitChange} suffix="원" />}
           />
           <SummaryCard
             icon={TrendingUpIcon}
@@ -1939,6 +2052,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                 ? `매월 ${formatWon(latest.monthlyContribution)} 투자 시 ${formatMonths(contributionGoalMonth)}`
                 : undefined
             }
+            detailAfterChange
             change={<Change value={periodChange} suffix="개월" inverse />}
           />
           <SummaryCard
@@ -2159,6 +2273,7 @@ function SummaryCard({
   value,
   valueClass,
   detail,
+  detailAfterChange = false,
   change,
 }: {
   icon: typeof TrendingUpIcon;
@@ -2166,6 +2281,7 @@ function SummaryCard({
   value: string;
   valueClass?: string;
   detail?: string;
+  detailAfterChange?: boolean;
   change: React.ReactNode;
 }) {
   return (
@@ -2179,12 +2295,17 @@ function SummaryCard({
         </div>
       </div>
       <p className={cn("mt-4 text-2xl font-black", valueClass)}>{value}</p>
-      {detail && (
+      {detail && !detailAfterChange && (
         <p className="mt-1.5 text-xs font-semibold text-sky-600 dark:text-sky-400">
           {detail}
         </p>
       )}
       <div className="mt-2">{change}</div>
+      {detail && detailAfterChange && (
+        <p className="mt-1.5 text-xs font-semibold text-sky-600 dark:text-sky-400">
+          {detail}
+        </p>
+      )}
     </div>
   );
 }

@@ -42,23 +42,39 @@ export default function DashboardSidebar({
       variant="inset"
       {...props}
     >
-      <SidebarHeader className="p-3">
+      <SidebarHeader className="border-sidebar-border/60 border-b p-3">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild size="lg" tooltip="EOKKA 홈">
-              <Link to="/">
-                <EokkaLogo className="size-9" priority />
+            <SidebarMenuButton
+              asChild
+              size="lg"
+              tooltip="EOKKA 홈"
+              className="rounded-2xl hover:bg-gradient-to-r hover:from-emerald-500/10 hover:to-violet-500/10"
+            >
+              <Link to="/" className="group/logo">
+                <EokkaLogo
+                  className="size-10 drop-shadow-[0_8px_18px_rgba(16,185,129,0.18)] transition-transform group-hover/logo:scale-105"
+                  priority
+                />
                 <div className="grid flex-1 text-left leading-tight">
-                  <span className="font-black tracking-[-0.02em]">EOKKA</span>
+                  <span className="bg-gradient-to-r from-emerald-500 to-violet-500 bg-clip-text text-base font-black tracking-[-0.03em] text-transparent">
+                    EOKKA
+                  </span>
+                  <span className="text-sidebar-foreground/50 text-[10px] font-bold tracking-[0.08em]">
+                    INVESTMENT LAB
+                  </span>
                 </div>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>내 투자</SidebarGroupLabel>
+      <SidebarContent className="px-1 py-2">
+        <SidebarGroup className="gap-1">
+          <SidebarGroupLabel>
+            <span className="mr-2 size-1.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]" />
+            내 투자
+          </SidebarGroupLabel>
           <SidebarMenu>
             {navigation.map((item) => (
               <SidebarMenuItem key={item.title}>
@@ -66,6 +82,7 @@ export default function DashboardSidebar({
                   asChild
                   tooltip={item.title}
                   isActive={pathname === item.url}
+                  className="hover:[&>svg]:animate-sidebar-menu-icon hover:[&>svg]:text-emerald-500 motion-reduce:hover:[&>svg]:animate-none"
                 >
                   <Link
                     to={item.url}
@@ -80,7 +97,7 @@ export default function DashboardSidebar({
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
+      <SidebarFooter className="border-sidebar-border/60 border-t bg-gradient-to-t from-emerald-500/4 to-transparent p-3">
         <SidebarUser user={user} />
       </SidebarFooter>
       <SidebarRail />

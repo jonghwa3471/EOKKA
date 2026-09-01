@@ -105,6 +105,7 @@ export default [
         index("features/users/screens/dashboard.tsx"),
         route("/insights", "features/users/screens/investment-insights.tsx"),
         route("/history", "features/users/screens/analysis-history.tsx"),
+        route("/pro", "features/users/screens/eokka-pro.tsx"),
         route("/payments", "features/payments/screens/payments.tsx"),
       ]),
       route("/account/edit", "features/users/screens/account.tsx"),

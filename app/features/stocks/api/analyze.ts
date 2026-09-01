@@ -27,6 +27,12 @@ const inputSchema = z
             averagePrice: z.number().finite().positive().max(10_000_000_000),
             quantity: z.number().finite().positive().max(1_000_000_000),
             currency: z.enum(["KRW", "USD"]),
+            costKrw: z
+              .number()
+              .finite()
+              .positive()
+              .max(10_000_000_000_000)
+              .optional(),
           })
           .strict(),
       )

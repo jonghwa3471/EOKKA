@@ -355,7 +355,7 @@ function TierCard({
       onMouseLeave={() =>
         expanded && setTilt({ x: 0, y: 0, glareX: 50, glareY: 50 })
       }
-      className={`group relative mx-auto w-full rounded-[28px] bg-gradient-to-br p-[5px] text-left transition-transform ease-out ${flippable ? "duration-700" : "duration-200"} ${expanded ? "max-w-[510px]" : "max-w-[420px]"} ${tier.frame}`}
+      className={`group relative mx-auto w-full rounded-[28px] bg-gradient-to-br p-[5px] text-left transition-transform ease-out ${flippable ? "cursor-pointer duration-700" : "duration-200"} ${expanded ? "max-w-[510px]" : "max-w-[420px]"} ${tier.frame}`}
       style={{
         transform: expanded
           ? `perspective(1100px) rotateX(${tilt.x}deg) rotateY(${tilt.y + (flipped ? 180 : 0)}deg) scale(0.96)`

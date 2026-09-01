@@ -6,10 +6,9 @@
 
 @theme {
   --font-sans:
-    "Pretendard Variable", Pretendard, "SUIT Variable", SUIT,
-    "Noto Sans KR", "Apple SD Gothic Neo", ui-sans-serif, system-ui,
-    sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
-    "Noto Color Emoji";
+    "Pretendard Variable", Pretendard, "SUIT Variable", SUIT, "Noto Sans KR",
+    "Apple SD Gothic Neo", ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
 
 html,
@@ -144,6 +143,20 @@ body {
     }
   }
 
+  --animate-sidebar-menu-icon: sidebar-menu-icon 520ms
+    cubic-bezier(0.22, 1, 0.36, 1) both;
+  @keyframes sidebar-menu-icon {
+    0%,
+    100% {
+      transform: translateY(0) rotate(0deg) scale(1);
+    }
+    30% {
+      transform: translateY(-2px) rotate(-8deg) scale(1.12);
+    }
+    68% {
+      transform: translateY(0) rotate(6deg) scale(1.06);
+    }
+  }
 }
 
 @layer base {
@@ -154,6 +167,26 @@ body {
     @apply bg-background text-foreground font-sans;
     font-synthesis: none;
     text-rendering: optimizeLegibility;
+  }
+  :where(
+    a[href],
+    button:not(:disabled),
+    select:not(:disabled),
+    summary,
+    label[for],
+    [role="button"]:not([aria-disabled="true"]),
+    [role="tab"]:not([aria-disabled="true"]),
+    [role="menuitem"]:not([aria-disabled="true"])
+  ) {
+    cursor: pointer;
+  }
+  :where(
+    button:disabled,
+    select:disabled,
+    [aria-disabled="true"],
+    [data-disabled]
+  ) {
+    cursor: not-allowed;
   }
   html.dark {
     @apply bg-background!;

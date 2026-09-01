@@ -8,7 +8,6 @@
  * - User authentication state awareness (logged in vs. logged out)
  * - User profile menu with avatar and dropdown options
  * - Theme switching functionality
- * - Language switching functionality
  * - Mobile-friendly navigation drawer
  *
  * The component handles different states:
@@ -20,7 +19,6 @@ import { CogIcon, HomeIcon, LogOutIcon, MenuIcon } from "lucide-react";
 import { Link } from "react-router";
 
 import { EokkaLogo } from "./eokka-logo";
-import LangSwitcher from "./lang-switcher";
 import ThemeSwitcher from "./theme-switcher";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Button } from "./ui/button";
@@ -72,23 +70,33 @@ function UserMenu({
     <DropdownMenu>
       {/* Avatar as the dropdown trigger */}
       <DropdownMenuTrigger asChild>
-        <Avatar className="size-8 cursor-pointer rounded-lg">
+        <Avatar className="ring-border/70 size-8 cursor-pointer rounded-lg ring-1 transition-all hover:ring-2 hover:ring-emerald-500/40 data-[state=open]:ring-2 data-[state=open]:ring-emerald-500/50">
           <AvatarImage src={avatarUrl ?? undefined} />
           <AvatarFallback>{name.slice(0, 2)}</AvatarFallback>
         </Avatar>
       </DropdownMenuTrigger>
 
       {/* Dropdown content with user info and actions */}
-      <DropdownMenuContent className="w-56">
+      <DropdownMenuContent align="end" sideOffset={10} className="w-64 p-2">
         {/* User information display */}
-        <DropdownMenuLabel className="grid flex-1 text-left text-sm leading-tight">
-          <span className="truncate font-semibold">{name}</span>
-          <span className="truncate text-xs">{email}</span>
+        <DropdownMenuLabel className="mb-1 flex items-center gap-3 rounded-xl border border-emerald-500/15 bg-gradient-to-br from-emerald-500/10 to-violet-500/10 p-3 font-normal">
+          <Avatar className="ring-background size-10 rounded-xl shadow-sm ring-2">
+            <AvatarImage src={avatarUrl ?? undefined} />
+            <AvatarFallback className="rounded-xl font-black">
+              {name.slice(0, 2)}
+            </AvatarFallback>
+          </Avatar>
+          <span className="grid min-w-0 flex-1 text-left leading-tight">
+            <strong className="truncate font-black">{name}</strong>
+            <span className="text-muted-foreground mt-1 truncate text-xs font-medium">
+              {email}
+            </span>
+          </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
 
         {/* 대시보드 link */}
-        <DropdownMenuItem asChild>
+        <DropdownMenuItem asChild variant="destructive">
           <SheetClose asChild>
             <Link to="/dashboard" viewTransition>
               <HomeIcon className="size-4" />
@@ -130,7 +138,7 @@ function AuthButtons() {
   return (
     <>
       {/* 로그인 button (less prominent) */}
-      <Button variant="ghost" asChild>
+      <Button variant="ghost" asChild className="rounded-full px-5 font-bold">
         <SheetClose asChild>
           <Link to="/login" viewTransition>
             로그인
@@ -139,7 +147,11 @@ function AuthButtons() {
       </Button>
 
       {/* 회원가입 button (more prominent) */}
-      <Button variant="default" asChild>
+      <Button
+        variant="default"
+        asChild
+        className="rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 px-5 font-black text-white shadow-[0_8px_24px_-12px_rgba(16,185,129,0.8)] hover:from-emerald-400 hover:to-emerald-600"
+      >
         <SheetClose asChild>
           <Link to="/join" viewTransition>
             회원가입
@@ -156,12 +168,11 @@ function AuthButtons() {
  * Displays utility actions and settings in the navigation bar, including:
  * - Debug/settings dropdown menu with links to monitoring tools
  * - Theme switcher for toggling between light and dark mode
- * - Language switcher for changing the application language
  *
  * This component is shown in the navigation bar for all users regardless of
  * authentication state and provides access to application-wide settings and tools.
  *
- * @returns Fragment containing settings dropdown, theme switcher, and language switcher
+ * @returns Fragment containing settings dropdown and theme switcher
  */
 function Actions() {
   return (
@@ -169,7 +180,11 @@ function Actions() {
       {/* Settings/debug dropdown menu */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild className="cursor-pointer">
-          <Button variant="ghost" size="icon">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="border-border/60 bg-background/60 rounded-xl border shadow-sm hover:border-emerald-500/25 hover:bg-emerald-500/10 hover:text-emerald-500"
+          >
             <CogIcon className="size-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -195,9 +210,6 @@ function Actions() {
 
       {/* Theme switcher component (light/dark mode) */}
       <ThemeSwitcher />
-
-      {/* Language switcher component */}
-      <LangSwitcher />
     </>
   );
 }
@@ -216,7 +228,7 @@ function Actions() {
  * - User authentication state handling (loading, authenticated, unauthenticated)
  * - User profile menu with avatar for authenticated users
  * - 로그인/sign up buttons for unauthenticated users
- * - Theme and language switching options
+ * - Theme switching option
  *
  * @param name - The authenticated user's name (if available)
  * @param email - The authenticated user's email (if available)
@@ -238,17 +250,20 @@ export function NavigationBar({
   return (
     <nav
       className={
-        "bg-background/80 fixed inset-x-0 top-0 z-50 mx-auto flex h-16 w-full items-center justify-between border-b px-5 font-sans shadow-xs backdrop-blur-lg transition-opacity md:px-10"
+        "bg-background/72 border-border/60 fixed inset-x-0 top-0 z-50 mx-auto flex h-16 w-full items-center justify-between border-b px-5 font-sans shadow-[0_12px_35px_-25px_rgba(15,23,42,0.5)] backdrop-blur-xl transition-opacity after:absolute after:inset-x-0 after:bottom-[-1px] after:h-px after:bg-gradient-to-r after:from-transparent after:via-emerald-500/35 after:to-transparent md:px-10"
       }
     >
       <div className="mx-auto flex h-full w-full max-w-screen-2xl items-center justify-between py-3">
         {/* Application logo/title with link to home */}
         <Link
           to="/"
-          className="inline-grid h-8 grid-flow-col items-center gap-2"
+          className="group/logo inline-grid h-10 grid-flow-col items-center gap-2 rounded-xl px-1.5 transition-colors hover:bg-emerald-500/8"
           aria-label="EOKKA 홈"
         >
-          <EokkaLogo className="block size-8 self-center" priority />
+          <EokkaLogo
+            className="block size-8 self-center drop-shadow-[0_6px_14px_rgba(16,185,129,0.2)] transition-transform group-hover/logo:scale-105"
+            priority
+          />
           <span className="block h-8 self-center text-lg leading-8 font-black tracking-[-0.02em]">
             EOKKA
           </span>
@@ -259,21 +274,21 @@ export function NavigationBar({
           <Link
             to="/about"
             viewTransition
-            className="text-muted-foreground hover:text-foreground text-sm font-semibold tracking-[-0.015em] transition-colors"
+            className="text-muted-foreground hover:text-foreground rounded-full px-4 py-2 text-sm font-bold tracking-[-0.015em] transition-all hover:bg-gradient-to-r hover:from-emerald-500/10 hover:to-violet-500/10"
           >
             서비스 소개
           </Link>
           <Link
             to="/methodology"
             viewTransition
-            className="text-muted-foreground hover:text-foreground text-sm font-semibold tracking-[-0.015em] transition-colors"
+            className="text-muted-foreground hover:text-foreground rounded-full px-4 py-2 text-sm font-bold tracking-[-0.015em] transition-all hover:bg-gradient-to-r hover:from-emerald-500/10 hover:to-violet-500/10"
           >
             분석 방법
           </Link>
 
           <Separator orientation="vertical" />
 
-          {/* Settings, theme switcher, and language switcher */}
+          {/* Settings and theme switcher */}
           <Actions />
 
           <Separator orientation="vertical" />
@@ -298,15 +313,15 @@ export function NavigationBar({
         </div>
 
         {/* Mobile menu trigger (hidden on desktop) */}
-        <SheetTrigger className="size-6 md:hidden">
-          <MenuIcon />
+        <SheetTrigger className="border-border/60 bg-background/70 flex size-9 items-center justify-center rounded-xl border shadow-sm transition-colors hover:bg-emerald-500/10 hover:text-emerald-500 md:hidden">
+          <MenuIcon className="size-4" />
         </SheetTrigger>
-        <SheetContent>
-          <SheetHeader className="mt-8 gap-1 text-left">
+        <SheetContent className="bg-background/95 border-l-emerald-500/15 backdrop-blur-xl">
+          <SheetHeader className="mt-12 gap-2 px-4 text-left">
             <SheetClose asChild>
               <Link
                 to="/about"
-                className="hover:bg-muted rounded-lg px-3 py-3 font-semibold tracking-[-0.015em]"
+                className="rounded-xl px-4 py-3 font-bold tracking-[-0.015em] transition-colors hover:bg-gradient-to-r hover:from-emerald-500/12 hover:to-violet-500/12"
               >
                 서비스 소개
               </Link>
@@ -314,7 +329,7 @@ export function NavigationBar({
             <SheetClose asChild>
               <Link
                 to="/methodology"
-                className="hover:bg-muted rounded-lg px-3 py-3 font-semibold tracking-[-0.015em]"
+                className="rounded-xl px-4 py-3 font-bold tracking-[-0.015em] transition-colors hover:bg-gradient-to-r hover:from-emerald-500/12 hover:to-violet-500/12"
               >
                 분석 방법
               </Link>

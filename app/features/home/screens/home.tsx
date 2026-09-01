@@ -77,13 +77,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   );
   const latest = history.at(-1);
   const previous = history.at(-2);
-  const latestMonth = latest?.savedOn.slice(0, 7);
-  const monthHistory = latestMonth
-    ? history.filter((item) => item.savedOn.startsWith(latestMonth))
+  const currentMonth = seoulDate().slice(0, 7);
+  const monthHistory = latest
+    ? history.filter((item) => item.savedOn.startsWith(currentMonth))
     : [];
-  const beforeMonth = latestMonth
-    ? history.filter((item) => item.savedOn < `${latestMonth}-01`).at(-1)
-    : undefined;
+  const beforeMonth = history
+    .filter((item) => item.savedOn < `${currentMonth}-01`)
+    .at(-1);
   const monthBaseline = beforeMonth ?? monthHistory[0];
   const baseScenario = latest?.result.scenarios.find(
     (scenario) => scenario.key === "base",
@@ -182,6 +182,7 @@ type Holding = {
   averagePrice: string;
   currency: "KRW" | "USD";
   quantity: string;
+  costKrw?: number;
   selectedStock: StockSearchResult | null;
 };
 
@@ -1187,7 +1188,15 @@ export default function Home() {
   ) => {
     setHoldings((items) =>
       items.map((item) =>
-        item.id === id ? { ...item, [field]: value } : item,
+        item.id === id
+          ? {
+              ...item,
+              [field]: value,
+              ...(field === "averagePrice" || field === "quantity"
+                ? { costKrw: undefined }
+                : {}),
+            }
+          : item,
       ),
     );
   };
@@ -1195,14 +1204,18 @@ export default function Home() {
   const updateHoldingSymbol = (id: number, symbol: string) => {
     setHoldings((items) =>
       items.map((item) =>
-        item.id === id ? { ...item, symbol, selectedStock: null } : item,
+        item.id === id
+          ? { ...item, symbol, selectedStock: null, costKrw: undefined }
+          : item,
       ),
     );
   };
 
   const updateCurrency = (id: number, currency: Holding["currency"]) => {
     setHoldings((items) =>
-      items.map((item) => (item.id === id ? { ...item, currency } : item)),
+      items.map((item) =>
+        item.id === id ? { ...item, currency, costKrw: undefined } : item,
+      ),
     );
   };
 
@@ -1215,6 +1228,7 @@ export default function Home() {
               symbol: stock.name,
               selectedStock: stock,
               currency: stock.currency,
+              costKrw: undefined,
             }
           : item,
       ),
@@ -1301,6 +1315,9 @@ export default function Home() {
             averagePrice: Number(holding.averagePrice),
             quantity: Number(holding.quantity),
             currency: holding.currency,
+            ...(holding.costKrw && holding.costKrw > 0
+              ? { costKrw: holding.costKrw }
+              : {}),
           })),
         }),
       });
@@ -1920,6 +1937,7 @@ export default function Home() {
               <AnalysisResultView
                 result={analysis}
                 showAuthCta={!isAuthenticated}
+                showContributionDetails
               />
             </div>
           )}

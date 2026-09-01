@@ -27,6 +27,7 @@ export interface AnalysisInput {
     averagePrice: number;
     quantity: number;
     currency: "KRW" | "USD";
+    costKrw?: number;
   }>;
 }
 
@@ -308,7 +309,11 @@ export async function analyzePortfolio(
       .map((point) => point.close)
       .filter((price) => Number.isFinite(price) && price > 0);
     const oneYearPrices = tenYearPrices.slice(-12);
-    const cost = holding.averagePrice * holding.quantity * costRate;
+    const calculatedCost = holding.averagePrice * holding.quantity * costRate;
+    const cost =
+      holding.costKrw && Number.isFinite(holding.costKrw) && holding.costKrw > 0
+        ? holding.costKrw
+        : calculatedCost;
     const value = data.currentPrice * holding.quantity * valueRate;
     return {
       name: stock.name,
@@ -710,25 +715,38 @@ export async function analyzePortfolio(
         );
 
         const contributedScenarios = buildScenarios(contributionValues);
-        return contributedScenarios.map((scenario, index) => {
-          const baselineGoalMonth = scenarios[index].goalMonth;
-          return {
-            key: scenario.key,
-            label: scenario.label,
-            percentile: scenario.percentile,
-            goalMonth: scenario.goalMonth,
-            valueAt10Years: scenario.valueAt10Years,
-            valueAt30Years: scenario.valueAt30Years,
-            valueAt50Years: scenario.valueAt50Years,
-            shortenedByMonths:
-              scenario.goalMonth !== null && baselineGoalMonth !== null
-                ? Math.max(0, baselineGoalMonth - scenario.goalMonth)
-                : null,
-          };
-        });
+        return {
+          scenarios: contributedScenarios.map((scenario, index) => {
+            const baselineGoalMonth = scenarios[index].goalMonth;
+            return {
+              key: scenario.key,
+              label: scenario.label,
+              percentile: scenario.percentile,
+              goalMonth: scenario.goalMonth,
+              valueAt10Years: scenario.valueAt10Years,
+              valueAt30Years: scenario.valueAt30Years,
+              valueAt50Years: scenario.valueAt50Years,
+              shortenedByMonths:
+                scenario.goalMonth !== null && baselineGoalMonth !== null
+                  ? Math.max(0, baselineGoalMonth - scenario.goalMonth)
+                  : null,
+            };
+          }),
+          chart: Array.from(
+            { length: Math.floor(GOAL_MONTHS / 6) + 1 },
+            (_, index) => {
+              const month = index * 6;
+              return {
+                month,
+                base: quantile(contributionValues[month], 0.5),
+              };
+            },
+          ),
+        };
       })()
     : null;
-  const contributionScenarios = contributionAnalysis ?? [];
+  const contributionScenarios = contributionAnalysis?.scenarios ?? [];
+  const contributionChart = contributionAnalysis?.chart ?? [];
 
   const chart = [];
   for (let month = 0; month <= GOAL_MONTHS; month += 6) {
@@ -800,6 +818,7 @@ export async function analyzePortfolio(
     },
     scenarios,
     contributionScenarios,
+    contributionChart,
     benchmark,
     chart,
     probability: {

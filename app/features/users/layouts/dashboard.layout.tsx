@@ -39,19 +39,24 @@ export default function DashboardLayout({ loaderData }: Route.ComponentProps) {
     ? "프로필 설정"
     : pathname.startsWith("/dashboard/insights")
       ? "투자 인사이트"
-    : pathname.startsWith("/dashboard/history")
-      ? "분석 기록"
-      : "내 투자 대시보드";
+      : pathname.startsWith("/dashboard/history")
+        ? "분석 기록"
+        : pathname.startsWith("/dashboard/pro")
+          ? "EOKKA Pro"
+          : pathname.startsWith("/dashboard/payments")
+            ? "결제내역"
+            : "내 투자 대시보드";
   return (
     <SidebarProvider>
       <DashboardSidebar user={user} />
       <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
+        <header className="bg-background/80 border-border/60 relative z-20 flex h-16 shrink-0 items-center gap-2 border-b shadow-[0_10px_30px_-26px_rgba(15,23,42,0.55)] backdrop-blur-xl transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12 after:absolute after:inset-x-0 after:bottom-[-1px] after:h-px after:bg-gradient-to-r after:from-emerald-500/35 after:via-violet-500/25 after:to-transparent">
           <div className="flex items-center gap-3 px-5">
             <SidebarTrigger className="-ml-1" />
-            <span className="text-muted-foreground font-sans text-sm font-semibold tracking-[-0.015em]">
+            <span className="font-sans text-sm font-black tracking-[-0.02em]">
               {pageTitle}
             </span>
+            <span className="size-1.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.7)]" />
           </div>
         </header>
         <Outlet />

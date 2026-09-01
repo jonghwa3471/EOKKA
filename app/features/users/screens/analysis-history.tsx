@@ -216,7 +216,7 @@ function SavedAnalysisResult({
           <AnalysisResultView
             result={record.result}
             showAuthCta={false}
-            showHistoryContributionDetails
+            showContributionDetails
           />
         </div>
       )}
