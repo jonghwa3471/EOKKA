@@ -103,6 +103,7 @@ export default [
     layout("features/users/layouts/dashboard.layout.tsx", [
       ...prefix("/dashboard", [
         index("features/users/screens/dashboard.tsx"),
+        route("/portfolio", "features/users/screens/managed-portfolio.tsx"),
         route("/insights", "features/users/screens/investment-insights.tsx"),
         route("/history", "features/users/screens/analysis-history.tsx"),
         route("/pro", "features/users/screens/eokka-pro.tsx"),

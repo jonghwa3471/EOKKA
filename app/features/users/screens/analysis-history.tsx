@@ -467,7 +467,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     validMonth(url.searchParams.get("month")) ?? selectedDate.slice(0, 7);
   const dayRecords = history
     .filter((item) => item.savedOn === selectedDate)
-    .sort((a, b) => a.goalAmount - b.goalAmount);
+    .sort(
+      (a, b) =>
+        Number(b.analysisMode === "managed") -
+          Number(a.analysisMode === "managed") || a.goalAmount - b.goalAmount,
+    );
   const requestedId = Number(url.searchParams.get("analysis"));
   const selected =
     dayRecords.find((item) => item.id === requestedId) ??
@@ -481,6 +485,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         .find(
           (item) =>
             item.goalAmount === selected.goalAmount &&
+            item.analysisMode === selected.analysisMode &&
             item.savedOn < selected.savedOn,
         )
     : null;
@@ -512,6 +517,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     dayRecords,
     selected,
     dailyMovements,
+    hasQuickHistory: history.some((item) => item.analysisMode === "quick"),
+    managedStartedOn: history.find((item) => item.analysisMode === "managed")
+      ?.savedOn,
   };
 }
 
@@ -566,6 +574,8 @@ export default function AnalysisHistory({ loaderData }: Route.ComponentProps) {
     dayRecords,
     selected,
     dailyMovements,
+    hasQuickHistory,
+    managedStartedOn,
   } = loaderData;
   const dates = calendarDates(month);
   const available = new Set(availableDates);
@@ -611,6 +621,19 @@ export default function AnalysisHistory({ loaderData }: Route.ComponentProps) {
             </Form>
           )}
         </header>
+
+        {managedStartedOn && hasQuickHistory && (
+          <div className="mt-6 rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.06] p-4 text-sm leading-6">
+            <p className="font-black">
+              {managedStartedOn.replaceAll("-", ".")}부터 정밀 분석을 사용
+              중이에요.
+            </p>
+            <p className="text-muted-foreground mt-1">
+              전환 이전 기록은 빠른 분석 기준으로 보관되며, 대시보드와 인사이트
+              통계에는 포함되지 않아요.
+            </p>
+          </div>
+        )}
 
         <section className="mt-7 grid items-start gap-5 xl:grid-cols-[380px_1fr]">
           <div className="bg-card rounded-3xl border p-5 shadow-sm">
@@ -711,22 +734,38 @@ export default function AnalysisHistory({ loaderData }: Route.ComponentProps) {
                             <p className="font-black">
                               {goalLabel(record.goalAmount)} 목표 분석
                             </p>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="text-muted-foreground mt-1 inline-block max-w-full cursor-help truncate align-bottom text-xs">
+                            <div className="mt-2 flex min-w-0 items-center gap-2.5">
+                              <span
+                                className={cn(
+                                  "inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-black",
+                                  record.analysisMode === "managed"
+                                    ? "bg-emerald-500/12 text-emerald-500"
+                                    : "bg-muted text-muted-foreground",
+                                )}
+                              >
+                                {record.analysisMode === "managed"
+                                  ? "정밀 분석"
+                                  : managedStartedOn
+                                    ? "빠른 분석 · 정밀 분석 전환 이전"
+                                    : "빠른 분석"}
+                              </span>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-muted-foreground min-w-0 flex-1 cursor-help truncate text-xs">
+                                    {stockNames} ·{" "}
+                                    {record.result.holdings.length}개 종목
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                  side="bottom"
+                                  sideOffset={6}
+                                  className="max-w-sm leading-5 break-keep"
+                                >
                                   {stockNames} · {record.result.holdings.length}
                                   개 종목
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent
-                                side="bottom"
-                                sideOffset={6}
-                                className="max-w-sm leading-5 break-keep"
-                              >
-                                {stockNames} · {record.result.holdings.length}개
-                                종목
-                              </TooltipContent>
-                            </Tooltip>
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
                           </div>
                           <TargetIcon className="size-5 shrink-0 text-emerald-500" />
                         </div>

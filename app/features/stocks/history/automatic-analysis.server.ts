@@ -1,6 +1,12 @@
 import { desc, inArray } from "drizzle-orm";
 
 import db from "~/core/db/drizzle-client.server";
+import {
+  calculateManagedHoldings,
+  getManagedPortfolio,
+  investmentMonthsSince,
+} from "~/features/stocks/portfolio/portfolio.server";
+import { managedPortfolios } from "~/features/stocks/portfolio/schema";
 import { stocks } from "~/features/stocks/schema";
 import { profiles } from "~/features/users/schema";
 
@@ -30,6 +36,8 @@ export async function runAutomaticPortfolioAnalysis(): Promise<AutomaticAnalysis
       savedOn: analysisSnapshots.saved_on,
       goalAmount: analysisSnapshots.goal_amount,
       monthlyContribution: analysisSnapshots.monthly_contribution,
+      analysisMode: analysisSnapshots.analysis_mode,
+      managedPortfolioId: analysisSnapshots.managed_portfolio_id,
       result: analysisSnapshots.result,
     })
     .from(analysisSnapshots)
@@ -38,8 +46,29 @@ export async function runAutomaticPortfolioAnalysis(): Promise<AutomaticAnalysis
       desc(analysisSnapshots.analysis_snapshot_id),
     );
 
+  const portfolioRows = await db
+    .select({
+      id: managedPortfolios.managed_portfolio_id,
+      userId: managedPortfolios.user_id,
+      status: managedPortfolios.status,
+    })
+    .from(managedPortfolios);
+  const activePortfolioByUser = new Map(
+    portfolioRows
+      .filter((portfolio) => portfolio.status === "active")
+      .map((portfolio) => [portfolio.userId, portfolio.id]),
+  );
+
   const latestConfigurations = new Map<string, (typeof snapshots)[number]>();
   for (const snapshot of snapshots) {
+    const activePortfolioId = activePortfolioByUser.get(snapshot.userId);
+    if (
+      (activePortfolioId != null &&
+        (snapshot.analysisMode !== "managed" ||
+          snapshot.managedPortfolioId !== activePortfolioId)) ||
+      (activePortfolioId == null && snapshot.analysisMode !== "quick")
+    )
+      continue;
     const key = latestConfigurationKey(snapshot.userId, snapshot.goalAmount);
     if (!latestConfigurations.has(key)) latestConfigurations.set(key, snapshot);
   }
@@ -110,46 +139,69 @@ export async function runAutomaticPortfolioAnalysis(): Promise<AutomaticAnalysis
     }
 
     try {
-      const holdings: AnalysisInput["holdings"] = snapshot.result.holdings.map(
-        (holding) => {
-          const stock = stockRows.find(
-            (row) =>
-              row.ticker === holding.ticker &&
-              row.currency === holding.currency,
-          );
-          const valueRate =
-            holding.currency === "USD"
-              ? (snapshot.result.exchangeRate ?? 1)
-              : 1;
-          const quantity =
-            holding.valueKrw / (holding.currentPrice * valueRate);
-          const averagePrice = holding.costKrw / (quantity * valueRate);
-
-          if (
-            !stock ||
-            !Number.isFinite(quantity) ||
-            quantity <= 0 ||
-            !Number.isFinite(averagePrice) ||
-            averagePrice <= 0
-          )
-            throw new Error(
-              `포트폴리오 입력값을 복원할 수 없습니다: ${holding.ticker}`,
-            );
-
-          return {
-            stockId: stock.stock_id,
-            averagePrice,
-            quantity,
+      const managed = await getManagedPortfolio(snapshot.userId);
+      const managedHoldings =
+        managed?.portfolio.status === "active"
+          ? calculateManagedHoldings(managed.transactions)
+          : null;
+      const managedInvestmentMonths =
+        managed?.portfolio.status === "active"
+          ? (() => {
+              const firstBoughtOn = managed.transactions.find(
+                (transaction) => transaction.type === "BUY",
+              )?.tradedOn;
+              return firstBoughtOn
+                ? investmentMonthsSince(firstBoughtOn, today)
+                : null;
+            })()
+          : null;
+      const holdings: AnalysisInput["holdings"] = managedHoldings
+        ? managedHoldings.map((holding) => ({
+            stockId: holding.stockId,
+            averagePrice: holding.averagePrice,
+            quantity: holding.quantity,
             currency: holding.currency,
             costKrw: holding.costKrw,
-          };
-        },
-      );
+          }))
+        : snapshot.result.holdings.map((holding) => {
+            const stock = stockRows.find(
+              (row) =>
+                row.ticker === holding.ticker &&
+                row.currency === holding.currency,
+            );
+            const valueRate =
+              holding.currency === "USD"
+                ? (snapshot.result.exchangeRate ?? 1)
+                : 1;
+            const quantity =
+              holding.valueKrw / (holding.currentPrice * valueRate);
+            const averagePrice = holding.costKrw / (quantity * valueRate);
+
+            if (
+              !stock ||
+              !Number.isFinite(quantity) ||
+              quantity <= 0 ||
+              !Number.isFinite(averagePrice) ||
+              averagePrice <= 0
+            )
+              throw new Error(
+                `포트폴리오 입력값을 복원할 수 없습니다: ${holding.ticker}`,
+              );
+
+            return {
+              stockId: stock.stock_id,
+              averagePrice,
+              quantity,
+              currency: holding.currency,
+              costKrw: holding.costKrw,
+            };
+          });
       const input: AnalysisInput = {
         goalAmount: snapshot.goalAmount,
         monthlyContribution: snapshot.monthlyContribution,
-        investmentPeriodMonths:
-          snapshot.result.investmentPeriodMonths === undefined
+        investmentPeriodMonths: managedHoldings
+          ? managedInvestmentMonths
+          : snapshot.result.investmentPeriodMonths === undefined
             ? 12
             : snapshot.result.investmentPeriodMonths,
         holdings,
@@ -163,6 +215,8 @@ export async function runAutomaticPortfolioAnalysis(): Promise<AutomaticAnalysis
       await saveDailyAnalysisSnapshot({
         userId: snapshot.userId,
         result: { ...result, aiStrategy: null },
+        analysisMode: snapshot.analysisMode as "quick" | "managed",
+        managedPortfolioId: snapshot.managedPortfolioId,
       });
       stats.analyzed += 1;
     } catch (error) {

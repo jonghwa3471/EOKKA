@@ -1,4 +1,5 @@
 import {
+  BriefcaseBusinessIcon,
   CalendarDaysIcon,
   ChartNoAxesCombinedIcon,
   SparklesIcon,
@@ -23,6 +24,11 @@ import SidebarUser from "./sidebar-user";
 
 const navigation = [
   { title: "대시보드", url: "/dashboard", icon: ChartNoAxesCombinedIcon },
+  {
+    title: "내 포트폴리오",
+    url: "/dashboard/portfolio",
+    icon: BriefcaseBusinessIcon,
+  },
   { title: "투자 인사이트", url: "/dashboard/insights", icon: SparklesIcon },
   { title: "분석 기록", url: "/dashboard/history", icon: CalendarDaysIcon },
 ];

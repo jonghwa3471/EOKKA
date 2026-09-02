@@ -12,6 +12,7 @@ import makeServerClient from "~/core/lib/supa-client.server";
 import { generateAiStrategy } from "../ai-strategy.server";
 import { type AnalysisInput, analyzePortfolio } from "../analysis.server";
 import { saveDailyAnalysisSnapshot } from "../history/analysis-history.server";
+import { getManagedPortfolio } from "../portfolio/portfolio.server";
 
 const MAX_REQUEST_SIZE = 10_000;
 const inputSchema = z
@@ -90,10 +91,13 @@ export async function action({ request }: Route.ActionArgs) {
         data: { user },
       } = await client.auth.getUser();
       if (user) {
-        await saveDailyAnalysisSnapshot({
-          userId: user.id,
-          result: completeResult,
-        });
+        const managed = await getManagedPortfolio(user.id);
+        if (managed?.portfolio.status !== "active") {
+          await saveDailyAnalysisSnapshot({
+            userId: user.id,
+            result: completeResult,
+          });
+        }
       }
     } catch (snapshotError) {
       // A storage problem must not discard an otherwise valid analysis.

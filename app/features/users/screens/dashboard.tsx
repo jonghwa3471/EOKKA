@@ -9,6 +9,7 @@ import {
   AwardIcon,
   CalendarDaysIcon,
   ChartNoAxesCombinedIcon,
+  ChevronDownIcon,
   Clock3Icon,
   CoinsIcon,
   CrownIcon,
@@ -38,12 +39,20 @@ import {
 import db from "~/core/db/drizzle-client.server";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
+import { analyzePortfolio } from "~/features/stocks/analysis.server";
 import {
   FREE_HISTORY_LIMIT,
-  getAnalysisHistory,
+  getActiveAnalysisHistory,
   getPreferredGoalAmount,
+  saveDailyAnalysisSnapshot,
+  seoulDate,
   setPreferredGoalAmount,
 } from "~/features/stocks/history/analysis-history.server";
+import {
+  calculateManagedHoldings,
+  getManagedPortfolio,
+  investmentMonthsSince,
+} from "~/features/stocks/portfolio/portfolio.server";
 import { stocks } from "~/features/stocks/schema";
 
 export const meta: Route.MetaFunction = () => [
@@ -58,7 +67,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const [allHistory, savedPreferredGoal] = user
     ? await Promise.all([
-        getAnalysisHistory(user.id),
+        getActiveAnalysisHistory(user.id),
         getPreferredGoalAmount(user.id),
       ])
     : [[], null];
@@ -148,8 +157,64 @@ export async function action({ request }: Route.ActionArgs) {
   if (!user) throw new Response("Unauthorized", { status: 401 });
 
   const formData = await request.formData();
+  const intent = String(formData.get("intent") ?? "set-preferred-goal");
+  if (intent === "refresh-managed-analysis") {
+    const [history, preferredGoalAmount, managed] = await Promise.all([
+      getActiveAnalysisHistory(user.id),
+      getPreferredGoalAmount(user.id),
+      getManagedPortfolio(user.id),
+    ]);
+    if (!managed || managed.portfolio.status !== "active")
+      throw new Response("Managed portfolio is not active", { status: 400 });
+    const goalOptions = [...new Set(history.map((item) => item.goalAmount))].sort(
+      (a, b) => a - b,
+    );
+    const goalAmount =
+      (preferredGoalAmount && goalOptions.includes(preferredGoalAmount)
+        ? preferredGoalAmount
+        : goalOptions.includes(100_000_000)
+          ? 100_000_000
+          : goalOptions[0]) ?? null;
+    const latest = goalAmount
+      ? history.filter((item) => item.goalAmount === goalAmount).at(-1)
+      : null;
+    if (!goalAmount || !latest)
+      throw new Response("Managed analysis configuration not found", {
+        status: 400,
+      });
+    const holdings = calculateManagedHoldings(managed.transactions);
+    const firstBoughtOn = managed.transactions.find(
+      (transaction) => transaction.type === "BUY",
+    )?.tradedOn;
+    if (!holdings.length || !firstBoughtOn)
+      throw new Response("Managed portfolio holdings not found", {
+        status: 400,
+      });
+    const result = await analyzePortfolio({
+      goalAmount,
+      monthlyContribution: latest.monthlyContribution,
+      investmentPeriodMonths: investmentMonthsSince(
+        firstBoughtOn,
+        seoulDate(),
+      ),
+      holdings: holdings.map((holding) => ({
+        stockId: holding.stockId,
+        averagePrice: holding.averagePrice,
+        quantity: holding.quantity,
+        currency: holding.currency,
+        costKrw: holding.costKrw,
+      })),
+    });
+    await saveDailyAnalysisSnapshot({
+      userId: user.id,
+      result,
+      analysisMode: "managed",
+      managedPortfolioId: managed.portfolio.managed_portfolio_id,
+    });
+    return redirect("/dashboard");
+  }
   const goalAmount = Number(formData.get("goalAmount"));
-  const history = await getAnalysisHistory(user.id);
+  const history = await getActiveAnalysisHistory(user.id);
   const validGoals = new Set(history.map((item) => item.goalAmount));
   if (!Number.isSafeInteger(goalAmount) || !validGoals.has(goalAmount)) {
     throw new Response("Invalid goal amount", { status: 400 });
@@ -159,7 +224,7 @@ export async function action({ request }: Route.ActionArgs) {
   return redirect("/dashboard");
 }
 
-type History = Awaited<ReturnType<typeof getAnalysisHistory>>;
+type History = Awaited<ReturnType<typeof getActiveAnalysisHistory>>;
 
 const won = new Intl.NumberFormat("ko-KR", {
   notation: "compact",
@@ -1897,6 +1962,13 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
     previous?.returnRate ?? null,
   );
   const profitChange = difference(latest.profit, previous?.profit ?? null);
+  const costChange = difference(
+    latest.result.totalCost,
+    previous?.result.totalCost ?? null,
+  );
+  const hasForeignHolding = latest.result.holdings.some(
+    (holding) => holding.currency === "USD",
+  );
   const annualizedReturnRate = latest.result.annualizedReturnRate ?? null;
   const previousAnnualizedReturnRate =
     previous?.result.annualizedReturnRate ?? null;
@@ -1934,34 +2006,65 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             <h1 className="mt-2 text-3xl font-black tracking-tight md:text-4xl">
               {name}님의 목표 현황
             </h1>
-            <p className="text-muted-foreground mt-2">
-              마지막 분석 {latest.savedOn} · 최근 {historyLimit}개 기록
-            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <p className="text-muted-foreground">
+                마지막 분석 {latest.savedOn} · 최근 {historyLimit}개 기록
+              </p>
+              <span
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[11px] font-black",
+                  latest.analysisMode === "managed"
+                    ? "bg-emerald-500/12 text-emerald-500"
+                    : "bg-muted text-muted-foreground",
+                )}
+              >
+                {latest.analysisMode === "managed"
+                  ? "정밀 분석 사용 중"
+                  : "빠른 분석 사용 중"}
+              </span>
+            </div>
           </div>
-          <Button asChild className="rounded-full">
-            <Link
-              to="/"
-              state={{
-                portfolioDraft: {
-                  holdings: updateDraft,
-                  targetEok: String(latest.goalAmount / 100_000_000),
-                  monthlyContribution: String(latest.monthlyContribution || ""),
-                  investmentYears: latest.result.investmentPeriodMonths
-                    ? String(
-                        Math.floor(latest.result.investmentPeriodMonths / 12),
-                      )
-                    : "",
-                  investmentMonths: latest.result.investmentPeriodMonths
-                    ? String(latest.result.investmentPeriodMonths % 12)
-                    : "",
-                  investmentPeriodUnknown:
-                    latest.result.investmentPeriodMonths == null,
-                },
-              }}
-            >
-              <RefreshCwIcon /> 오늘 분석 업데이트
-            </Link>
-          </Button>
+          {latest.analysisMode === "managed" ? (
+            <Form method="post">
+              <input
+                type="hidden"
+                name="intent"
+                value="refresh-managed-analysis"
+              />
+              <Button type="submit" className="rounded-full">
+                <RefreshCwIcon /> 오늘 분석 업데이트
+              </Button>
+            </Form>
+          ) : (
+            <Button asChild className="rounded-full">
+              <Link
+                to="/"
+                state={{
+                  portfolioDraft: {
+                    holdings: updateDraft,
+                    targetEok: String(latest.goalAmount / 100_000_000),
+                    monthlyContribution: String(
+                      latest.monthlyContribution || "",
+                    ),
+                    investmentYears: latest.result.investmentPeriodMonths
+                      ? String(
+                          Math.floor(
+                            latest.result.investmentPeriodMonths / 12,
+                          ),
+                        )
+                      : "",
+                    investmentMonths: latest.result.investmentPeriodMonths
+                      ? String(latest.result.investmentPeriodMonths % 12)
+                      : "",
+                    investmentPeriodUnknown:
+                      latest.result.investmentPeriodMonths == null,
+                  },
+                }}
+              >
+                <RefreshCwIcon /> 오늘 분석 업데이트
+              </Link>
+            </Button>
+          )}
         </header>
 
         {goalOptions.length > 1 && (
@@ -2069,6 +2172,108 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             }
           />
         </section>
+
+        <details className="group bg-card mt-4 overflow-hidden rounded-3xl border shadow-sm">
+          <summary className="hover:bg-muted/35 flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 transition-colors marker:hidden md:px-6">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 text-violet-500">
+                <ScaleIcon className="size-4.5" />
+              </span>
+              <div className="min-w-0">
+                <p className="font-black">계산 내역 보기</p>
+                <p className="text-muted-foreground mt-0.5 truncate text-xs">
+                  평가금액·매입원금·평가손익과 환율 적용 기준
+                </p>
+              </div>
+            </div>
+            <ChevronDownIcon className="text-muted-foreground size-5 shrink-0 transition-transform duration-200 group-open:rotate-180" />
+          </summary>
+
+          <div className="border-t px-5 py-5 md:px-6 md:py-6">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <CalculationValue
+                label="현재 평가금액"
+                value={formatWon(latest.currentValue)}
+                description="현재가 × 수량을 원화로 합산"
+              />
+              <CalculationValue
+                label="원화 매입원금"
+                value={formatWon(latest.result.totalCost)}
+                description="보유 종목의 원화 매입금액 합계"
+              />
+              <CalculationValue
+                label="현재 평가손익"
+                value={formatWon(latest.profit)}
+                valueClass={
+                  latest.profit >= 0 ? "text-rose-500" : "text-blue-500"
+                }
+                description="평가금액 − 원화 매입원금"
+              />
+              <CalculationValue
+                label="현재 수익률"
+                value={formatRate(latest.returnRate)}
+                valueClass={
+                  latest.returnRate >= 0 ? "text-rose-500" : "text-blue-500"
+                }
+                description="평가손익 ÷ 원화 매입원금"
+              />
+            </div>
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <div className="bg-muted/25 rounded-2xl border p-4">
+                <p className="text-sm font-black">직전 기록과 비교</p>
+                {previous ? (
+                  <>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      {previous.savedOn} → {latest.savedOn}
+                    </p>
+                    <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+                      <CalculationChange label="평가금액" value={assetChange} />
+                      <CalculationChange label="매입원금" value={costChange} />
+                      <CalculationChange
+                        label="평가손익"
+                        value={profitChange}
+                      />
+                    </dl>
+                  </>
+                ) : (
+                  <p className="text-muted-foreground mt-2 text-xs leading-5">
+                    기록이 하나 더 쌓이면 각 금액이 왜 변했는지 비교해 드려요.
+                  </p>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-sky-500/20 bg-sky-500/[0.06] p-4">
+                <p className="text-sm font-black">환율과 매입원금 기준</p>
+                {hasForeignHolding ? (
+                  <div className="text-muted-foreground mt-2 space-y-2 text-xs leading-5">
+                    <p>
+                      현재 해외주식 평가에는{" "}
+                      <strong className="text-foreground">
+                        1달러당{" "}
+                        {(latest.result.exchangeRate ?? 0).toLocaleString(
+                          "ko-KR",
+                        )}
+                        원
+                      </strong>
+                      을 적용했어요.
+                    </p>
+                    <p>
+                      첫 분석은 입력한 달러 평균가를 분석일 환율로 환산하며,
+                      이후 종목·수량·평균가가 같으면 저장된 원화 매입원금을
+                      유지해요.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground mt-2 text-xs leading-5">
+                    국내 종목만 포함되어 있어 별도의 환율 환산을 적용하지
+                    않았어요.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </details>
 
         <section className="mt-5 grid gap-5 xl:grid-cols-[1.65fr_1fr]">
           <div className="bg-card flex min-h-[430px] flex-col rounded-3xl border p-5 shadow-sm md:p-7">
@@ -2264,6 +2469,58 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
         </section>
       </div>
     </main>
+  );
+}
+
+function CalculationValue({
+  label,
+  value,
+  description,
+  valueClass,
+}: {
+  label: string;
+  value: string;
+  description: string;
+  valueClass?: string;
+}) {
+  return (
+    <div className="bg-muted/25 rounded-2xl border p-4">
+      <p className="text-muted-foreground text-xs font-semibold">{label}</p>
+      <p className={cn("mt-2 text-lg font-black tabular-nums", valueClass)}>
+        {value}
+      </p>
+      <p className="text-muted-foreground mt-1 text-[11px] leading-5">
+        {description}
+      </p>
+    </div>
+  );
+}
+
+function CalculationChange({
+  label,
+  value,
+}: {
+  label: string;
+  value: number | null;
+}) {
+  const tone =
+    value === null || value === 0
+      ? "text-muted-foreground"
+      : value > 0
+        ? "text-rose-500"
+        : "text-blue-500";
+
+  return (
+    <div>
+      <dt className="text-muted-foreground text-[11px]">{label}</dt>
+      <dd className={cn("mt-1 font-black tabular-nums", tone)}>
+        {value === null
+          ? "비교 불가"
+          : value === 0
+            ? "변화 없음"
+            : `${value > 0 ? "+" : ""}${formatWon(value)}`}
+      </dd>
+    </div>
   );
 }
 

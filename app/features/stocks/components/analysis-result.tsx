@@ -1944,10 +1944,12 @@ export function AnalysisResultView({
   result,
   showAuthCta = true,
   showContributionDetails = false,
+  onStartManagedAnalysis,
 }: {
   result: AnalysisResult;
   showAuthCta?: boolean;
   showContributionDetails?: boolean;
+  onStartManagedAnalysis?: () => void;
 }) {
   const { ref: metricsRef, isRevealed: areMetricsRevealed } =
     useChartRevealOnce<HTMLDivElement>();
@@ -2297,14 +2299,6 @@ export function AnalysisResultView({
         <p className="text-muted-foreground mt-2 text-sm font-medium">
           현재 평가금액 기준 {won(remainingToGoal)} 남았어요
         </p>
-        {showContributionDetails &&
-          result.monthlyContribution > 0 &&
-          contributedBase && (
-            <p className="mt-2 text-sm font-bold text-sky-600 dark:text-sky-400">
-              매월 {compactWon(result.monthlyContribution)} 투자 시{" "}
-              {remainingPeriodLabel(contributedBase.goalMonth)}
-            </p>
-          )}
       </div>
 
       {result.monthlyContribution > 0 && contributedBase && (
@@ -2830,6 +2824,30 @@ export function AnalysisResultView({
           ))}
         </ul>
       </div>
+
+      {onStartManagedAnalysis && (
+        <div className="mt-5 rounded-2xl border border-violet-500/25 bg-gradient-to-br from-violet-500/10 to-emerald-500/5 p-5 sm:flex sm:items-center sm:justify-between sm:gap-6 sm:p-6">
+          <div>
+            <p className="text-xs font-bold text-violet-500">
+              이 결과를 더 정확하게 관리하고 싶다면
+            </p>
+            <h3 className="mt-1 text-lg font-black">
+              정밀 분석으로 이어가세요
+            </h3>
+            <p className="text-muted-foreground mt-2 max-w-xl text-sm leading-6">
+              입력한 종목·평균 매수가·수량은 그대로 가져가고, 종목별 매수 날짜만
+              추가하면 당시 환율까지 자동 반영해요.
+            </p>
+          </div>
+          <Button
+            type="button"
+            onClick={onStartManagedAnalysis}
+            className="mt-5 shrink-0 sm:mt-0"
+          >
+            정밀 분석으로 전환 <ArrowRightIcon />
+          </Button>
+        </div>
+      )}
 
       {showAuthCta && (
         <div className="mt-5 rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 to-teal-500/5 p-5 sm:flex sm:items-center sm:justify-between sm:gap-6 sm:p-6">

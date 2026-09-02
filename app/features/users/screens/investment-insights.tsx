@@ -15,7 +15,7 @@ import { Button } from "~/core/components/ui/button";
 import makeServerClient from "~/core/lib/supa-client.server";
 import {
   FREE_HISTORY_LIMIT,
-  getAnalysisHistory,
+  getActiveAnalysisHistory,
   getPreferredGoalAmount,
   setPreferredGoalAmount,
 } from "~/features/stocks/history/analysis-history.server";
@@ -232,7 +232,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (!user) throw redirect("/login");
 
   const [allHistory, savedPreferredGoal] = await Promise.all([
-    getAnalysisHistory(user.id),
+    getActiveAnalysisHistory(user.id),
     getPreferredGoalAmount(user.id),
   ]);
   const goalOptions = [
@@ -270,7 +270,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   const formData = await request.formData();
   const goalAmount = Number(formData.get("goalAmount"));
-  const history = await getAnalysisHistory(user.id);
+  const history = await getActiveAnalysisHistory(user.id);
   const validGoals = new Set(history.map((item) => item.goalAmount));
   if (!Number.isSafeInteger(goalAmount) || !validGoals.has(goalAmount)) {
     throw new Response("Invalid goal amount", { status: 400 });

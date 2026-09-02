@@ -7,6 +7,7 @@ import {
   jsonb,
   pgPolicy,
   pgTable,
+  text,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -14,6 +15,7 @@ import { authUid, authUsers, authenticatedRole } from "drizzle-orm/supabase";
 
 import { timestamps } from "~/core/db/helpers.server";
 import type { AnalysisResult } from "~/features/stocks/analysis.types";
+import { managedPortfolios } from "~/features/stocks/portfolio/schema";
 
 export const analysisSnapshots = pgTable(
   "analysis_snapshots",
@@ -31,6 +33,11 @@ export const analysisSnapshots = pgTable(
     return_rate: doublePrecision().notNull(),
     goal_month: integer(),
     monthly_contribution: bigint({ mode: "number" }).notNull().default(0),
+    analysis_mode: text().notNull().default("quick"),
+    managed_portfolio_id: bigint({ mode: "number" }).references(
+      () => managedPortfolios.managed_portfolio_id,
+      { onDelete: "set null" },
+    ),
     result: jsonb().$type<AnalysisResult>().notNull(),
     ...timestamps,
   },
@@ -39,6 +46,7 @@ export const analysisSnapshots = pgTable(
       table.user_id,
       table.goal_amount,
       table.saved_on,
+      table.analysis_mode,
     ),
     pgPolicy("select-own-analysis-snapshots", {
       for: "select",

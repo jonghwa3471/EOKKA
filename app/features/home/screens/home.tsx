@@ -35,11 +35,12 @@ import type { AnalysisResult } from "~/features/stocks/analysis.types";
 import { AnalysisResultView } from "~/features/stocks/components/analysis-result";
 import { StockAutocomplete } from "~/features/stocks/components/stock-autocomplete";
 import {
-  getAnalysisHistory,
+  getActiveAnalysisHistory,
   getPreferredGoalAmount,
   seoulDate,
 } from "~/features/stocks/history/analysis-history.server";
 import { getStockMarketMode } from "~/features/stocks/market-mode.server";
+import { isManagedPortfolioActive } from "~/features/stocks/portfolio/portfolio.server";
 import type { StockSearchResult } from "~/features/stocks/types";
 
 export const meta: Route.MetaFunction = ({ data }) => [
@@ -54,12 +55,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     data: { user },
   } = await client.auth.getUser();
 
-  const [allHistory, savedPreferredGoal] = user
+  const [allHistory, savedPreferredGoal, managedAnalysisActive] = user
     ? await Promise.all([
-        getAnalysisHistory(user.id),
+        getActiveAnalysisHistory(user.id),
         getPreferredGoalAmount(user.id),
+        isManagedPortfolioActive(user.id),
       ])
-    : [[], null];
+    : [[], null, false];
   const goalOptions = [
     ...new Set(allHistory.map((item) => item.goalAmount)),
   ].sort((a, b) => a - b);
@@ -130,6 +132,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     subtitle: "보유 주식을 입력하고 목표까지 얼마나 남았는지 확인해보세요.",
     marketMode: getStockMarketMode(),
     isAuthenticated: user !== null,
+    managedAnalysisActive,
     moneyInsights:
       latest && preferredGoal
         ? {
@@ -964,7 +967,7 @@ function JackpotGoal() {
 }
 
 export default function Home() {
-  const { marketMode, isAuthenticated, moneyInsights } =
+  const { marketMode, isAuthenticated, managedAnalysisActive, moneyInsights } =
     useLoaderData<typeof loader>();
   const location = useLocation();
   const navigate = useNavigate();
@@ -1347,6 +1350,26 @@ export default function Home() {
         matrixTrailRef.current = [];
       }}
     >
+      {isAnalyzing && (
+        <div
+          className="fixed inset-0 z-[9999] flex cursor-wait items-center justify-center bg-background/60 backdrop-blur-sm"
+          role="status"
+          aria-live="polite"
+          aria-label="포트폴리오 분석 중"
+        >
+          <div className="border-border/70 bg-card/95 flex items-center gap-3 rounded-2xl border px-5 py-4 shadow-2xl">
+            <span className="flex size-9 items-center justify-center rounded-xl bg-emerald-500/12 text-emerald-500">
+              <LoaderCircleIcon className="size-5 animate-spin" />
+            </span>
+            <div>
+              <p className="text-sm font-black">포트폴리오를 분석하고 있어요</p>
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                시세와 목표 달성 시점을 계산하고 있어요.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       <CurrencyMatrixSpotlight
         canvasRef={matrixCanvasRef}
         trailRef={matrixTrailRef}
@@ -1412,479 +1435,518 @@ export default function Home() {
             </div>
 
             {tab === "quick" ? (
-              <div className="bg-card/90 rounded-3xl border shadow-2xl shadow-black/5 backdrop-blur dark:shadow-black/20">
-                <div className="border-b px-5 py-5 sm:px-8">
-                  <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
-                    <div className="flex items-start gap-3">
-                      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
-                        <TrendingUpIcon className="size-5" />
-                      </div>
-                      <div>
-                        <h2 className="text-lg font-bold">
-                          보유 주식을 알려주세요
-                        </h2>
-                        <p className="text-muted-foreground mt-1 text-sm">
-                          {isGlobalTest
-                            ? "국내 주식과 미국 주식을 KIS 시세로 테스트할 수 있어요."
-                            : "국내 주식과 ETF·ETN을 입력할 수 있어요. 로그인하면 분석 결과를 저장하고, 추가 매수 후에도 이어서 분석할 수 있어요."}
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={clearStoredPortfolio}
-                      className="border-red-500/40 text-red-500 hover:border-red-500 hover:bg-red-500/10 hover:text-red-500"
-                    >
-                      <Trash2Icon className="size-4" />
-                      현재 탭의 정보 삭제
-                    </Button>
-                  </div>
-                </div>
-
-                <form
-                  className="space-y-7 px-5 py-6 sm:px-8 sm:py-8"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void analyze();
-                  }}
-                >
-                  <div className="space-y-4">
-                    {holdings.map((holding, index) => (
-                      <div
-                        key={holding.id}
-                        className="bg-muted/35 rounded-2xl border p-4 sm:p-5"
-                      >
-                        <div className="mb-4 flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-sm font-bold">
-                            <span className="flex size-6 items-center justify-center rounded-full bg-emerald-500 text-xs text-white">
-                              {index + 1}
-                            </span>
-                            보유 종목
-                          </div>
-                          {holdings.length > 1 && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              aria-label={`${index + 1}번째 종목 삭제`}
-                              onClick={() =>
-                                setHoldings((items) =>
-                                  items.filter(({ id }) => id !== holding.id),
-                                )
-                              }
-                              className="text-muted-foreground hover:text-destructive size-8"
-                            >
-                              <Trash2Icon className="size-4" />
-                            </Button>
-                          )}
+              <>
+                <div className="bg-card/90 rounded-3xl border shadow-2xl shadow-black/5 backdrop-blur dark:shadow-black/20">
+                  <div className="border-b px-5 py-5 sm:px-8">
+                    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+                      <div className="flex items-start gap-3">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
+                          <TrendingUpIcon className="size-5" />
                         </div>
+                        <div>
+                          <h2 className="text-lg font-bold">
+                            보유 주식을 알려주세요
+                          </h2>
+                          <p className="text-muted-foreground mt-1 text-sm">
+                            {isGlobalTest
+                              ? "국내 주식과 미국 주식을 KIS 시세로 테스트할 수 있어요."
+                              : "국내 주식과 ETF·ETN을 입력할 수 있어요. 로그인하면 분석 결과를 저장하고, 추가 매수 후에도 이어서 분석할 수 있어요."}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={clearStoredPortfolio}
+                        className="border-red-500/40 text-red-500 hover:border-red-500 hover:bg-red-500/10 hover:text-red-500"
+                      >
+                        <Trash2Icon className="size-4" />
+                        현재 탭의 정보 삭제
+                      </Button>
+                    </div>
+                  </div>
 
-                        <div className="grid gap-4 md:grid-cols-[1.35fr_1fr_1fr]">
-                          <Field
-                            label="종목명 또는 티커"
-                            id={`symbol-${holding.id}`}
-                          >
-                            <StockAutocomplete
+                  <div className="border-b bg-gradient-to-r from-emerald-500/[0.06] via-transparent to-violet-500/[0.06] px-5 py-4 sm:px-8">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-violet-500/12 text-violet-500">
+                          <SparklesIcon className="size-4" />
+                        </span>
+                        <div>
+                          <p className="text-sm font-black">
+                            거래 날짜와 당시 환율까지 기록하고 싶나요?
+                          </p>
+                          <p className="text-muted-foreground mt-1 text-xs leading-5">
+                            매매일지를 기반으로 더 정확하게 분석할 수 있어요.
+                          </p>
+                        </div>
+                      </div>
+                      <Link
+                        to="/dashboard/portfolio?start=precise"
+                        className="bg-background/70 inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border border-violet-500/25 px-4 text-xs font-black text-violet-600 shadow-sm transition-all hover:border-violet-500/50 hover:bg-violet-500/10 dark:text-violet-400"
+                      >
+                        정밀 분석으로 시작하기
+                        <ArrowRightIcon className="size-3.5" />
+                      </Link>
+                    </div>
+                    {managedAnalysisActive && (
+                      <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.07] px-3 py-2.5 text-xs leading-5 font-semibold text-amber-700 dark:text-amber-400">
+                        <Clock3Icon className="mt-0.5 size-3.5 shrink-0" />
+                        <span>
+                          정밀 분석 사용 중에는 빠른 분석 결과가 분석 기록과
+                          대시보드에 저장되지 않아요.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <form
+                    className="space-y-7 px-5 py-6 sm:px-8 sm:py-8"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void analyze();
+                    }}
+                  >
+                    <div className="space-y-4">
+                      {holdings.map((holding, index) => (
+                        <div
+                          key={holding.id}
+                          className="bg-muted/35 rounded-2xl border p-4 sm:p-5"
+                        >
+                          <div className="mb-4 flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-sm font-bold">
+                              <span className="flex size-6 items-center justify-center rounded-full bg-emerald-500 text-xs text-white">
+                                {index + 1}
+                              </span>
+                              보유 종목
+                            </div>
+                            {holdings.length > 1 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`${index + 1}번째 종목 삭제`}
+                                onClick={() =>
+                                  setHoldings((items) =>
+                                    items.filter(({ id }) => id !== holding.id),
+                                  )
+                                }
+                                className="text-muted-foreground hover:text-destructive size-8"
+                              >
+                                <Trash2Icon className="size-4" />
+                              </Button>
+                            )}
+                          </div>
+
+                          <div className="grid gap-4 md:grid-cols-[1.35fr_1fr_1fr]">
+                            <Field
+                              label="종목명 또는 티커"
                               id={`symbol-${holding.id}`}
-                              value={holding.symbol}
-                              selectedStock={holding.selectedStock}
-                              onValueChange={(value) =>
-                                updateHoldingSymbol(holding.id, value)
-                              }
-                              onSelect={(stock) =>
-                                selectStock(holding.id, stock)
-                              }
-                            />
-                          </Field>
+                            >
+                              <StockAutocomplete
+                                id={`symbol-${holding.id}`}
+                                value={holding.symbol}
+                                selectedStock={holding.selectedStock}
+                                onValueChange={(value) =>
+                                  updateHoldingSymbol(holding.id, value)
+                                }
+                                onSelect={(stock) =>
+                                  selectStock(holding.id, stock)
+                                }
+                              />
+                            </Field>
 
-                          <Field
-                            label={
-                              <>
-                                평균 매수가
-                                {isGlobalTest && holding.currency === "USD" && (
-                                  <span className="text-muted-foreground ml-1 text-[11px] font-normal">
-                                    (달러는 소수점 없이 입력)
-                                  </span>
+                            <Field
+                              label={
+                                <>
+                                  평균 매수가
+                                  {isGlobalTest &&
+                                    holding.currency === "USD" && (
+                                      <span className="text-muted-foreground ml-1 text-[11px] font-normal">
+                                        (달러는 소수점 없이 입력)
+                                      </span>
+                                    )}
+                                </>
+                              }
+                              id={`price-${holding.id}`}
+                            >
+                              <div className="flex gap-2">
+                                {isGlobalTest && (
+                                  <div
+                                    className="bg-muted flex h-11 shrink-0 rounded-md p-1"
+                                    aria-label="매수 통화"
+                                  >
+                                    {(["KRW", "USD"] as const).map(
+                                      (currency) => (
+                                        <button
+                                          key={currency}
+                                          type="button"
+                                          aria-pressed={
+                                            holding.currency === currency
+                                          }
+                                          onClick={() =>
+                                            updateCurrency(holding.id, currency)
+                                          }
+                                          className={cn(
+                                            "min-w-9 rounded-sm px-2 text-sm font-bold transition-all",
+                                            holding.currency === currency
+                                              ? "bg-background text-foreground shadow-sm"
+                                              : "text-muted-foreground hover:text-foreground",
+                                          )}
+                                        >
+                                          {currency === "KRW" ? "₩" : "$"}
+                                        </button>
+                                      ),
+                                    )}
+                                  </div>
                                 )}
-                              </>
-                            }
-                            id={`price-${holding.id}`}
-                          >
-                            <div className="flex gap-2">
-                              {isGlobalTest && (
-                                <div
-                                  className="bg-muted flex h-11 shrink-0 rounded-md p-1"
-                                  aria-label="매수 통화"
-                                >
-                                  {(["KRW", "USD"] as const).map((currency) => (
-                                    <button
-                                      key={currency}
-                                      type="button"
-                                      aria-pressed={
-                                        holding.currency === currency
-                                      }
-                                      onClick={() =>
-                                        updateCurrency(holding.id, currency)
-                                      }
-                                      className={cn(
-                                        "min-w-9 rounded-sm px-2 text-sm font-bold transition-all",
-                                        holding.currency === currency
-                                          ? "bg-background text-foreground shadow-sm"
-                                          : "text-muted-foreground hover:text-foreground",
-                                      )}
-                                    >
-                                      {currency === "KRW" ? "₩" : "$"}
-                                    </button>
-                                  ))}
+                                <div className="relative min-w-0 flex-1">
+                                  <span className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm">
+                                    {holding.currency === "KRW" ? "₩" : "$"}
+                                  </span>
+                                  <Input
+                                    id={`price-${holding.id}`}
+                                    type="text"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    value={holding.averagePrice}
+                                    onChange={(event) =>
+                                      updateHolding(
+                                        holding.id,
+                                        "averagePrice",
+                                        event.target.value.replace(/\D/g, ""),
+                                      )
+                                    }
+                                    placeholder={
+                                      holding.currency === "KRW"
+                                        ? "예: 70000"
+                                        : "예: 180"
+                                    }
+                                    className="bg-background h-11 pl-7"
+                                  />
                                 </div>
-                              )}
-                              <div className="relative min-w-0 flex-1">
-                                <span className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm">
-                                  {holding.currency === "KRW" ? "₩" : "$"}
-                                </span>
+                              </div>
+                            </Field>
+
+                            <Field
+                              label="보유 수량"
+                              id={`quantity-${holding.id}`}
+                            >
+                              <div className="relative">
                                 <Input
-                                  id={`price-${holding.id}`}
-                                  type="text"
-                                  inputMode="numeric"
-                                  pattern="[0-9]*"
-                                  value={holding.averagePrice}
+                                  id={`quantity-${holding.id}`}
+                                  type="number"
+                                  min="0"
+                                  step="0.000001"
+                                  inputMode="decimal"
+                                  value={holding.quantity}
                                   onChange={(event) =>
                                     updateHolding(
                                       holding.id,
-                                      "averagePrice",
-                                      event.target.value.replace(/\D/g, ""),
+                                      "quantity",
+                                      event.target.value,
                                     )
                                   }
-                                  placeholder={
-                                    holding.currency === "KRW"
-                                      ? "예: 70000"
-                                      : "예: 180"
-                                  }
-                                  className="bg-background h-11 pl-7"
+                                  placeholder="20"
+                                  className="bg-background h-11 pr-9"
                                 />
+                                <span className="text-muted-foreground absolute top-1/2 right-3 -translate-y-1/2 text-sm">
+                                  주
+                                </span>
                               </div>
-                            </div>
-                          </Field>
-
-                          <Field
-                            label="보유 수량"
-                            id={`quantity-${holding.id}`}
-                          >
-                            <div className="relative">
-                              <Input
-                                id={`quantity-${holding.id}`}
-                                type="number"
-                                min="0"
-                                step="0.000001"
-                                inputMode="decimal"
-                                value={holding.quantity}
-                                onChange={(event) =>
-                                  updateHolding(
-                                    holding.id,
-                                    "quantity",
-                                    event.target.value,
-                                  )
-                                }
-                                placeholder="20"
-                                className="bg-background h-11 pr-9"
-                              />
-                              <span className="text-muted-foreground absolute top-1/2 right-3 -translate-y-1/2 text-sm">
-                                주
-                              </span>
-                            </div>
-                          </Field>
+                            </Field>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
 
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={addHolding}
-                      disabled={holdings.length >= 10}
-                      className="h-11 w-full border-dashed"
-                    >
-                      <PlusIcon />
-                      {holdings.length >= 10
-                        ? "최대 10개까지 추가할 수 있어요"
-                        : `종목 추가하기 (${holdings.length}/10)`}
-                    </Button>
-                  </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={addHolding}
+                        disabled={holdings.length >= 10}
+                        className="h-11 w-full border-dashed"
+                      >
+                        <PlusIcon />
+                        {holdings.length >= 10
+                          ? "최대 10개까지 추가할 수 있어요"
+                          : `종목 추가하기 (${holdings.length}/10)`}
+                      </Button>
+                    </div>
 
-                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 sm:p-5">
-                    <div>
-                      <Label htmlFor="investment-years" className="font-bold">
-                        주식 투자를 시작한 지 얼마나 됐나요?
-                      </Label>
-                      <p className="text-muted-foreground mt-1 text-xs">
-                        현재 누적 수익률을 대략적인 연평균 수익률로 환산하는 데
-                        사용해요.
-                      </p>
-                      <div className="mt-3 flex max-w-sm items-center gap-2">
-                        <div className="relative flex-1">
-                          <Input
-                            id="investment-years"
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            value={investmentYears}
-                            disabled={investmentPeriodUnknown}
-                            onChange={(event) => {
-                              const value = event.target.value
-                                .replace(/\D/g, "")
-                                .slice(0, 3);
-                              setInvestmentYears(
-                                value
-                                  ? String(Math.min(Number(value), 100))
-                                  : "",
-                              );
-                            }}
-                            placeholder="예: 3"
-                            className="bg-background h-11 pr-9 text-right font-bold tabular-nums"
-                          />
-                          <span className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm">
-                            년
-                          </span>
-                        </div>
-                        <div className="relative flex-1">
-                          <Input
-                            id="investment-months"
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            value={investmentMonths}
-                            disabled={investmentPeriodUnknown}
-                            onChange={(event) => {
-                              const value = event.target.value
-                                .replace(/\D/g, "")
-                                .slice(0, 2);
-                              setInvestmentMonths(
-                                value
-                                  ? String(Math.min(Number(value), 11))
-                                  : "",
-                              );
-                            }}
-                            placeholder="예: 6"
-                            aria-label="추가 투자 개월 수"
-                            className="bg-background h-11 pr-12 text-right font-bold tabular-nums"
-                          />
-                          <span className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm">
-                            개월
-                          </span>
-                        </div>
-                      </div>
-                      <div className="mt-3 flex items-start gap-2.5">
-                        <Checkbox
-                          id="investment-period-unknown"
-                          checked={investmentPeriodUnknown}
-                          onCheckedChange={(checked) => {
-                            const isUnknown = checked === true;
-                            setInvestmentPeriodUnknown(isUnknown);
-                            if (isUnknown) {
-                              setInvestmentYears("");
-                              setInvestmentMonths("");
-                            }
-                          }}
-                          className="mt-0.5"
-                        />
-                        <Label
-                          htmlFor="investment-period-unknown"
-                          className="text-muted-foreground cursor-pointer text-sm leading-5 font-medium"
-                        >
-                          1개월 미만이거나 투자 기간을 잘 모르겠어요
+                    <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 sm:p-5">
+                      <div>
+                        <Label htmlFor="investment-years" className="font-bold">
+                          주식 투자를 시작한 지 얼마나 됐나요?
                         </Label>
+                        <p className="text-muted-foreground mt-1 text-xs">
+                          현재 누적 수익률을 대략적인 연평균 수익률로 환산하는
+                          데 사용해요.
+                        </p>
+                        <div className="mt-3 flex max-w-sm items-center gap-2">
+                          <div className="relative flex-1">
+                            <Input
+                              id="investment-years"
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={investmentYears}
+                              disabled={investmentPeriodUnknown}
+                              onChange={(event) => {
+                                const value = event.target.value
+                                  .replace(/\D/g, "")
+                                  .slice(0, 3);
+                                setInvestmentYears(
+                                  value
+                                    ? String(Math.min(Number(value), 100))
+                                    : "",
+                                );
+                              }}
+                              placeholder="예: 3"
+                              className="bg-background h-11 pr-9 text-right font-bold tabular-nums"
+                            />
+                            <span className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm">
+                              년
+                            </span>
+                          </div>
+                          <div className="relative flex-1">
+                            <Input
+                              id="investment-months"
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={investmentMonths}
+                              disabled={investmentPeriodUnknown}
+                              onChange={(event) => {
+                                const value = event.target.value
+                                  .replace(/\D/g, "")
+                                  .slice(0, 2);
+                                setInvestmentMonths(
+                                  value
+                                    ? String(Math.min(Number(value), 11))
+                                    : "",
+                                );
+                              }}
+                              placeholder="예: 6"
+                              aria-label="추가 투자 개월 수"
+                              className="bg-background h-11 pr-12 text-right font-bold tabular-nums"
+                            />
+                            <span className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm">
+                              개월
+                            </span>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex items-start gap-2.5">
+                          <Checkbox
+                            id="investment-period-unknown"
+                            checked={investmentPeriodUnknown}
+                            onCheckedChange={(checked) => {
+                              const isUnknown = checked === true;
+                              setInvestmentPeriodUnknown(isUnknown);
+                              if (isUnknown) {
+                                setInvestmentYears("");
+                                setInvestmentMonths("");
+                              }
+                            }}
+                            className="mt-0.5"
+                          />
+                          <Label
+                            htmlFor="investment-period-unknown"
+                            className="text-muted-foreground cursor-pointer text-sm leading-5 font-medium"
+                          >
+                            1개월 미만이거나 투자 기간을 잘 모르겠어요
+                          </Label>
+                        </div>
+                        {investmentPeriodMonths !== null &&
+                          investmentPeriodMonths > 0 &&
+                          investmentPeriodMonths <= 1_200 && (
+                            <p className="mt-2 text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                              투자 기간 약{" "}
+                              {Math.floor(investmentPeriodMonths / 12) > 0
+                                ? `${Math.floor(investmentPeriodMonths / 12)}년 `
+                                : ""}
+                              {investmentPeriodMonths % 12 > 0
+                                ? `${investmentPeriodMonths % 12}개월`
+                                : ""}
+                            </p>
+                          )}
                       </div>
-                      {investmentPeriodMonths !== null &&
-                        investmentPeriodMonths > 0 &&
-                        investmentPeriodMonths <= 1_200 && (
+
+                      <div className="mt-5 border-t border-emerald-500/15 pt-5">
+                        <Label htmlFor="target-amount" className="font-bold">
+                          몇 억을 목표로 하나요?
+                        </Label>
+                        <p className="text-muted-foreground mt-1 text-xs">
+                          1억부터 1,000억까지 원하는 목표를 입력할 수 있어요.
+                        </p>
+                        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                          <div className="relative sm:w-44">
+                            <Input
+                              id="target-amount"
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={targetEok}
+                              onChange={(event) =>
+                                setTargetEok(
+                                  event.target.value
+                                    .replace(/\D/g, "")
+                                    .slice(0, 4),
+                                )
+                              }
+                              className="bg-background h-11 pr-9 text-right text-base font-bold"
+                              aria-describedby="target-amount-unit"
+                            />
+                            <span
+                              id="target-amount-unit"
+                              className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm"
+                            >
+                              억
+                            </span>
+                          </div>
+                          <div className="grid flex-1 grid-cols-3 gap-2">
+                            {GOAL_PRESETS.map((goal) => (
+                              <button
+                                key={goal}
+                                type="button"
+                                onClick={() => setTargetEok(String(goal))}
+                                className={cn(
+                                  "h-11 rounded-lg border text-sm font-semibold transition-colors",
+                                  targetEok === String(goal)
+                                    ? "border-emerald-500 bg-emerald-500 text-white"
+                                    : "bg-background hover:border-emerald-500/50",
+                                )}
+                              >
+                                {goal}억
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-5 border-t border-emerald-500/15 pt-5">
+                        <Label
+                          htmlFor="monthly-contribution"
+                          className="font-bold"
+                        >
+                          매월 추가 투자금{" "}
+                          <span className="text-muted-foreground text-xs font-normal">
+                            (선택)
+                          </span>
+                        </Label>
+                        <p className="text-muted-foreground mt-1 text-xs">
+                          매달 같은 금액을 현재 포트폴리오 비중대로 투자한다고
+                          가정해 목표 기간이 얼마나 줄어드는지 비교해요.
+                        </p>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <div className="relative w-full sm:w-80">
+                            <Input
+                              id="monthly-contribution"
+                              type="text"
+                              inputMode="numeric"
+                              value={
+                                monthlyContribution
+                                  ? monthlyContributionAmount.toLocaleString(
+                                      "ko-KR",
+                                    )
+                                  : ""
+                              }
+                              onChange={(event) =>
+                                updateMonthlyContribution(event.target.value)
+                              }
+                              placeholder="예: 1,000,000"
+                              className="bg-background h-11 pr-12 text-right font-bold tabular-nums"
+                            />
+                            <span className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm">
+                              원
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {MONTHLY_CONTRIBUTION_PRESETS.map((amount) => (
+                              <button
+                                key={amount}
+                                type="button"
+                                onClick={() => addMonthlyContribution(amount)}
+                                className="bg-background h-8 rounded-full border px-3 text-xs font-semibold transition-colors hover:border-emerald-500/60 hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400"
+                                aria-label={`월 투자금에 ${formatKoreanMoney(amount)} 추가`}
+                              >
+                                +{formatKoreanMoney(amount)}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        {monthlyContributionAmount > 0 && (
                           <p className="mt-2 text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                            투자 기간 약{" "}
-                            {Math.floor(investmentPeriodMonths / 12) > 0
-                              ? `${Math.floor(investmentPeriodMonths / 12)}년 `
-                              : ""}
-                            {investmentPeriodMonths % 12 > 0
-                              ? `${investmentPeriodMonths % 12}개월`
-                              : ""}
+                            {`매월 ${formatKoreanMoney(monthlyContributionAmount)}씩 투자`}
                           </p>
                         )}
-                    </div>
-
-                    <div className="mt-5 border-t border-emerald-500/15 pt-5">
-                      <Label htmlFor="target-amount" className="font-bold">
-                        몇 억을 목표로 하나요?
-                      </Label>
-                      <p className="text-muted-foreground mt-1 text-xs">
-                        1억부터 1,000억까지 원하는 목표를 입력할 수 있어요.
-                      </p>
-                      <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-                        <div className="relative sm:w-44">
-                          <Input
-                            id="target-amount"
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            value={targetEok}
-                            onChange={(event) =>
-                              setTargetEok(
-                                event.target.value
-                                  .replace(/\D/g, "")
-                                  .slice(0, 4),
-                              )
-                            }
-                            className="bg-background h-11 pr-9 text-right text-base font-bold"
-                            aria-describedby="target-amount-unit"
-                          />
-                          <span
-                            id="target-amount-unit"
-                            className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm"
-                          >
-                            억
-                          </span>
-                        </div>
-                        <div className="grid flex-1 grid-cols-3 gap-2">
-                          {GOAL_PRESETS.map((goal) => (
-                            <button
-                              key={goal}
-                              type="button"
-                              onClick={() => setTargetEok(String(goal))}
-                              className={cn(
-                                "h-11 rounded-lg border text-sm font-semibold transition-colors",
-                                targetEok === String(goal)
-                                  ? "border-emerald-500 bg-emerald-500 text-white"
-                                  : "bg-background hover:border-emerald-500/50",
-                              )}
-                            >
-                              {goal}억
-                            </button>
-                          ))}
-                        </div>
                       </div>
                     </div>
-                    <div className="mt-5 border-t border-emerald-500/15 pt-5">
-                      <Label
-                        htmlFor="monthly-contribution"
-                        className="font-bold"
+
+                    <div>
+                      <Button
+                        type="submit"
+                        size="lg"
+                        disabled={!canAnalyze || isAnalyzing}
+                        className="h-12 w-full bg-emerald-500 text-base text-white shadow-lg shadow-emerald-500/20 hover:bg-emerald-600"
                       >
-                        매월 추가 투자금{" "}
-                        <span className="text-muted-foreground text-xs font-normal">
-                          (선택)
-                        </span>
-                      </Label>
-                      <p className="text-muted-foreground mt-1 text-xs">
-                        매달 같은 금액을 현재 포트폴리오 비중대로 투자한다고
-                        가정해 목표 기간이 얼마나 줄어드는지 비교해요.
+                        {isAnalyzing ? (
+                          <>
+                            <LoaderCircleIcon className="animate-spin" />
+                            시세와 목표 달성 시점 계산 중...
+                          </>
+                        ) : (
+                          <>
+                            내 주식 {targetEok || "-"}억까지 분석하기
+                            <ArrowRightIcon />
+                          </>
+                        )}
+                      </Button>
+                      {isAnalyzing && (
+                        <div className="mt-3" role="status" aria-live="polite">
+                          <div className="text-muted-foreground flex items-center justify-between gap-3 text-xs">
+                            <span>시세·시나리오·AI 전략을 분석하고 있어요</span>
+                            <span className="shrink-0 font-bold text-emerald-600 tabular-nums dark:text-emerald-400">
+                              {analysisSecondsLeft > 0
+                                ? `약 ${analysisSecondsLeft}초 남음`
+                                : "마무리 중..."}
+                            </span>
+                          </div>
+                          <div className="bg-muted mt-2 h-1.5 overflow-hidden rounded-full">
+                            <div
+                              className="h-full rounded-full bg-emerald-500 transition-[width] duration-1000 ease-linear"
+                              style={{
+                                width: `${Math.min(
+                                  95,
+                                  ((ANALYSIS_ESTIMATED_SECONDS -
+                                    analysisSecondsLeft) /
+                                    ANALYSIS_ESTIMATED_SECONDS) *
+                                    100,
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                          <p className="text-muted-foreground mt-1.5 text-center text-[11px]">
+                            데이터 조회 상황에 따라 실제 시간은 달라질 수 있어요
+                          </p>
+                        </div>
+                      )}
+                      <p className="text-muted-foreground mt-3 flex items-center justify-center gap-1.5 text-xs">
+                        <LockKeyholeIcon className="size-3.5" />
+                        입력 정보는 현재 탭에서만 유지되며, 탭을 닫으면 자동
+                        삭제돼요
                       </p>
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <div className="relative w-full sm:w-80">
-                          <Input
-                            id="monthly-contribution"
-                            type="text"
-                            inputMode="numeric"
-                            value={
-                              monthlyContribution
-                                ? monthlyContributionAmount.toLocaleString(
-                                    "ko-KR",
-                                  )
-                                : ""
-                            }
-                            onChange={(event) =>
-                              updateMonthlyContribution(event.target.value)
-                            }
-                            placeholder="예: 1,000,000"
-                            className="bg-background h-11 pr-12 text-right font-bold tabular-nums"
-                          />
-                          <span className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm">
-                            원
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {MONTHLY_CONTRIBUTION_PRESETS.map((amount) => (
-                            <button
-                              key={amount}
-                              type="button"
-                              onClick={() => addMonthlyContribution(amount)}
-                              className="bg-background h-8 rounded-full border px-3 text-xs font-semibold transition-colors hover:border-emerald-500/60 hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400"
-                              aria-label={`월 투자금에 ${formatKoreanMoney(amount)} 추가`}
-                            >
-                              +{formatKoreanMoney(amount)}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      {monthlyContributionAmount > 0 && (
-                        <p className="mt-2 text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                          {`매월 ${formatKoreanMoney(monthlyContributionAmount)}씩 투자`}
-                        </p>
-                      )}
                     </div>
-                  </div>
-
-                  <div>
-                    <Button
-                      type="submit"
-                      size="lg"
-                      disabled={!canAnalyze || isAnalyzing}
-                      className="h-12 w-full bg-emerald-500 text-base text-white shadow-lg shadow-emerald-500/20 hover:bg-emerald-600"
-                    >
-                      {isAnalyzing ? (
-                        <>
-                          <LoaderCircleIcon className="animate-spin" />
-                          시세와 목표 달성 시점 계산 중...
-                        </>
-                      ) : (
-                        <>
-                          내 주식 {targetEok || "-"}억까지 분석하기
-                          <ArrowRightIcon />
-                        </>
-                      )}
-                    </Button>
-                    {isAnalyzing && (
-                      <div className="mt-3" role="status" aria-live="polite">
-                        <div className="text-muted-foreground flex items-center justify-between gap-3 text-xs">
-                          <span>시세·시나리오·AI 전략을 분석하고 있어요</span>
-                          <span className="shrink-0 font-bold text-emerald-600 tabular-nums dark:text-emerald-400">
-                            {analysisSecondsLeft > 0
-                              ? `약 ${analysisSecondsLeft}초 남음`
-                              : "마무리 중..."}
-                          </span>
-                        </div>
-                        <div className="bg-muted mt-2 h-1.5 overflow-hidden rounded-full">
-                          <div
-                            className="h-full rounded-full bg-emerald-500 transition-[width] duration-1000 ease-linear"
-                            style={{
-                              width: `${Math.min(
-                                95,
-                                ((ANALYSIS_ESTIMATED_SECONDS -
-                                  analysisSecondsLeft) /
-                                  ANALYSIS_ESTIMATED_SECONDS) *
-                                  100,
-                              )}%`,
-                            }}
-                          />
-                        </div>
-                        <p className="text-muted-foreground mt-1.5 text-center text-[11px]">
-                          데이터 조회 상황에 따라 실제 시간은 달라질 수 있어요
-                        </p>
-                      </div>
+                    {analysisError && (
+                      <p
+                        role="alert"
+                        className="text-destructive text-center text-sm"
+                      >
+                        {analysisError}
+                      </p>
                     )}
-                    <p className="text-muted-foreground mt-3 flex items-center justify-center gap-1.5 text-xs">
-                      <LockKeyholeIcon className="size-3.5" />
-                      입력 정보는 현재 탭에서만 유지되며, 탭을 닫으면 자동
-                      삭제돼요
-                    </p>
-                  </div>
-                  {analysisError && (
-                    <p
-                      role="alert"
-                      className="text-destructive text-center text-sm"
-                    >
-                      {analysisError}
-                    </p>
-                  )}
-                </form>
-              </div>
+                  </form>
+                </div>
+              </>
             ) : isAuthenticated && moneyInsights ? (
               <MyEokkaSummary insight={moneyInsights} />
             ) : isAuthenticated ? (
@@ -1938,6 +2000,27 @@ export default function Home() {
                 result={analysis}
                 showAuthCta={!isAuthenticated}
                 showContributionDetails
+                onStartManagedAnalysis={() =>
+                  navigate("/dashboard/portfolio?from=quick", {
+                    state: {
+                      quickPortfolioDraft: {
+                        holdings: holdings.flatMap((holding) =>
+                          holding.selectedStock &&
+                          Number(holding.averagePrice) > 0 &&
+                          Number(holding.quantity) > 0
+                            ? [
+                                {
+                                  stock: holding.selectedStock,
+                                  averagePrice: Number(holding.averagePrice),
+                                  quantity: Number(holding.quantity),
+                                },
+                              ]
+                            : [],
+                        ),
+                      },
+                    },
+                  })
+                }
               />
             </div>
           )}

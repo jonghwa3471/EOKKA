@@ -16,6 +16,7 @@ import type { Route } from "./+types/root";
 
 import * as Sentry from "@sentry/react-router";
 import NProgress from "nprogress";
+import { LoaderCircleIcon } from "lucide-react";
 import nProgressStyles from "nprogress/nprogress.css?url";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -29,6 +30,7 @@ import {
   useLocation,
   useNavigate,
   useNavigation,
+  useFetchers,
   useRouteLoaderData,
   useSearchParams,
 } from "react-router";
@@ -228,6 +230,10 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
  */
 export default function App() {
   const navigation = useNavigation();
+  const fetchers = useFetchers();
+  const isBusy =
+    navigation.state !== "idle" ||
+    fetchers.some((fetcher) => fetcher.state !== "idle");
 
   // Initialize NProgress with spinner for better UX during navigation
   useEffect(() => {
@@ -236,12 +242,21 @@ export default function App() {
 
   // Show/hide progress bar based on navigation state
   useEffect(() => {
-    if (navigation.state === "loading") {
+    if (isBusy) {
       NProgress.start();
-    } else if (navigation.state === "idle") {
+    } else {
       NProgress.done();
     }
-  }, [navigation.state]);
+  }, [isBusy]);
+
+  useEffect(() => {
+    if (!isBusy) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isBusy]);
 
   // Handle Supabase authentication redirects
   // This is a workaround for a Supabase auth issue: https://github.com/supabase/auth/issues/1927
@@ -267,6 +282,26 @@ export default function App() {
     <Sheet>
       <Dialog>
         <Outlet />
+        {isBusy && (
+          <div
+            className="fixed inset-0 z-[9999] flex cursor-wait items-center justify-center bg-background/55 backdrop-blur-sm"
+            role="status"
+            aria-live="polite"
+            aria-label="요청 처리 중"
+          >
+            <div className="border-border/70 bg-card/95 flex items-center gap-3 rounded-2xl border px-5 py-4 shadow-2xl">
+              <span className="flex size-9 items-center justify-center rounded-xl bg-emerald-500/12 text-emerald-500">
+                <LoaderCircleIcon className="size-5 animate-spin" />
+              </span>
+              <div>
+                <p className="text-sm font-black">최신 정보를 불러오고 있어요</p>
+                <p className="text-muted-foreground mt-0.5 text-xs">
+                  잠시만 기다려 주세요.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </Dialog>
     </Sheet>
   );
