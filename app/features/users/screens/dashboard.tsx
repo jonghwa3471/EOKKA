@@ -2344,7 +2344,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                 </p>
                 <h2 className="mt-1 text-xl font-black">내 자산 성장 추이</h2>
               </div>
-              <div className="flex flex-wrap items-center gap-1 text-xs font-bold">
+              <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
                 <button
                   type="button"
                   onClick={() => toggleTrendSeries("actual")}

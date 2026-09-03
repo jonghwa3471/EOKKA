@@ -42,6 +42,8 @@ export async function getManagedPortfolio(userId: string) {
       currency: portfolioTransactions.currency,
       exchangeRate: portfolioTransactions.exchange_rate,
       memo: portfolioTransactions.memo,
+      createdAt: portfolioTransactions.created_at,
+      updatedAt: portfolioTransactions.updated_at,
     })
     .from(portfolioTransactions)
     .innerJoin(stocks, eq(portfolioTransactions.stock_id, stocks.stock_id))

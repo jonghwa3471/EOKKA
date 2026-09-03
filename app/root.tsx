@@ -50,8 +50,18 @@ import { cn } from "./core/lib/utils";
 import NotFound from "./core/screens/404";
 
 export const links: Route.LinksFunction = () => [
-  { rel: "icon", href: "/images/eokka-app-logo-kakao.png", type: "image/png" },
-  { rel: "apple-touch-icon", href: "/images/eokka-app-logo.png" },
+  { rel: "icon", href: "/favicon.ico?v=eokka-2", sizes: "any" },
+  {
+    rel: "icon",
+    href: "/images/eokka-app-logo-kakao.png?v=eokka-2",
+    type: "image/png",
+    sizes: "512x512",
+  },
+  {
+    rel: "apple-touch-icon",
+    href: "/images/eokka-app-logo-kakao.png?v=eokka-2",
+    sizes: "512x512",
+  },
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
     rel: "preconnect",
@@ -306,17 +316,20 @@ export default function App() {
       case "add-transaction":
         return {
           title: "매매일지를 저장하고 있어요",
-          description: "거래일의 환율을 확인하고 보유 현황을 다시 계산해요.",
+          description:
+            "거래일의 환율과 보유 현황만 계산해요. 정밀 분석에는 아직 반영하지 않아요.",
         };
       case "update-transaction":
         return {
           title: "매매일지를 수정하고 있어요",
-          description: "변경한 거래를 반영해 포트폴리오를 다시 계산해요.",
+          description:
+            "변경 내용을 매매일지에 저장해요. 정밀 분석에는 아직 반영하지 않아요.",
         };
       case "delete-transaction":
         return {
           title: "매매 기록을 삭제하고 있어요",
-          description: "남은 거래를 기준으로 보유 현황을 정리해요.",
+          description:
+            "남은 거래로 보유 현황만 정리해요. 정밀 분석에는 아직 반영하지 않아요.",
         };
       case "import-quick-portfolio":
         return {

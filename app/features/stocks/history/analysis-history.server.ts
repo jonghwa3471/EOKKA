@@ -166,6 +166,7 @@ export async function getAnalysisHistory(userId: string) {
       analysisMode: analysisSnapshots.analysis_mode,
       managedPortfolioId: analysisSnapshots.managed_portfolio_id,
       result: analysisSnapshots.result,
+      updatedAt: analysisSnapshots.updated_at,
     })
     .from(analysisSnapshots)
     .where(eq(analysisSnapshots.user_id, userId))

@@ -68,7 +68,21 @@ export function DatePicker({
   useEffect(() => {
     if (!open) return;
     const close = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (rootRef.current?.contains(target)) return;
+
+      // Radix Select renders its menu in a portal outside the date picker.
+      // Treat year/month menu interactions as part of the calendar so only
+      // selecting an actual day (or clicking outside) closes the picker.
+      if (
+        target instanceof Element &&
+        target.closest('[data-slot="select-content"]')
+      ) {
+        return;
+      }
+
+      setOpen(false);
     };
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
