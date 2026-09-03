@@ -9,6 +9,7 @@ import {
   AwardIcon,
   CalendarDaysIcon,
   ChartNoAxesCombinedIcon,
+  CheckCircle2Icon,
   ChevronDownIcon,
   Clock3Icon,
   CoinsIcon,
@@ -31,6 +32,13 @@ import { useEffect, useRef, useState } from "react";
 import { Form, Link, redirect, useLocation } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/core/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
@@ -87,6 +95,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const history = Array.from(
     new Map(goalHistory.map((item) => [item.savedOn, item])).values(),
   );
+  const today = seoulDate();
   const latestResult = history.at(-1)?.result;
   const tickers = latestResult?.holdings.map((holding) => holding.ticker) ?? [];
   const stockRows =
@@ -146,6 +155,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       user?.email?.split("@")[0] ??
       "사용자",
     historyLimit: FREE_HISTORY_LIMIT,
+    today,
   };
 }
 
@@ -166,9 +176,9 @@ export async function action({ request }: Route.ActionArgs) {
     ]);
     if (!managed || managed.portfolio.status !== "active")
       throw new Response("Managed portfolio is not active", { status: 400 });
-    const goalOptions = [...new Set(history.map((item) => item.goalAmount))].sort(
-      (a, b) => a - b,
-    );
+    const goalOptions = [
+      ...new Set(history.map((item) => item.goalAmount)),
+    ].sort((a, b) => a - b);
     const goalAmount =
       (preferredGoalAmount && goalOptions.includes(preferredGoalAmount)
         ? preferredGoalAmount
@@ -193,10 +203,7 @@ export async function action({ request }: Route.ActionArgs) {
     const result = await analyzePortfolio({
       goalAmount,
       monthlyContribution: latest.monthlyContribution,
-      investmentPeriodMonths: investmentMonthsSince(
-        firstBoughtOn,
-        seoulDate(),
-      ),
+      investmentPeriodMonths: investmentMonthsSince(firstBoughtOn, seoulDate()),
       holdings: holdings.map((holding) => ({
         stockId: holding.stockId,
         averagePrice: holding.averagePrice,
@@ -1088,18 +1095,21 @@ function ProfitContributionGrid({ history }: { history: History }) {
           >
             연도
           </label>
-          <select
-            id="profit-grid-year"
-            value={selectedYear}
-            onChange={(event) => setSelectedYear(Number(event.target.value))}
-            className="bg-background h-9 rounded-xl border px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500/40"
+          <Select
+            value={String(selectedYear)}
+            onValueChange={(value) => setSelectedYear(Number(value))}
           >
-            {availableYears.map((year) => (
-              <option key={year} value={year}>
-                {year}년
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id="profit-grid-year" className="w-[108px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {availableYears.map((year) => (
+                <SelectItem key={year} value={String(year)}>
+                  {year}년
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -1911,6 +1921,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
     goalOptions,
     preferredGoal,
     updateDraft,
+    today,
   } = loaderData;
   const [dimmedTrendSeries, setDimmedTrendSeries] = useState<TrendSeries[]>([]);
   const toggleTrendSeries = (series: TrendSeries) =>
@@ -1952,6 +1963,11 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
       </main>
     );
   }
+
+  const todayAnalysis = history.find((item) => item.savedOn === today);
+  const todayAnalysisHref = todayAnalysis
+    ? `/dashboard/history?month=${today.slice(0, 7)}&date=${today}&analysis=${todayAnalysis.id}`
+    : null;
 
   const assetChange = difference(
     latest.currentValue,
@@ -2048,9 +2064,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                     ),
                     investmentYears: latest.result.investmentPeriodMonths
                       ? String(
-                          Math.floor(
-                            latest.result.investmentPeriodMonths / 12,
-                          ),
+                          Math.floor(latest.result.investmentPeriodMonths / 12),
                         )
                       : "",
                     investmentMonths: latest.result.investmentPeriodMonths
@@ -2066,6 +2080,52 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             </Button>
           )}
         </header>
+
+        <section
+          className={cn(
+            "mt-6 flex flex-col gap-4 rounded-2xl border px-5 py-4 sm:flex-row sm:items-center sm:justify-between",
+            todayAnalysis
+              ? "border-emerald-500/25 bg-emerald-500/[0.07]"
+              : "border-amber-500/25 bg-amber-500/[0.07]",
+          )}
+        >
+          <div className="flex items-start gap-3">
+            <span
+              className={cn(
+                "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl",
+                todayAnalysis
+                  ? "bg-emerald-500/15 text-emerald-500"
+                  : "bg-amber-500/15 text-amber-500",
+              )}
+            >
+              {todayAnalysis ? (
+                <CheckCircle2Icon className="size-5" />
+              ) : (
+                <RefreshCwIcon className="size-5" />
+              )}
+            </span>
+            <div>
+              <p className="font-black">
+                {todayAnalysis
+                  ? "오늘 분석을 완료했어요"
+                  : "오늘은 아직 분석하지 않았어요"}
+              </p>
+              <p className="text-muted-foreground mt-1 text-sm leading-6">
+                {todayAnalysis
+                  ? "오늘 저장된 최신 결과와 변화를 분석 기록에서 확인할 수 있어요."
+                  : "오늘의 가격과 포트폴리오 변화를 반영하려면 분석을 업데이트해 주세요."}
+              </p>
+            </div>
+          </div>
+          {todayAnalysisHref && (
+            <Link
+              to={todayAnalysisHref}
+              className="inline-flex shrink-0 items-center gap-1.5 self-start text-sm font-black text-emerald-500 transition-colors hover:text-emerald-400 sm:self-center"
+            >
+              해당 분석 보러가기 <ArrowRightIcon className="size-4" />
+            </Link>
+          )}
+        </section>
 
         {goalOptions.length > 1 && (
           <section className="bg-card mt-7 flex flex-col gap-4 rounded-3xl border p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between md:p-5">

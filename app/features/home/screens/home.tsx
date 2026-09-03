@@ -1352,20 +1352,50 @@ export default function Home() {
     >
       {isAnalyzing && (
         <div
-          className="fixed inset-0 z-[9999] flex cursor-wait items-center justify-center bg-background/60 backdrop-blur-sm"
+          className="bg-background/60 fixed inset-0 z-[9999] flex cursor-wait items-center justify-center backdrop-blur-sm"
           role="status"
           aria-live="polite"
           aria-label="포트폴리오 분석 중"
         >
-          <div className="border-border/70 bg-card/95 flex items-center gap-3 rounded-2xl border px-5 py-4 shadow-2xl">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-emerald-500/12 text-emerald-500">
-              <LoaderCircleIcon className="size-5 animate-spin" />
-            </span>
-            <div>
-              <p className="text-sm font-black">포트폴리오를 분석하고 있어요</p>
-              <p className="text-muted-foreground mt-0.5 text-xs">
-                시세와 목표 달성 시점을 계산하고 있어요.
-              </p>
+          <div className="border-border/70 bg-card/95 w-[min(90vw,380px)] rounded-2xl border px-5 py-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/12 text-emerald-500">
+                <LoaderCircleIcon className="size-5 animate-spin" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-black">
+                    포트폴리오를 분석하고 있어요
+                  </p>
+                  <span className="text-xs font-black text-emerald-500 tabular-nums">
+                    {Math.round(
+                      Math.min(
+                        95,
+                        ((ANALYSIS_ESTIMATED_SECONDS - analysisSecondsLeft) /
+                          ANALYSIS_ESTIMATED_SECONDS) *
+                          100,
+                      ),
+                    )}
+                    %
+                  </span>
+                </div>
+                <p className="text-muted-foreground mt-0.5 text-xs">
+                  시세와 목표 달성 시점을 계산하고 있어요.
+                </p>
+              </div>
+            </div>
+            <div className="bg-muted mt-3 h-1.5 overflow-hidden rounded-full">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-violet-500 transition-[width] duration-1000 ease-linear"
+                style={{
+                  width: `${Math.min(
+                    95,
+                    ((ANALYSIS_ESTIMATED_SECONDS - analysisSecondsLeft) /
+                      ANALYSIS_ESTIMATED_SECONDS) *
+                      100,
+                  )}%`,
+                }}
+              />
             </div>
           </div>
         </div>
@@ -1558,17 +1588,7 @@ export default function Home() {
                             </Field>
 
                             <Field
-                              label={
-                                <>
-                                  평균 매수가
-                                  {isGlobalTest &&
-                                    holding.currency === "USD" && (
-                                      <span className="text-muted-foreground ml-1 text-[11px] font-normal">
-                                        (달러는 소수점 없이 입력)
-                                      </span>
-                                    )}
-                                </>
-                              }
+                              label={<>평균 매수가</>}
                               id={`price-${holding.id}`}
                             >
                               <div className="flex gap-2">
@@ -1608,20 +1628,35 @@ export default function Home() {
                                   <Input
                                     id={`price-${holding.id}`}
                                     type="text"
-                                    inputMode="numeric"
-                                    pattern="[0-9]*"
+                                    inputMode={
+                                      holding.currency === "USD"
+                                        ? "decimal"
+                                        : "numeric"
+                                    }
+                                    pattern={
+                                      holding.currency === "USD"
+                                        ? "[0-9]*[.]?[0-9]*"
+                                        : "[0-9]*"
+                                    }
                                     value={holding.averagePrice}
                                     onChange={(event) =>
                                       updateHolding(
                                         holding.id,
                                         "averagePrice",
-                                        event.target.value.replace(/\D/g, ""),
+                                        holding.currency === "USD"
+                                          ? event.target.value
+                                              .replace(/[^\d.]/g, "")
+                                              .replace(/(\..*)\./g, "$1")
+                                          : event.target.value.replace(
+                                              /\D/g,
+                                              "",
+                                            ),
                                       )
                                     }
                                     placeholder={
                                       holding.currency === "KRW"
                                         ? "예: 70000"
-                                        : "예: 180"
+                                        : "예: 180.50"
                                     }
                                     className="bg-background h-11 pl-7"
                                   />

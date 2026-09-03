@@ -157,6 +157,46 @@ export async function deletePortfolioTransaction(userId: string, id: number) {
     );
 }
 
+export async function updatePortfolioTransaction({
+  userId,
+  id,
+  type,
+  tradedOn,
+  quantity,
+  unitPrice,
+  exchangeRate,
+  memo,
+}: {
+  userId: string;
+  id: number;
+  type: "BUY" | "SELL";
+  tradedOn: string;
+  quantity: number;
+  unitPrice: number;
+  exchangeRate: number;
+  memo: string | null;
+}) {
+  const [updated] = await db
+    .update(portfolioTransactions)
+    .set({
+      transaction_type: type,
+      traded_on: tradedOn,
+      quantity,
+      unit_price: unitPrice,
+      exchange_rate: exchangeRate,
+      memo,
+      updated_at: new Date(),
+    })
+    .where(
+      and(
+        eq(portfolioTransactions.portfolio_transaction_id, id),
+        eq(portfolioTransactions.user_id, userId),
+      ),
+    )
+    .returning({ id: portfolioTransactions.portfolio_transaction_id });
+  if (!updated) throw new Error("수정할 거래를 찾지 못했어요.");
+}
+
 export function calculateManagedHoldings(
   transactions: NonNullable<
     Awaited<ReturnType<typeof getManagedPortfolio>>

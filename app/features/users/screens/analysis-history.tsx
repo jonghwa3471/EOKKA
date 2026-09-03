@@ -16,9 +16,16 @@ import {
   TrendingUpIcon,
 } from "lucide-react";
 import { useState } from "react";
-import { Form, Link, redirect } from "react-router";
+import { Form, Link, redirect, useNavigate } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/core/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
@@ -581,6 +588,25 @@ export default function AnalysisHistory({ loaderData }: Route.ComponentProps) {
   const available = new Set(availableDates);
   const previousMonth = shiftMonth(month, -1);
   const nextMonth = shiftMonth(month, 1);
+  const navigate = useNavigate();
+  const calendarYear = Number(month.slice(0, 4));
+  const calendarMonth = Number(month.slice(5));
+  const todayYear = Number(seoulToday().slice(0, 4));
+  const earliestYear = availableDates.length
+    ? Math.min(...availableDates.map((date) => Number(date.slice(0, 4))))
+    : todayYear;
+  const firstSelectableYear = Math.min(
+    earliestYear,
+    calendarYear,
+    todayYear - 10,
+  );
+  const lastSelectableYear = Math.max(todayYear, calendarYear);
+  const calendarYears = Array.from(
+    { length: Math.max(1, lastSelectableYear - firstSelectableYear + 1) },
+    (_, index) => lastSelectableYear - index,
+  );
+  const moveToMonth = (year: number, monthNumber: number) =>
+    navigate(`?month=${year}-${String(monthNumber).padStart(2, "0")}`);
 
   return (
     <main className="flex flex-1 flex-col px-5 pt-8 pb-14 md:px-8 md:pt-12">
@@ -648,9 +674,53 @@ export default function AnalysisHistory({ loaderData }: Route.ComponentProps) {
                   <ChevronLeftIcon />
                 </Link>
               </Button>
-              <h2 className="text-lg font-black">
-                {Number(month.slice(0, 4))}년 {Number(month.slice(5))}월
-              </h2>
+              <div className="flex items-center gap-1.5">
+                <Select
+                  value={String(calendarYear)}
+                  onValueChange={(value) =>
+                    moveToMonth(Number(value), calendarMonth)
+                  }
+                >
+                  <SelectTrigger
+                    aria-label="연도 선택"
+                    className="w-[108px] rounded-xl"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {calendarYears.map((year) => (
+                      <SelectItem key={year} value={String(year)}>
+                        {year}년
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={String(calendarMonth)}
+                  onValueChange={(value) =>
+                    moveToMonth(calendarYear, Number(value))
+                  }
+                >
+                  <SelectTrigger
+                    aria-label="월 선택"
+                    className="w-[84px] rounded-xl"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 12 }, (_, index) => index + 1).map(
+                      (monthNumber) => (
+                        <SelectItem
+                          key={monthNumber}
+                          value={String(monthNumber)}
+                        >
+                          {monthNumber}월
+                        </SelectItem>
+                      ),
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
               <Button
                 asChild
                 size="icon"

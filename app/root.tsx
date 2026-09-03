@@ -15,10 +15,10 @@ import "./app.css";
 import type { Route } from "./+types/root";
 
 import * as Sentry from "@sentry/react-router";
-import NProgress from "nprogress";
 import { LoaderCircleIcon } from "lucide-react";
+import NProgress from "nprogress";
 import nProgressStyles from "nprogress/nprogress.css?url";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Links,
@@ -27,10 +27,10 @@ import {
   Scripts,
   ScrollRestoration,
   isRouteErrorResponse,
+  useFetchers,
   useLocation,
   useNavigate,
   useNavigation,
-  useFetchers,
   useRouteLoaderData,
   useSearchParams,
 } from "react-router";
@@ -234,29 +234,53 @@ export default function App() {
   const isBusy =
     navigation.state !== "idle" ||
     fetchers.some((fetcher) => fetcher.state !== "idle");
+  const [showBlockingLoader, setShowBlockingLoader] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const activeFetcher = fetchers.find((fetcher) => fetcher.state !== "idle");
 
   // Initialize NProgress with spinner for better UX during navigation
   useEffect(() => {
-    NProgress.configure({ showSpinner: true });
+    NProgress.configure({ showSpinner: false });
   }, []);
 
-  // Show/hide progress bar based on navigation state
+  // Fast route changes stay visually instant. Only requests that take longer
+  // than the threshold show a blocking loader.
   useEffect(() => {
-    if (isBusy) {
-      NProgress.start();
-    } else {
+    if (!isBusy) {
+      setShowBlockingLoader(false);
+      setLoadingProgress(0);
       NProgress.done();
+      return;
     }
+
+    const timer = window.setTimeout(() => {
+      setLoadingProgress(8);
+      setShowBlockingLoader(true);
+      NProgress.start();
+    }, 450);
+    return () => window.clearTimeout(timer);
   }, [isBusy]);
 
   useEffect(() => {
-    if (!isBusy) return;
+    if (!showBlockingLoader || !isBusy) return;
+    const timer = window.setInterval(() => {
+      setLoadingProgress((progress) =>
+        progress >= 92
+          ? 92
+          : Math.min(92, progress + Math.max(1, (92 - progress) * 0.08)),
+      );
+    }, 350);
+    return () => window.clearInterval(timer);
+  }, [isBusy, showBlockingLoader]);
+
+  useEffect(() => {
+    if (!showBlockingLoader) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [isBusy]);
+  }, [showBlockingLoader]);
 
   // Handle Supabase authentication redirects
   // This is a workaround for a Supabase auth issue: https://github.com/supabase/auth/issues/1927
@@ -264,6 +288,83 @@ export default function App() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const requestFormData = navigation.formData ?? activeFetcher?.formData;
+  const requestIntent = String(requestFormData?.get("intent") ?? "");
+  const targetPath = navigation.location?.pathname ?? location.pathname;
+  const loadingCopy = (() => {
+    switch (requestIntent) {
+      case "analyze-managed":
+        return {
+          title: "정밀 분석을 진행하고 있어요",
+          description: "포트폴리오와 목표를 바탕으로 미래 시나리오를 계산해요.",
+        };
+      case "refresh-managed-analysis":
+        return {
+          title: "오늘의 분석을 업데이트하고 있어요",
+          description: "최신 가격과 환율을 반영해 분석 기록을 새로 계산해요.",
+        };
+      case "add-transaction":
+        return {
+          title: "매매일지를 저장하고 있어요",
+          description: "거래일의 환율을 확인하고 보유 현황을 다시 계산해요.",
+        };
+      case "update-transaction":
+        return {
+          title: "매매일지를 수정하고 있어요",
+          description: "변경한 거래를 반영해 포트폴리오를 다시 계산해요.",
+        };
+      case "delete-transaction":
+        return {
+          title: "매매 기록을 삭제하고 있어요",
+          description: "남은 거래를 기준으로 보유 현황을 정리해요.",
+        };
+      case "import-quick-portfolio":
+        return {
+          title: "포트폴리오를 가져오고 있어요",
+          description: "빠른 분석의 종목을 정밀 매매일지로 옮기고 있어요.",
+        };
+      case "delete-analysis":
+        return {
+          title: "분석 기록을 삭제하고 있어요",
+          description: "선택한 목표 분석을 기록에서 정리해요.",
+        };
+      case "delete-all-history":
+        return {
+          title: "전체 분석 기록을 삭제하고 있어요",
+          description: "저장된 분석 기록을 안전하게 정리하고 있어요.",
+        };
+    }
+
+    if (requestFormData)
+      return {
+        title: "변경사항을 저장하고 있어요",
+        description: "요청한 내용을 안전하게 반영하고 있어요.",
+      };
+    if (targetPath.startsWith("/dashboard/history"))
+      return {
+        title: "분석 기록을 불러오고 있어요",
+        description: "저장된 날짜와 목표별 분석을 정리하고 있어요.",
+      };
+    if (targetPath.startsWith("/dashboard/portfolio"))
+      return {
+        title: "포트폴리오를 불러오고 있어요",
+        description: "보유 현황과 매매일지를 준비하고 있어요.",
+      };
+    if (targetPath.startsWith("/dashboard/insights"))
+      return {
+        title: "투자 인사이트를 불러오고 있어요",
+        description: "저장된 기록을 비교해 주요 변화를 정리하고 있어요.",
+      };
+    if (targetPath.startsWith("/dashboard"))
+      return {
+        title: "대시보드를 불러오고 있어요",
+        description: "최신 투자 현황과 목표 진행 상황을 준비하고 있어요.",
+      };
+    return {
+      title: "페이지를 불러오고 있어요",
+      description: "필요한 정보를 준비하고 있어요.",
+    };
+  })();
   useEffect(() => {
     if (location.pathname === "/") {
       const error = searchParams.get("error");
@@ -283,21 +384,37 @@ export default function App() {
       <Dialog>
         <Outlet />
         {isBusy && (
+          <div className="fixed inset-0 z-[9998]" aria-hidden="true" />
+        )}
+        {showBlockingLoader && (
           <div
-            className="fixed inset-0 z-[9999] flex cursor-wait items-center justify-center bg-background/55 backdrop-blur-sm"
+            className="bg-background/55 fixed inset-0 z-[9999] flex cursor-wait items-center justify-center backdrop-blur-sm"
             role="status"
             aria-live="polite"
             aria-label="요청 처리 중"
           >
-            <div className="border-border/70 bg-card/95 flex items-center gap-3 rounded-2xl border px-5 py-4 shadow-2xl">
-              <span className="flex size-9 items-center justify-center rounded-xl bg-emerald-500/12 text-emerald-500">
-                <LoaderCircleIcon className="size-5 animate-spin" />
-              </span>
-              <div>
-                <p className="text-sm font-black">최신 정보를 불러오고 있어요</p>
-                <p className="text-muted-foreground mt-0.5 text-xs">
-                  잠시만 기다려 주세요.
-                </p>
+            <div className="border-border/70 bg-card/95 w-[min(90vw,360px)] rounded-2xl border px-5 py-4 shadow-2xl">
+              <div className="flex items-center gap-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/12 text-emerald-500">
+                  <LoaderCircleIcon className="size-5 animate-spin" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-black">{loadingCopy.title}</p>
+                    <span className="text-xs font-black text-emerald-500 tabular-nums">
+                      {Math.round(loadingProgress)}%
+                    </span>
+                  </div>
+                  <p className="text-muted-foreground mt-0.5 text-xs">
+                    {loadingCopy.description}
+                  </p>
+                </div>
+              </div>
+              <div className="bg-muted mt-3 h-1.5 overflow-hidden rounded-full">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-violet-500 transition-[width] duration-300 ease-out"
+                  style={{ width: `${loadingProgress}%` }}
+                />
               </div>
             </div>
           </div>

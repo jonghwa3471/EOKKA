@@ -6,15 +6,21 @@ import {
   BookOpenIcon,
   BriefcaseBusinessIcon,
   CalendarDaysIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
   CircleAlertIcon,
+  PencilIcon,
   PlusIcon,
+  TargetIcon,
   Trash2Icon,
+  XIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Form, data, redirect, useActionData, useLocation } from "react-router";
 import { z } from "zod";
 
 import { Button } from "~/core/components/ui/button";
+import { DatePicker } from "~/core/components/ui/date-picker";
 import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
 import {
@@ -43,6 +49,7 @@ import {
   deletePortfolioTransaction,
   getManagedPortfolio,
   investmentMonthsSince,
+  updatePortfolioTransaction,
 } from "~/features/stocks/portfolio/portfolio.server";
 import { stocks } from "~/features/stocks/schema";
 import type { StockSearchResult } from "~/features/stocks/types";
@@ -93,6 +100,21 @@ type QuickImportRow = {
   quantity: number;
   tradedOn: string;
 };
+
+type JournalPeriod = "all" | "1m" | "3m" | "6m" | "1y" | "custom";
+
+const journalPeriods: Array<{
+  value: JournalPeriod;
+  label: string;
+  days: number;
+}> = [
+  { value: "all", label: "전체", days: 0 },
+  { value: "1m", label: "1개월", days: 30 },
+  { value: "3m", label: "3개월", days: 90 },
+  { value: "6m", label: "6개월", days: 180 },
+  { value: "1y", label: "1년", days: 365 },
+  { value: "custom", label: "직접 설정", days: 0 },
+];
 
 const quickImportTones = [
   {
@@ -155,7 +177,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   const holdings = managed
     ? calculateManagedHoldings(managed.transactions)
     : [];
-  const latest = quickHistory.at(-1) ?? null;
 
   return {
     today: seoulDate(),
@@ -167,11 +188,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     investmentStartedOn:
       managed?.transactions.find((transaction) => transaction.type === "BUY")
         ?.tradedOn ?? null,
-    defaults: {
-      goalAmount: latest?.goalAmount ?? 100_000_000,
-      monthlyContribution: latest?.monthlyContribution ?? 0,
-      investmentPeriodMonths: latest?.result.investmentPeriodMonths ?? null,
-    },
   };
 }
 
@@ -250,6 +266,57 @@ export async function action({ request }: Route.ActionArgs) {
         ),
       );
       await deletePortfolioTransaction(user.id, transactionId);
+      return redirect("/dashboard/portfolio");
+    }
+
+    if (intent === "update-transaction") {
+      const transactionId = Number(formData.get("transactionId"));
+      if (!Number.isSafeInteger(transactionId) || transactionId <= 0)
+        throw new Error("수정할 거래를 확인하지 못했어요.");
+      const managed = await getManagedPortfolio(user.id);
+      const existing = managed?.transactions.find(
+        (transaction) => transaction.id === transactionId,
+      );
+      if (!managed || !existing)
+        throw new Error("수정할 거래를 찾지 못했어요.");
+      const parsed = transactionSchema.parse({
+        stockId: existing.stockId,
+        type: formData.get("type"),
+        tradedOn: formData.get("tradedOn"),
+        quantity: formData.get("quantity"),
+        unitPrice: formData.get("unitPrice"),
+        memo: formData.get("memo") ?? "",
+      });
+      const historicalRate =
+        existing.currency === "USD"
+          ? await getHistoricalUsdKrwRate(parsed.tradedOn)
+          : { rate: 1 };
+      const nextTransactions = managed.transactions
+        .map((transaction) =>
+          transaction.id === transactionId
+            ? {
+                ...transaction,
+                type: parsed.type,
+                tradedOn: parsed.tradedOn,
+                quantity: parsed.quantity,
+                unitPrice: parsed.unitPrice,
+                exchangeRate: historicalRate.rate,
+                memo: parsed.memo || null,
+              }
+            : transaction,
+        )
+        .sort((a, b) => a.tradedOn.localeCompare(b.tradedOn) || a.id - b.id);
+      calculateManagedHoldings(nextTransactions);
+      await updatePortfolioTransaction({
+        userId: user.id,
+        id: transactionId,
+        type: parsed.type,
+        tradedOn: parsed.tradedOn,
+        quantity: parsed.quantity,
+        unitPrice: parsed.unitPrice,
+        exchangeRate: historicalRate.rate,
+        memo: parsed.memo || null,
+      });
       return redirect("/dashboard/portfolio");
     }
 
@@ -365,14 +432,8 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
-  const {
-    today,
-    managed,
-    holdings,
-    quickRecordCount,
-    investmentStartedOn,
-    defaults,
-  } = loaderData;
+  const { today, managed, holdings, quickRecordCount, investmentStartedOn } =
+    loaderData;
   const actionData = useActionData<typeof action>();
   const location = useLocation();
   const quickDraft = (
@@ -392,12 +453,57 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
   const [selectedStock, setSelectedStock] = useState<StockSearchResult | null>(
     null,
   );
-  const [goalAmountInput, setGoalAmountInput] = useState(
-    String(defaults.goalAmount),
+  const [goalAmountInput, setGoalAmountInput] = useState("");
+  const [monthlyContributionInput, setMonthlyContributionInput] = useState("");
+  const [editingTransactionId, setEditingTransactionId] = useState<
+    number | null
+  >(null);
+  const [holdingFilter, setHoldingFilter] = useState<number | null>(null);
+  const [journalPeriod, setJournalPeriod] = useState<JournalPeriod>("all");
+  const [journalExpanded, setJournalExpanded] = useState(false);
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState(today);
+  const [visibleTransactionCount, setVisibleTransactionCount] = useState(20);
+  const journalRef = useRef<HTMLElement>(null);
+  const transactionCount = managed?.transactions.length ?? 0;
+  const portfolioStockIds = [
+    ...new Set(managed?.transactions.map((transaction) => transaction.stockId)),
+  ];
+  const getPortfolioTone = (stockId: number) =>
+    quickImportTones[
+      Math.max(0, portfolioStockIds.indexOf(stockId)) % quickImportTones.length
+    ];
+  const selectedJournalPeriod = journalPeriods.find(
+    (period) => period.value === journalPeriod,
+  )!;
+  const journalStartDate = (() => {
+    if (journalPeriod === "custom") return customStartDate || null;
+    if (!selectedJournalPeriod.days) return null;
+    const date = new Date(`${today}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() - selectedJournalPeriod.days + 1);
+    return date.toISOString().slice(0, 10);
+  })();
+  const journalTransactions = [...(managed?.transactions ?? [])]
+    .reverse()
+    .filter(
+      (transaction) =>
+        (holdingFilter === null || transaction.stockId === holdingFilter) &&
+        (!journalStartDate || transaction.tradedOn >= journalStartDate) &&
+        (journalPeriod !== "custom" ||
+          !customEndDate ||
+          transaction.tradedOn <= customEndDate),
+    );
+  const displayedJournalTransactions = journalTransactions.slice(
+    0,
+    journalExpanded ? visibleTransactionCount : 5,
   );
-  const [monthlyContributionInput, setMonthlyContributionInput] = useState(
-    String(defaults.monthlyContribution),
-  );
+  useEffect(() => {
+    setVisibleTransactionCount(20);
+  }, [holdingFilter, journalPeriod, customStartDate, customEndDate]);
+  useEffect(() => {
+    setStockQuery("");
+    setSelectedStock(null);
+  }, [transactionCount]);
   const isActive = managed?.portfolio.status === "active";
   const updateQuickImportRow = (
     rowId: string,
@@ -569,17 +675,12 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
                         <Label htmlFor={`import-date-${row.rowId}`}>
                           매수 날짜
                         </Label>
-                        <Input
+                        <DatePicker
                           id={`import-date-${row.rowId}`}
-                          type="date"
                           value={row.tradedOn}
                           max={loaderData.today}
-                          onChange={(event) =>
-                            updateQuickImportRow(
-                              row.rowId,
-                              "tradedOn",
-                              event.target.value,
-                            )
+                          onChange={(value) =>
+                            updateQuickImportRow(row.rowId, "tradedOn", value)
                           }
                           required
                         />
@@ -645,7 +746,11 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
               해외주식 환율은 거래 날짜를 기준으로 자동 적용해요. 주말과
               휴장일은 직전 기준 환율을 사용해요.
             </p>
-            <Form method="post" className="mt-5 grid gap-4 sm:grid-cols-2">
+            <Form
+              key={`transaction-form-${transactionCount}`}
+              method="post"
+              className="mt-5 grid gap-4 sm:grid-cols-2"
+            >
               <input type="hidden" name="intent" value="add-transaction" />
               <div className="space-y-2">
                 <Label htmlFor="managed-stock">종목명 또는 티커</Label>
@@ -682,10 +787,9 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="tradedOn">거래 날짜</Label>
-                <Input
+                <DatePicker
                   id="tradedOn"
                   name="tradedOn"
-                  type="date"
                   defaultValue={today}
                   max={today}
                   required
@@ -740,28 +844,64 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
             </div>
             {holdings.length ? (
               <div className="mt-5 space-y-3">
-                {holdings.map((holding) => (
-                  <div
-                    key={holding.stockId}
-                    className="bg-muted/25 flex items-center justify-between gap-4 rounded-2xl border p-4"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate font-black">{holding.name}</p>
-                      <p className="text-muted-foreground mt-1 text-xs">
-                        {holding.ticker} ·{" "}
-                        {holding.quantity.toLocaleString("ko-KR")}주
-                      </p>
+                {holdings.map((holding) => {
+                  const tone = getPortfolioTone(holding.stockId);
+                  return (
+                    <div
+                      key={holding.stockId}
+                      className={cn(
+                        "flex items-center justify-between gap-4 rounded-2xl border p-4",
+                        tone.card,
+                      )}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span
+                            className={cn(
+                              "size-2 shrink-0 rounded-full",
+                              tone.dot,
+                            )}
+                          />
+                          <p className="truncate font-black">{holding.name}</p>
+                        </div>
+                        <p className="text-muted-foreground mt-1 text-xs">
+                          {holding.ticker} ·{" "}
+                          {holding.quantity.toLocaleString("ko-KR")}주
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <div className="text-right">
+                          <p className="text-sm font-black">
+                            {formatWon(holding.costKrw)}
+                          </p>
+                          <p className="text-muted-foreground mt-1 text-[11px]">
+                            원화 매입원금
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="rounded-full"
+                          aria-label={`${holding.name} 보유 현황 수정`}
+                          title="이 종목의 매매일지 수정"
+                          onClick={() => {
+                            setHoldingFilter(holding.stockId);
+                            setEditingTransactionId(null);
+                            window.requestAnimationFrame(() =>
+                              journalRef.current?.scrollIntoView({
+                                behavior: "smooth",
+                                block: "start",
+                              }),
+                            );
+                          }}
+                        >
+                          <PencilIcon className="size-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-sm font-black">
-                        {formatWon(holding.costKrw)}
-                      </p>
-                      <p className="text-muted-foreground mt-1 text-[11px]">
-                        원화 매입원금
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="text-muted-foreground mt-5 flex min-h-40 items-center justify-center rounded-2xl border border-dashed text-sm">
@@ -771,80 +911,371 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
           </div>
         </section>
 
-        <section className="bg-card mt-5 rounded-3xl border p-5 shadow-sm md:p-6">
-          <div className="flex items-center gap-2">
-            <CalendarDaysIcon className="size-5 text-violet-500" />
-            <h2 className="text-xl font-black">매매일지</h2>
-          </div>
-          {managed?.transactions.length ? (
-            <div className="mt-5 overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="text-muted-foreground text-xs">
-                  <tr className="border-b">
-                    <th className="px-3 py-3">날짜</th>
-                    <th className="px-3 py-3">종목</th>
-                    <th className="px-3 py-3">구분</th>
-                    <th className="px-3 py-3">수량</th>
-                    <th className="px-3 py-3">체결가</th>
-                    <th className="px-3 py-3">환율</th>
-                    <th className="px-3 py-3">메모</th>
-                    <th className="px-3 py-3" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...managed.transactions].reverse().map((transaction) => (
-                    <tr key={transaction.id} className="border-b last:border-0">
-                      <td className="px-3 py-3">{transaction.tradedOn}</td>
-                      <td className="px-3 py-3 font-bold">
-                        {transaction.stockName}
-                      </td>
-                      <td
-                        className={`px-3 py-3 font-black ${transaction.type === "BUY" ? "text-rose-500" : "text-blue-500"}`}
-                      >
-                        {transaction.type === "BUY" ? "매수" : "매도"}
-                      </td>
-                      <td className="px-3 py-3">
-                        {transaction.quantity.toLocaleString("ko-KR")}
-                      </td>
-                      <td className="px-3 py-3">
-                        {transaction.unitPrice.toLocaleString("ko-KR")}{" "}
-                        {transaction.currency}
-                      </td>
-                      <td className="px-3 py-3">
-                        {transaction.currency === "USD"
-                          ? `${transaction.exchangeRate.toLocaleString("ko-KR")}원`
-                          : "—"}
-                      </td>
-                      <td className="text-muted-foreground max-w-44 truncate px-3 py-3">
-                        {transaction.memo || "—"}
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        <Form method="post">
-                          <input
-                            type="hidden"
-                            name="intent"
-                            value="delete-transaction"
-                          />
-                          <input
-                            type="hidden"
-                            name="transactionId"
-                            value={transaction.id}
-                          />
-                          <Button
-                            type="submit"
-                            size="icon"
-                            variant="ghost"
-                            aria-label={`${transaction.stockName} 거래 삭제`}
-                          >
-                            <Trash2Icon />
-                          </Button>
-                        </Form>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        <section
+          ref={journalRef}
+          className="bg-card mt-5 scroll-mt-6 rounded-3xl border p-5 shadow-sm md:p-6"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <CalendarDaysIcon className="size-5 text-violet-500" />
+              <div>
+                <h2 className="text-xl font-black">매매일지</h2>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  {journalExpanded
+                    ? "스크롤하면 이전 기록을 계속 불러와요."
+                    : "최근 매매 기록 5건을 보여드려요."}
+                </p>
+              </div>
             </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {holdingFilter !== null && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={() => {
+                    setHoldingFilter(null);
+                    setEditingTransactionId(null);
+                  }}
+                >
+                  전체 종목 보기 <XIcon className="size-3.5" />
+                </Button>
+              )}
+            </div>
+          </div>
+          {holdingFilter !== null && (
+            <p className="mt-2 text-sm font-bold text-emerald-500">
+              {
+                holdings.find((holding) => holding.stockId === holdingFilter)
+                  ?.name
+              }
+              의 거래만 보고 있어요. 수정하면 보유 현황이 자동으로 다시
+              계산돼요.
+            </p>
+          )}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <span className="text-muted-foreground mr-1 text-xs font-bold">
+              조회 기간
+            </span>
+            {journalPeriods.map((period) => (
+              <Button
+                key={period.value}
+                type="button"
+                size="sm"
+                variant={journalPeriod === period.value ? "default" : "ghost"}
+                className="h-8 rounded-full px-3 text-xs"
+                onClick={() => {
+                  setJournalPeriod(period.value);
+                  setEditingTransactionId(null);
+                }}
+              >
+                {period.label}
+              </Button>
+            ))}
+            <span className="text-muted-foreground ml-auto text-xs">
+              {journalTransactions.length}건
+            </span>
+          </div>
+          {journalPeriod === "custom" && (
+            <div className="bg-muted/20 mt-3 grid gap-3 rounded-2xl border p-4 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
+              <div className="space-y-2">
+                <Label htmlFor="journal-start-date">시작일</Label>
+                <DatePicker
+                  id="journal-start-date"
+                  value={customStartDate}
+                  max={customEndDate || today}
+                  onChange={setCustomStartDate}
+                />
+              </div>
+              <span className="text-muted-foreground hidden pb-2 text-sm sm:block">
+                부터
+              </span>
+              <div className="space-y-2">
+                <Label htmlFor="journal-end-date">종료일</Label>
+                <DatePicker
+                  id="journal-end-date"
+                  value={customEndDate}
+                  min={customStartDate || undefined}
+                  max={today}
+                  onChange={setCustomEndDate}
+                />
+              </div>
+            </div>
+          )}
+          {managed?.transactions.length ? (
+            journalTransactions.length ? (
+              <>
+                <div
+                  className={cn(
+                    "mt-4 overflow-x-auto",
+                    journalExpanded && "max-h-[620px] overflow-y-auto pr-1",
+                  )}
+                  onScroll={(event) => {
+                    if (!journalExpanded) return;
+                    const element = event.currentTarget;
+                    if (
+                      element.scrollHeight -
+                        element.scrollTop -
+                        element.clientHeight <
+                      120
+                    )
+                      setVisibleTransactionCount((count) =>
+                        Math.min(count + 20, journalTransactions.length),
+                      );
+                  }}
+                >
+                  <table className="w-full min-w-[760px] text-left text-sm">
+                    <thead className="text-muted-foreground text-xs">
+                      <tr className="border-b">
+                        <th className="px-3 py-3">날짜</th>
+                        <th className="px-3 py-3">종목</th>
+                        <th className="px-3 py-3">구분</th>
+                        <th className="px-3 py-3">수량</th>
+                        <th className="px-3 py-3">체결가</th>
+                        <th className="px-3 py-3">환율</th>
+                        <th className="px-3 py-3">메모</th>
+                        <th className="px-3 py-3" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {displayedJournalTransactions.map((transaction) => {
+                        const tone = getPortfolioTone(transaction.stockId);
+                        return editingTransactionId === transaction.id ? (
+                          <tr
+                            key={transaction.id}
+                            className={cn("border-b last:border-0", tone.card)}
+                          >
+                            <td colSpan={8} className="p-3">
+                              <Form
+                                method="post"
+                                className="grid gap-3 md:grid-cols-6"
+                              >
+                                <input
+                                  type="hidden"
+                                  name="intent"
+                                  value="update-transaction"
+                                />
+                                <input
+                                  type="hidden"
+                                  name="transactionId"
+                                  value={transaction.id}
+                                />
+                                <div className="space-y-1.5">
+                                  <Label
+                                    htmlFor={`edit-date-${transaction.id}`}
+                                  >
+                                    날짜
+                                  </Label>
+                                  <DatePicker
+                                    id={`edit-date-${transaction.id}`}
+                                    name="tradedOn"
+                                    defaultValue={transaction.tradedOn}
+                                    max={today}
+                                    required
+                                  />
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label
+                                    htmlFor={`edit-type-${transaction.id}`}
+                                  >
+                                    구분
+                                  </Label>
+                                  <Select
+                                    name="type"
+                                    defaultValue={transaction.type}
+                                  >
+                                    <SelectTrigger
+                                      id={`edit-type-${transaction.id}`}
+                                      className="w-full"
+                                    >
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="BUY">매수</SelectItem>
+                                      <SelectItem value="SELL">매도</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label
+                                    htmlFor={`edit-quantity-${transaction.id}`}
+                                  >
+                                    수량
+                                  </Label>
+                                  <Input
+                                    id={`edit-quantity-${transaction.id}`}
+                                    name="quantity"
+                                    type="number"
+                                    min="0.000001"
+                                    step="any"
+                                    defaultValue={transaction.quantity}
+                                    required
+                                  />
+                                </div>
+                                <div className="space-y-1.5">
+                                  <Label
+                                    htmlFor={`edit-price-${transaction.id}`}
+                                  >
+                                    체결가
+                                  </Label>
+                                  <Input
+                                    id={`edit-price-${transaction.id}`}
+                                    name="unitPrice"
+                                    type="number"
+                                    min="0.000001"
+                                    step="any"
+                                    defaultValue={transaction.unitPrice}
+                                    required
+                                  />
+                                </div>
+                                <div className="space-y-1.5 md:col-span-2">
+                                  <Label
+                                    htmlFor={`edit-memo-${transaction.id}`}
+                                  >
+                                    메모
+                                  </Label>
+                                  <Input
+                                    id={`edit-memo-${transaction.id}`}
+                                    name="memo"
+                                    maxLength={300}
+                                    defaultValue={transaction.memo ?? ""}
+                                  />
+                                </div>
+                                <div className="flex justify-end gap-2 md:col-span-6">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    onClick={() =>
+                                      setEditingTransactionId(null)
+                                    }
+                                  >
+                                    취소
+                                  </Button>
+                                  <Button type="submit">수정 저장</Button>
+                                </div>
+                              </Form>
+                            </td>
+                          </tr>
+                        ) : (
+                          <tr
+                            key={transaction.id}
+                            className={cn("border-b last:border-0", tone.card)}
+                          >
+                            <td className="px-3 py-3">
+                              {transaction.tradedOn}
+                            </td>
+                            <td className="px-3 py-3 font-bold">
+                              <span
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-black",
+                                  tone.badge,
+                                )}
+                              >
+                                <span
+                                  className={cn(
+                                    "size-1.5 rounded-full",
+                                    tone.dot,
+                                  )}
+                                />
+                                {transaction.stockName}
+                              </span>
+                            </td>
+                            <td
+                              className={`px-3 py-3 font-black ${transaction.type === "BUY" ? "text-rose-500" : "text-blue-500"}`}
+                            >
+                              {transaction.type === "BUY" ? "매수" : "매도"}
+                            </td>
+                            <td className="px-3 py-3">
+                              {transaction.quantity.toLocaleString("ko-KR")}
+                            </td>
+                            <td className="px-3 py-3">
+                              {transaction.unitPrice.toLocaleString("ko-KR")}{" "}
+                              {transaction.currency}
+                            </td>
+                            <td className="px-3 py-3">
+                              {transaction.currency === "USD"
+                                ? `${transaction.exchangeRate.toLocaleString("ko-KR")}원`
+                                : "—"}
+                            </td>
+                            <td className="text-muted-foreground max-w-44 truncate px-3 py-3">
+                              {transaction.memo || "—"}
+                            </td>
+                            <td className="px-3 py-3 text-right">
+                              <div className="flex justify-end gap-1">
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="ghost"
+                                  aria-label={`${transaction.stockName} 거래 수정`}
+                                  onClick={() =>
+                                    setEditingTransactionId(transaction.id)
+                                  }
+                                >
+                                  <PencilIcon />
+                                </Button>
+                                <Form method="post">
+                                  <input
+                                    type="hidden"
+                                    name="intent"
+                                    value="delete-transaction"
+                                  />
+                                  <input
+                                    type="hidden"
+                                    name="transactionId"
+                                    value={transaction.id}
+                                  />
+                                  <Button
+                                    type="submit"
+                                    size="icon"
+                                    variant="ghost"
+                                    aria-label={`${transaction.stockName} 거래 삭제`}
+                                  >
+                                    <Trash2Icon />
+                                  </Button>
+                                </Form>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {journalExpanded &&
+                    displayedJournalTransactions.length <
+                      journalTransactions.length && (
+                      <p className="text-muted-foreground py-4 text-center text-xs">
+                        아래로 스크롤하면 이전 기록을 더 불러와요.
+                      </p>
+                    )}
+                </div>
+                {(journalExpanded || journalTransactions.length > 5) && (
+                  <div className="mt-4 flex justify-center">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={journalExpanded ? "secondary" : "outline"}
+                      className="rounded-full px-5"
+                      onClick={() => {
+                        setJournalExpanded((expanded) => !expanded);
+                        setEditingTransactionId(null);
+                      }}
+                    >
+                      {journalExpanded ? "최근 기록만 보기" : "상세히 보기"}
+                      {journalExpanded ? (
+                        <ChevronUpIcon className="size-3.5" />
+                      ) : (
+                        <ChevronDownIcon className="size-3.5" />
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="text-muted-foreground mt-5 rounded-2xl border border-dashed p-8 text-center text-sm">
+                선택한 기간에 해당하는 매매 기록이 없어요.
+              </p>
+            )
           ) : (
             <p className="text-muted-foreground mt-5 rounded-2xl border border-dashed p-8 text-center text-sm">
               아직 작성한 매매일지가 없어요.
@@ -863,6 +1294,20 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
               ? "저장된 매매일지를 반영해 오늘의 정밀 분석 기록을 업데이트해요."
               : `전환하면 기존 빠른 분석 기록 ${quickRecordCount}개는 분석 기록에 보관되고, 대시보드와 인사이트는 정밀 분석 기록으로 새로 시작해요.`}
           </p>
+          {isActive && (
+            <div className="mt-4 flex items-start gap-3 rounded-2xl border border-violet-500/25 bg-violet-500/[0.06] p-4 text-sm leading-6">
+              <TargetIcon className="mt-0.5 size-4 shrink-0 text-violet-500" />
+              <div>
+                <p className="font-black">
+                  목표 금액별로 따로 분석할 수 있어요
+                </p>
+                <p className="text-muted-foreground mt-1">
+                  기존과 다른 목표 금액을 입력하면 포트폴리오는 그대로 유지되고,
+                  해당 금액을 기준으로 한 새로운 목표 분석이 별도로 추가돼요.
+                </p>
+              </div>
+            </div>
+          )}
           {investmentStartedOn && (
             <p className="mt-3 text-xs font-bold text-emerald-600 dark:text-emerald-400">
               투자 기간은 최초 매수일 {investmentStartedOn.replaceAll("-", ".")}
@@ -879,15 +1324,14 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
                 type="number"
                 min="100000000"
                 step="100000000"
+                placeholder="예: 100000000"
                 value={goalAmountInput}
                 onChange={(event) => setGoalAmountInput(event.target.value)}
                 required
               />
-              {formatKoreanMoney(goalAmountInput) && (
-                <p className="text-right text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                  {formatKoreanMoney(goalAmountInput)}
-                </p>
-              )}
+              <p className="text-right text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                {formatKoreanMoney(goalAmountInput) || "예: 1억원"}
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="monthlyContribution">매월 투자금</Label>
@@ -896,16 +1340,15 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
                 name="monthlyContribution"
                 type="number"
                 min="0"
+                placeholder="예: 100000"
                 value={monthlyContributionInput}
                 onChange={(event) =>
                   setMonthlyContributionInput(event.target.value)
                 }
               />
-              {formatKoreanMoney(monthlyContributionInput) && (
-                <p className="text-right text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                  {formatKoreanMoney(monthlyContributionInput)}
-                </p>
-              )}
+              <p className="text-right text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                {formatKoreanMoney(monthlyContributionInput) || "예: 10만원"}
+              </p>
             </div>
             {!isActive && (
               <label className="bg-background/70 flex items-start gap-3 rounded-2xl border border-amber-500/25 p-4 text-sm leading-6 sm:col-span-2">
