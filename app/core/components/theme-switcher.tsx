@@ -48,6 +48,7 @@ export default function ThemeSwitcher() {
         <Button
           variant="ghost"
           size="icon"
+          aria-label="화면 테마 변경"
           className="border-border/60 bg-background/60 rounded-xl border shadow-sm hover:border-violet-500/25 hover:bg-violet-500/10 hover:text-violet-500"
         >
           {/* Conditionally render the appropriate icon based on current theme */}

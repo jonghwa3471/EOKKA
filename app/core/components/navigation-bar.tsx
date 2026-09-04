@@ -96,7 +96,7 @@ function UserMenu({
         <DropdownMenuSeparator />
 
         {/* 대시보드 link */}
-        <DropdownMenuItem asChild variant="destructive">
+        <DropdownMenuItem asChild>
           <SheetClose asChild>
             <Link to="/dashboard" viewTransition>
               <HomeIcon className="size-4" />
@@ -106,7 +106,7 @@ function UserMenu({
         </DropdownMenuItem>
 
         {/* Logout link */}
-        <DropdownMenuItem asChild>
+        <DropdownMenuItem asChild variant="destructive">
           <SheetClose asChild>
             <Link to="/logout" viewTransition>
               <LogOutIcon className="size-4" />
@@ -183,6 +183,7 @@ function Actions() {
           <Button
             variant="ghost"
             size="icon"
+            aria-label="설정 메뉴 열기"
             className="border-border/60 bg-background/60 rounded-xl border shadow-sm hover:border-emerald-500/25 hover:bg-emerald-500/10 hover:text-emerald-500"
           >
             <CogIcon className="size-4" />

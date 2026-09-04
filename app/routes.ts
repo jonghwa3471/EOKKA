@@ -104,6 +104,10 @@ export default [
       ...prefix("/dashboard", [
         index("features/users/screens/dashboard.tsx"),
         route("/portfolio", "features/users/screens/managed-portfolio.tsx"),
+        route(
+          "/precise-analysis",
+          "features/users/screens/precise-analysis.tsx",
+        ),
         route("/insights", "features/users/screens/investment-insights.tsx"),
         route("/history", "features/users/screens/analysis-history.tsx"),
         route("/pro", "features/users/screens/eokka-pro.tsx"),

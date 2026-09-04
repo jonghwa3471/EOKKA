@@ -18,6 +18,7 @@ import {
 import { useState } from "react";
 import { Form, Link, redirect, useNavigate } from "react-router";
 
+import { DestructiveConfirmDialog } from "~/core/components/destructive-confirm-dialog";
 import { Button } from "~/core/components/ui/button";
 import {
   Select,
@@ -625,26 +626,21 @@ export default function AnalysisHistory({ loaderData }: Route.ComponentProps) {
             </p>
           </div>
           {availableDates.length > 0 && (
-            <Form
-              method="post"
-              onSubmit={(event) => {
-                if (
-                  !window.confirm(
-                    "모든 목표의 분석 기록을 전부 삭제할까요? 삭제한 기록은 복구할 수 없고, 홈에서 다시 분석하기 전까지 자동 기록도 중단돼요.",
-                  )
-                )
-                  event.preventDefault();
-              }}
-            >
-              <input type="hidden" name="intent" value="delete-all-history" />
-              <Button
-                type="submit"
-                variant="outline"
-                className="rounded-full text-rose-500 hover:text-rose-500"
-              >
-                <Trash2Icon /> 전체 기록 삭제
-              </Button>
-            </Form>
+            <DestructiveConfirmDialog
+              title="분석 기록을 전부 삭제할까요?"
+              description="모든 날짜와 목표 금액의 분석 기록이 삭제됩니다. 삭제한 기록은 복구할 수 없으며, 다시 분석하기 전까지 자동 기록도 중단돼요."
+              confirmLabel="분석 기록 전체 삭제"
+              fields={{ intent: "delete-all-history" }}
+              trigger={
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full border-red-500/25 text-red-500 hover:bg-red-500/10 hover:text-red-500"
+                >
+                  <Trash2Icon /> 전체 기록 삭제
+                </Button>
+              }
+            />
           )}
         </header>
 
@@ -670,7 +666,11 @@ export default function AnalysisHistory({ loaderData }: Route.ComponentProps) {
                 variant="ghost"
                 className="rounded-full"
               >
-                <Link to={`?month=${previousMonth}`} aria-label="이전 달">
+                <Link
+                  to={`?month=${previousMonth}`}
+                  aria-label="이전 달"
+                  title="이전 달"
+                >
                   <ChevronLeftIcon />
                 </Link>
               </Button>
@@ -727,7 +727,11 @@ export default function AnalysisHistory({ loaderData }: Route.ComponentProps) {
                 variant="ghost"
                 className="rounded-full"
               >
-                <Link to={`?month=${nextMonth}`} aria-label="다음 달">
+                <Link
+                  to={`?month=${nextMonth}`}
+                  aria-label="다음 달"
+                  title="다음 달"
+                >
                   <ChevronRightIcon />
                 </Link>
               </Button>
@@ -851,44 +855,30 @@ export default function AnalysisHistory({ loaderData }: Route.ComponentProps) {
                           </span>
                         </div>
                       </Link>
-                      <Form
-                        method="post"
-                        className="mr-3 shrink-0"
-                        onSubmit={(event) => {
-                          if (
-                            !window.confirm(
-                              `${selectedDate}의 ${goalLabel(record.goalAmount)} 목표 분석을 삭제할까요?`,
-                            )
-                          )
-                            event.preventDefault();
-                        }}
-                      >
-                        <input
-                          type="hidden"
-                          name="intent"
-                          value="delete-analysis"
+                      <div className="mr-3 shrink-0">
+                        <DestructiveConfirmDialog
+                          title={`${goalLabel(record.goalAmount)} 목표 분석을 삭제할까요?`}
+                          description={`${selectedDate.replaceAll("-", ".")}에 저장한 목표 분석 하나를 삭제합니다. 삭제한 기록은 복구할 수 없어요.`}
+                          confirmLabel="분석 삭제"
+                          fields={{
+                            intent: "delete-analysis",
+                            snapshotId: record.id,
+                            savedOn: selectedDate,
+                          }}
+                          trigger={
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="text-muted-foreground size-9 rounded-full hover:text-rose-500"
+                              aria-label={`${goalLabel(record.goalAmount)} 목표 분석 삭제`}
+                              title="이 분석 삭제"
+                            >
+                              <Trash2Icon className="size-4" />
+                            </Button>
+                          }
                         />
-                        <input
-                          type="hidden"
-                          name="snapshotId"
-                          value={record.id}
-                        />
-                        <input
-                          type="hidden"
-                          name="savedOn"
-                          value={selectedDate}
-                        />
-                        <Button
-                          type="submit"
-                          size="icon"
-                          variant="ghost"
-                          className="text-muted-foreground size-9 rounded-full hover:text-rose-500"
-                          aria-label={`${goalLabel(record.goalAmount)} 목표 분석 삭제`}
-                          title="이 분석 삭제"
-                        >
-                          <Trash2Icon className="size-4" />
-                        </Button>
-                      </Form>
+                      </div>
                     </div>
                   );
                 })}

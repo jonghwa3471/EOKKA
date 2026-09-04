@@ -10,17 +10,19 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
       analysis_snapshots: {
         Row: {
+          analysis_mode: string
           analysis_snapshot_id: number
           created_at: string
           current_value: number
           goal_amount: number
           goal_month: number | null
+          managed_portfolio_id: number | null
           monthly_contribution: number
           profit: number
           result: Json
@@ -30,11 +32,13 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          analysis_mode?: string
           analysis_snapshot_id?: never
           created_at?: string
           current_value: number
           goal_amount: number
           goal_month?: number | null
+          managed_portfolio_id?: number | null
           monthly_contribution?: number
           profit: number
           result: Json
@@ -44,16 +48,56 @@ export type Database = {
           user_id: string
         }
         Update: {
+          analysis_mode?: string
           analysis_snapshot_id?: never
           created_at?: string
           current_value?: number
           goal_amount?: number
           goal_month?: number | null
+          managed_portfolio_id?: number | null
           monthly_contribution?: number
           profit?: number
           result?: Json
           return_rate?: number
           saved_on?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analysis_snapshots_managed_portfolio_id_managed_portfolios_mana"
+            columns: ["managed_portfolio_id"]
+            isOneToOne: false
+            referencedRelation: "managed_portfolios"
+            referencedColumns: ["managed_portfolio_id"]
+          },
+        ]
+      }
+      managed_portfolios: {
+        Row: {
+          created_at: string
+          managed_portfolio_id: number
+          name: string
+          status: string
+          transitioned_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          managed_portfolio_id?: never
+          name?: string
+          status?: string
+          transitioned_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          managed_portfolio_id?: never
+          name?: string
+          status?: string
+          transitioned_at?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -109,6 +153,75 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      portfolio_transactions: {
+        Row: {
+          created_at: string
+          currency: string
+          exchange_rate: number
+          fee_krw: number
+          managed_portfolio_id: number
+          memo: string | null
+          portfolio_transaction_id: number
+          quantity: number
+          stock_id: number
+          tax_krw: number
+          traded_on: string
+          transaction_type: string
+          unit_price: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          currency: string
+          exchange_rate?: number
+          fee_krw?: number
+          managed_portfolio_id: number
+          memo?: string | null
+          portfolio_transaction_id?: never
+          quantity: number
+          stock_id: number
+          tax_krw?: number
+          traded_on: string
+          transaction_type: string
+          unit_price: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          exchange_rate?: number
+          fee_krw?: number
+          managed_portfolio_id?: number
+          memo?: string | null
+          portfolio_transaction_id?: never
+          quantity?: number
+          stock_id?: number
+          tax_krw?: number
+          traded_on?: string
+          transaction_type?: string
+          unit_price?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_transactions_managed_portfolio_id_managed_portfolios_"
+            columns: ["managed_portfolio_id"]
+            isOneToOne: false
+            referencedRelation: "managed_portfolios"
+            referencedColumns: ["managed_portfolio_id"]
+          },
+          {
+            foreignKeyName: "portfolio_transactions_stock_id_stocks_stock_id_fk"
+            columns: ["stock_id"]
+            isOneToOne: false
+            referencedRelation: "stocks"
+            referencedColumns: ["stock_id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -253,12 +366,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -282,11 +395,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -307,11 +420,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -332,11 +445,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -349,11 +462,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

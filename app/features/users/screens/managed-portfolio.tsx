@@ -13,14 +13,21 @@ import {
   PencilIcon,
   PlusIcon,
   RefreshCwIcon,
-  TargetIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { Form, data, redirect, useActionData, useLocation } from "react-router";
+import { type FormEvent, useEffect, useRef, useState } from "react";
+import {
+  Form,
+  Link,
+  data,
+  redirect,
+  useActionData,
+  useLocation,
+} from "react-router";
 import { z } from "zod";
 
+import { DestructiveConfirmDialog } from "~/core/components/destructive-confirm-dialog";
 import { Button } from "~/core/components/ui/button";
 import { DatePicker } from "~/core/components/ui/date-picker";
 import { Input } from "~/core/components/ui/input";
@@ -35,23 +42,20 @@ import {
 import db from "~/core/db/drizzle-client.server";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
-import { analyzePortfolio } from "~/features/stocks/analysis.server";
 import { StockAutocomplete } from "~/features/stocks/components/stock-autocomplete";
 import {
   getAnalysisHistory,
-  saveDailyAnalysisSnapshot,
   seoulDate,
-  startManagedAnalysisHistory,
 } from "~/features/stocks/history/analysis-history.server";
 import { getHistoricalUsdKrwRate } from "~/features/stocks/portfolio/exchange-rate.server";
 import {
   addPortfolioTransaction,
   addPortfolioTransactions,
   calculateManagedHoldings,
+  deleteAllPortfolioTransactions,
   deletePortfolioTransaction,
   getManagedPortfolio,
-  investmentMonthsSince,
-  updatePortfolioTransaction,
+  updatePortfolioTransactions,
 } from "~/features/stocks/portfolio/portfolio.server";
 import { stocks } from "~/features/stocks/schema";
 import type { StockSearchResult } from "~/features/stocks/types";
@@ -69,11 +73,19 @@ const transactionSchema = z.object({
   memo: z.string().trim().max(300),
 });
 
-const analysisSchema = z.object({
-  goalAmount: z.coerce.number().int().min(100_000_000).max(100_000_000_000),
-  monthlyContribution: z.coerce.number().int().min(0).max(1_000_000_000),
-  confirmReset: z.literal("on").optional(),
-});
+const pendingTransactionUpdateSchema = transactionSchema
+  .omit({ stockId: true })
+  .extend({
+    id: z.number().int().positive(),
+  });
+
+const pendingTransactionUpdatesSchema = z
+  .array(pendingTransactionUpdateSchema)
+  .max(500);
+
+type PendingTransactionUpdate = z.infer<
+  typeof pendingTransactionUpdatesSchema
+>[number];
 
 const quickImportSchema = z
   .array(
@@ -150,21 +162,6 @@ function formatWon(value: number) {
   return `${Math.round(value).toLocaleString("ko-KR")}원`;
 }
 
-function formatKoreanMoney(value: string) {
-  const amount = Number(value);
-  if (!Number.isFinite(amount) || amount < 0 || value === "") return "";
-  const rounded = Math.round(amount);
-  const eok = Math.floor(rounded / 100_000_000);
-  const man = Math.floor((rounded % 100_000_000) / 10_000);
-  const won = rounded % 10_000;
-  const parts = [
-    eok > 0 ? `${eok.toLocaleString("ko-KR")}억` : "",
-    man > 0 ? `${man.toLocaleString("ko-KR")}만` : "",
-    won > 0 ? won.toLocaleString("ko-KR") : "",
-  ].filter(Boolean);
-  return `${parts.join(" ") || "0"}원`;
-}
-
 export async function loader({ request }: Route.LoaderArgs) {
   const [client] = makeServerClient(request);
   const {
@@ -193,18 +190,19 @@ export async function loader({ request }: Route.LoaderArgs) {
           null,
         )
     : null;
+  const hasUnappliedChanges = Boolean(
+    managed?.portfolio.status === "active" &&
+      (!lastManagedAnalysisAt ||
+        new Date(managed.portfolio.updated_at).getTime() >
+          new Date(lastManagedAnalysisAt).getTime()),
+  );
 
   return {
     today: seoulDate(),
     managed,
     holdings,
-    quickRecordCount: quickHistory.filter(
-      (record) => record.analysisMode === "quick",
-    ).length,
-    investmentStartedOn:
-      managed?.transactions.find((transaction) => transaction.type === "BUY")
-        ?.tradedOn ?? null,
     lastManagedAnalysisAt,
+    hasUnappliedChanges,
   };
 }
 
@@ -294,58 +292,15 @@ export async function action({ request }: Route.ActionArgs) {
       });
     }
 
-    if (intent === "update-transaction") {
-      const transactionId = Number(formData.get("transactionId"));
-      if (!Number.isSafeInteger(transactionId) || transactionId <= 0)
-        throw new Error("수정할 거래를 확인하지 못했어요.");
+    if (intent === "delete-all-transactions") {
       const managed = await getManagedPortfolio(user.id);
-      const existing = managed?.transactions.find(
-        (transaction) => transaction.id === transactionId,
-      );
-      if (!managed || !existing)
-        throw new Error("수정할 거래를 찾지 못했어요.");
-      const parsed = transactionSchema.parse({
-        stockId: existing.stockId,
-        type: formData.get("type"),
-        tradedOn: formData.get("tradedOn"),
-        quantity: formData.get("quantity"),
-        unitPrice: formData.get("unitPrice"),
-        memo: formData.get("memo") ?? "",
-      });
-      const historicalRate =
-        existing.currency === "USD"
-          ? await getHistoricalUsdKrwRate(parsed.tradedOn)
-          : { rate: 1 };
-      const nextTransactions = managed.transactions
-        .map((transaction) =>
-          transaction.id === transactionId
-            ? {
-                ...transaction,
-                type: parsed.type,
-                tradedOn: parsed.tradedOn,
-                quantity: parsed.quantity,
-                unitPrice: parsed.unitPrice,
-                exchangeRate: historicalRate.rate,
-                memo: parsed.memo || null,
-              }
-            : transaction,
-        )
-        .sort((a, b) => a.tradedOn.localeCompare(b.tradedOn) || a.id - b.id);
-      calculateManagedHoldings(nextTransactions);
-      await updatePortfolioTransaction({
-        userId: user.id,
-        id: transactionId,
-        type: parsed.type,
-        tradedOn: parsed.tradedOn,
-        quantity: parsed.quantity,
-        unitPrice: parsed.unitPrice,
-        exchangeRate: historicalRate.rate,
-        memo: parsed.memo || null,
-      });
+      if (!managed?.transactions.length)
+        throw new Error("삭제할 매매 기록이 없어요.");
+      await deleteAllPortfolioTransactions(user.id);
       return data({
-        success: "매매일지 수정을 완료했어요.",
+        success: "매매일지를 전부 삭제했어요.",
         portfolioChanged: true,
-        operation: "update",
+        operation: "delete-all-transactions",
       });
     }
 
@@ -392,60 +347,59 @@ export async function action({ request }: Route.ActionArgs) {
       });
     }
 
-    if (intent === "analyze-managed") {
-      const parsed = analysisSchema.parse({
-        goalAmount: formData.get("goalAmount"),
-        monthlyContribution: formData.get("monthlyContribution") || 0,
-        confirmReset: formData.get("confirmReset") ?? undefined,
-      });
-      const managed = await getManagedPortfolio(user.id);
-      if (!managed)
-        throw new Error("먼저 매매일지를 한 건 이상 작성해 주세요.");
-      const holdings = calculateManagedHoldings(managed.transactions);
-      if (holdings.length === 0)
-        throw new Error("현재 보유 중인 종목이 없어 분석할 수 없어요.");
-      if (holdings.length > 10)
-        throw new Error("정밀 분석은 현재 최대 10개 보유 종목을 지원해요.");
-      if (managed.portfolio.status !== "active" && parsed.confirmReset !== "on")
-        throw new Error("정밀 분석 전환에 동의해 주세요.");
-
-      const firstBoughtOn = managed.transactions.find(
-        (transaction) => transaction.type === "BUY",
-      )?.tradedOn;
-      if (!firstBoughtOn)
-        throw new Error("투자 기간을 계산할 매수 기록이 없어요.");
-      const investmentPeriodMonths = investmentMonthsSince(
-        firstBoughtOn,
-        seoulDate(),
+    if (intent === "apply-transaction-updates") {
+      const pendingUpdates = pendingTransactionUpdatesSchema.parse(
+        JSON.parse(String(formData.get("transactionUpdates") ?? "[]")),
       );
-      const result = await analyzePortfolio({
-        goalAmount: parsed.goalAmount,
-        monthlyContribution: parsed.monthlyContribution,
-        investmentPeriodMonths,
-        holdings: holdings.map((holding) => ({
-          stockId: holding.stockId,
-          averagePrice: holding.averagePrice,
-          quantity: holding.quantity,
-          currency: holding.currency,
-          costKrw: holding.costKrw,
-        })),
-      });
+      if (pendingUpdates.length === 0)
+        throw new Error("저장할 수정사항이 없어요.");
+      const managed = await getManagedPortfolio(user.id);
+      if (!managed) throw new Error("포트폴리오를 찾지 못했어요.");
 
-      if (managed.portfolio.status === "active") {
-        await saveDailyAnalysisSnapshot({
-          userId: user.id,
-          result,
-          analysisMode: "managed",
-          managedPortfolioId: managed.portfolio.managed_portfolio_id,
-        });
-      } else {
-        await startManagedAnalysisHistory({
-          userId: user.id,
-          portfolioId: managed.portfolio.managed_portfolio_id,
-          result,
-        });
-      }
-      return redirect("/dashboard");
+      const preparedUpdates = await Promise.all(
+        pendingUpdates.map(async (update) => {
+          const existing = managed.transactions.find(
+            (transaction) => transaction.id === update.id,
+          );
+          if (!existing) throw new Error("수정할 거래를 찾지 못했어요.");
+          const historicalRate =
+            existing.currency === "USD"
+              ? await getHistoricalUsdKrwRate(update.tradedOn)
+              : { rate: 1 };
+          return {
+            ...update,
+            exchangeRate: historicalRate.rate,
+            memo: update.memo || null,
+          };
+        }),
+      );
+      const updateById = new Map(
+        preparedUpdates.map((update) => [update.id, update]),
+      );
+      const transactions = managed.transactions
+        .map((transaction) => {
+          const update = updateById.get(transaction.id);
+          return update
+            ? {
+                ...transaction,
+                type: update.type,
+                tradedOn: update.tradedOn,
+                quantity: update.quantity,
+                unitPrice: update.unitPrice,
+                exchangeRate: update.exchangeRate,
+                memo: update.memo,
+              }
+            : transaction;
+        })
+        .sort((a, b) => a.tradedOn.localeCompare(b.tradedOn) || a.id - b.id);
+      calculateManagedHoldings(transactions);
+      await updatePortfolioTransactions(user.id, preparedUpdates);
+
+      return data({
+        success: `매매일지 수정 ${preparedUpdates.length}건을 저장했어요.`,
+        portfolioChanged: true,
+        operation: "batch-update",
+      });
     }
   } catch (error) {
     return data(
@@ -469,9 +423,8 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
     today,
     managed,
     holdings,
-    quickRecordCount,
-    investmentStartedOn,
     lastManagedAnalysisAt,
+    hasUnappliedChanges,
   } = loaderData;
   const actionData = useActionData<typeof action>();
   const location = useLocation();
@@ -492,11 +445,12 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
   const [selectedStock, setSelectedStock] = useState<StockSearchResult | null>(
     null,
   );
-  const [goalAmountInput, setGoalAmountInput] = useState("");
-  const [monthlyContributionInput, setMonthlyContributionInput] = useState("");
   const [editingTransactionId, setEditingTransactionId] = useState<
     number | null
   >(null);
+  const [pendingTransactionUpdates, setPendingTransactionUpdates] = useState<
+    Record<number, PendingTransactionUpdate>
+  >({});
   const [holdingFilter, setHoldingFilter] = useState<number | null>(null);
   const [journalPeriod, setJournalPeriod] = useState<JournalPeriod>("all");
   const [journalExpanded, setJournalExpanded] = useState(false);
@@ -507,10 +461,16 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
     useState(false);
   const [quickImportCompleted, setQuickImportCompleted] = useState(false);
   const journalRef = useRef<HTMLElement>(null);
-  const analysisUpdateRef = useRef<HTMLElement>(null);
   const transactionCount = managed?.transactions.length ?? 0;
+  const effectiveTransactions = (managed?.transactions ?? []).map(
+    (transaction) => {
+      const update = pendingTransactionUpdates[transaction.id];
+      return update ? { ...transaction, ...update } : transaction;
+    },
+  );
+  const pendingUpdateCount = Object.keys(pendingTransactionUpdates).length;
   const portfolioStockIds = [
-    ...new Set(managed?.transactions.map((transaction) => transaction.stockId)),
+    ...new Set(effectiveTransactions.map((transaction) => transaction.stockId)),
   ];
   const getPortfolioTone = (stockId: number) =>
     quickImportTones[
@@ -526,7 +486,7 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
     date.setUTCDate(date.getUTCDate() - selectedJournalPeriod.days + 1);
     return date.toISOString().slice(0, 10);
   })();
-  const journalTransactions = [...(managed?.transactions ?? [])]
+  const journalTransactions = [...effectiveTransactions]
     .reverse()
     .filter(
       (transaction) =>
@@ -562,6 +522,11 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
     setEditingTransactionId(null);
     setDismissedPortfolioPrompt(false);
     if (actionOperation === "import") setQuickImportCompleted(true);
+    if (
+      actionOperation === "batch-update" ||
+      actionOperation === "delete-all-transactions"
+    )
+      setPendingTransactionUpdates({});
   }, [actionData]);
   const isActive = managed?.portfolio.status === "active";
   const updateQuickImportRow = (
@@ -593,6 +558,28 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
       );
       return next;
     });
+  const stageTransactionUpdate = (
+    event: FormEvent<HTMLFormElement>,
+    transactionId: number,
+  ) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const parsed = pendingTransactionUpdateSchema.safeParse({
+      id: transactionId,
+      type: formData.get("type"),
+      tradedOn: formData.get("tradedOn"),
+      quantity: formData.get("quantity"),
+      unitPrice: formData.get("unitPrice"),
+      memo: formData.get("memo") ?? "",
+    });
+    if (!parsed.success) return;
+    setPendingTransactionUpdates((updates) => ({
+      ...updates,
+      [transactionId]: parsed.data,
+    }));
+    setEditingTransactionId(null);
+    setDismissedPortfolioPrompt(false);
+  };
 
   return (
     <main className="flex flex-1 flex-col px-5 pt-8 pb-12 md:px-8 md:pt-12">
@@ -628,51 +615,43 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
           </div>
         )}
 
-        {actionSuccess && portfolioChanged && !dismissedPortfolioPrompt && (
-          <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.07] p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3">
-              <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-500">
-                <CheckCircle2Icon className="size-5" />
-              </span>
-              <div>
-                <p className="font-black">{actionSuccess}</p>
-                <p className="text-muted-foreground mt-1 text-sm leading-6">
-                  보유 현황은 다시 계산됐지만 대시보드의 정밀 분석에는 아직
-                  반영되지 않았어요. 모든 변경을 마쳤다면 분석을 업데이트해
-                  주세요.
-                </p>
+        {((actionSuccess && portfolioChanged) || hasUnappliedChanges) &&
+          !dismissedPortfolioPrompt && (
+            <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.07] p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-500">
+                  <CheckCircle2Icon className="size-5" />
+                </span>
+                <div>
+                  <p className="font-black">
+                    {actionSuccess ?? "매매일지 변경사항이 저장되어 있어요."}
+                  </p>
+                  <p className="text-muted-foreground mt-1 text-sm leading-6">
+                    보유 현황은 다시 계산됐지만 대시보드의 정밀 분석에는 아직
+                    반영되지 않았어요. 모든 변경을 마쳤다면 분석을 업데이트해
+                    주세요.
+                  </p>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2 self-end sm:self-center">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="rounded-full"
+                  onClick={() => setDismissedPortfolioPrompt(true)}
+                >
+                  나중에
+                </Button>
+                <Button asChild size="sm" className="rounded-full">
+                  <Link to="/dashboard/precise-analysis">
+                    {isActive ? "분석 업데이트하기" : "정밀 분석 시작하기"}
+                    <ArrowRightIcon className="size-4" />
+                  </Link>
+                </Button>
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2 self-end sm:self-center">
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="rounded-full"
-                onClick={() => setDismissedPortfolioPrompt(true)}
-              >
-                나중에
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                className="rounded-full"
-                onClick={() => {
-                  analysisUpdateRef.current?.scrollIntoView({
-                    behavior: "smooth",
-                    block: "start",
-                  });
-                  window.requestAnimationFrame(() =>
-                    document.getElementById("goalAmount")?.focus(),
-                  );
-                }}
-              >
-                {isActive ? "분석 업데이트하기" : "정밀 분석 시작하기"}
-                <ArrowRightIcon className="size-4" />
-              </Button>
-            </div>
-          </div>
-        )}
+          )}
 
         {quickDraftHoldings.length > 0 && !quickImportCompleted && (
           <section className="mt-7 rounded-3xl border border-violet-500/25 bg-violet-500/[0.06] p-5 shadow-sm md:p-6">
@@ -1033,6 +1012,24 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {Boolean(managed?.transactions.length) && (
+                <DestructiveConfirmDialog
+                  title="매매일지를 전부 삭제할까요?"
+                  description="등록한 모든 매수·매도 기록과 수정 대기 내용이 삭제됩니다. 기존 분석 기록은 보관되지만, 매매일지는 복구할 수 없어요."
+                  confirmLabel="매매일지 전체 삭제"
+                  fields={{ intent: "delete-all-transactions" }}
+                  trigger={
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="rounded-full border-red-500/25 text-red-500 hover:bg-red-500/10 hover:text-red-500"
+                    >
+                      <Trash2Icon className="size-3.5" /> 전체 삭제
+                    </Button>
+                  }
+                />
+              )}
               {holdingFilter !== null && (
                 <Button
                   type="button"
@@ -1108,6 +1105,21 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
               </div>
             </div>
           )}
+          {pendingUpdateCount > 0 && (
+            <div className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-500/25 bg-amber-500/[0.07] p-4 text-sm leading-6">
+              <CircleAlertIcon className="mt-0.5 size-4 shrink-0 text-amber-500" />
+              <div>
+                <p className="font-black text-amber-700 dark:text-amber-300">
+                  매매일지 {pendingUpdateCount}건을 수정하고 있어요
+                </p>
+                <p className="text-muted-foreground mt-1">
+                  아직 DB와 분석에는 반영되지 않았어요. 모든 수정을 마친 뒤
+                  <strong className="text-foreground mx-1">수정 확인</strong>을
+                  눌러 한 번에 저장해 주세요.
+                </p>
+              </div>
+            </div>
+          )}
           {managed?.transactions.length ? (
             journalTransactions.length ? (
               <>
@@ -1159,19 +1171,11 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
                           >
                             <td colSpan={8} className="p-3">
                               <Form
-                                method="post"
                                 className="grid gap-3 md:grid-cols-6"
+                                onSubmit={(event) =>
+                                  stageTransactionUpdate(event, transaction.id)
+                                }
                               >
-                                <input
-                                  type="hidden"
-                                  name="intent"
-                                  value="update-transaction"
-                                />
-                                <input
-                                  type="hidden"
-                                  name="transactionId"
-                                  value={transaction.id}
-                                />
                                 <div className="space-y-1.5">
                                   <Label
                                     htmlFor={`edit-date-${transaction.id}`}
@@ -1263,7 +1267,7 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
                                   >
                                     취소
                                   </Button>
-                                  <Button type="submit">수정 저장</Button>
+                                  <Button type="submit">수정 보관</Button>
                                 </div>
                               </Form>
                             </td>
@@ -1291,11 +1295,15 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
                                 />
                                 {transaction.stockName}
                               </span>
-                              {wasEdited && (
+                              {pendingTransactionUpdates[transaction.id] ? (
+                                <span className="bg-foreground text-background ml-1.5 inline-flex rounded-full border border-transparent px-2 py-1 text-[10px] font-black shadow-sm">
+                                  수정 대기
+                                </span>
+                              ) : wasEdited ? (
                                 <span className="border-border/80 bg-background/80 text-muted-foreground ml-1.5 inline-flex rounded-full border border-dashed px-2 py-1 text-[10px] font-black shadow-sm">
                                   수정됨
                                 </span>
-                              )}
+                              ) : null}
                             </td>
                             <td
                               className={`px-3 py-3 font-black ${transaction.type === "BUY" ? "text-rose-500" : "text-blue-500"}`}
@@ -1330,26 +1338,45 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
                                 >
                                   <PencilIcon />
                                 </Button>
-                                <Form method="post">
-                                  <input
-                                    type="hidden"
-                                    name="intent"
-                                    value="delete-transaction"
-                                  />
-                                  <input
-                                    type="hidden"
-                                    name="transactionId"
-                                    value={transaction.id}
-                                  />
+                                {pendingTransactionUpdates[transaction.id] && (
                                   <Button
-                                    type="submit"
+                                    type="button"
                                     size="icon"
                                     variant="ghost"
-                                    aria-label={`${transaction.stockName} 거래 삭제`}
+                                    className="text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+                                    aria-label={`${transaction.stockName} 수정 대기 취소`}
+                                    onClick={() =>
+                                      setPendingTransactionUpdates(
+                                        (updates) => {
+                                          const next = { ...updates };
+                                          delete next[transaction.id];
+                                          return next;
+                                        },
+                                      )
+                                    }
                                   >
-                                    <Trash2Icon />
+                                    <XIcon />
                                   </Button>
-                                </Form>
+                                )}
+                                <DestructiveConfirmDialog
+                                  title={`${transaction.stockName} 거래를 삭제할까요?`}
+                                  description={`${transaction.tradedOn}에 기록한 ${transaction.stockName} ${transaction.type === "BUY" ? "매수" : "매도"} 내역을 삭제합니다. 삭제한 거래는 복구할 수 없어요.`}
+                                  confirmLabel="거래 삭제"
+                                  fields={{
+                                    intent: "delete-transaction",
+                                    transactionId: transaction.id,
+                                  }}
+                                  trigger={
+                                    <Button
+                                      type="button"
+                                      size="icon"
+                                      variant="ghost"
+                                      aria-label={`${transaction.stockName} 거래 삭제`}
+                                    >
+                                      <Trash2Icon />
+                                    </Button>
+                                  }
+                                />
                               </div>
                             </td>
                           </tr>
@@ -1367,7 +1394,9 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
                 </div>
                 {(journalExpanded ||
                   journalTransactions.length > 5 ||
-                  (actionSuccess && portfolioChanged)) && (
+                  pendingUpdateCount > 0 ||
+                  (actionSuccess && portfolioChanged) ||
+                  hasUnappliedChanges) && (
                   <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
                     {(journalExpanded || journalTransactions.length > 5) && (
                       <Button
@@ -1388,26 +1417,43 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
                         )}
                       </Button>
                     )}
-                    {actionSuccess && portfolioChanged && (
+                    {pendingUpdateCount > 0 ? (
+                      <Form method="post">
+                        <input
+                          type="hidden"
+                          name="intent"
+                          value="apply-transaction-updates"
+                        />
+                        <input
+                          type="hidden"
+                          name="transactionUpdates"
+                          value={JSON.stringify(
+                            Object.values(pendingTransactionUpdates),
+                          )}
+                        />
+                        <Button
+                          type="submit"
+                          size="sm"
+                          className="rounded-full px-5"
+                        >
+                          <CheckCircle2Icon className="size-3.5" />
+                          {pendingUpdateCount}건 수정 확인
+                        </Button>
+                      </Form>
+                    ) : (actionSuccess && portfolioChanged) ||
+                      hasUnappliedChanges ? (
                       <Button
-                        type="button"
+                        asChild
                         size="sm"
                         variant="outline"
                         className="rounded-full border-amber-500/35 bg-amber-500/[0.07] px-4 text-amber-600 hover:bg-amber-500/15 hover:text-amber-600 dark:text-amber-400 dark:hover:text-amber-400"
-                        onClick={() => {
-                          analysisUpdateRef.current?.scrollIntoView({
-                            behavior: "smooth",
-                            block: "start",
-                          });
-                          window.requestAnimationFrame(() =>
-                            document.getElementById("goalAmount")?.focus(),
-                          );
-                        }}
                       >
-                        <RefreshCwIcon className="size-3.5" />
-                        분석에 변경사항 반영하기
+                        <Link to="/dashboard/precise-analysis">
+                          <RefreshCwIcon className="size-3.5" />
+                          분석에 변경사항 반영하기
+                        </Link>
                       </Button>
-                    )}
+                    ) : null}
                   </div>
                 )}
               </>
@@ -1421,100 +1467,6 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
               아직 작성한 매매일지가 없어요.
             </p>
           )}
-        </section>
-
-        <section
-          ref={analysisUpdateRef}
-          className={`mt-5 rounded-3xl border p-5 shadow-sm md:p-6 ${isActive ? "bg-card" : "border-amber-500/25 bg-amber-500/[0.06]"}`}
-        >
-          <h2 className="text-xl font-black">
-            {isActive ? "정밀 분석 업데이트" : "정밀 포트폴리오로 전환"}
-          </h2>
-          <p className="text-muted-foreground mt-2 text-sm leading-6">
-            {isActive
-              ? "저장된 매매일지를 반영해 오늘의 정밀 분석 기록을 업데이트해요."
-              : `전환하면 기존 빠른 분석 기록 ${quickRecordCount}개는 분석 기록에 보관되고, 대시보드와 인사이트는 정밀 분석 기록으로 새로 시작해요.`}
-          </p>
-          {isActive && (
-            <div className="mt-4 flex items-start gap-3 rounded-2xl border border-violet-500/25 bg-violet-500/[0.06] p-4 text-sm leading-6">
-              <TargetIcon className="mt-0.5 size-4 shrink-0 text-violet-500" />
-              <div>
-                <p className="font-black">
-                  목표 금액별로 따로 분석할 수 있어요
-                </p>
-                <p className="text-muted-foreground mt-1">
-                  기존과 다른 목표 금액을 입력하면 포트폴리오는 그대로 유지되고,
-                  해당 금액을 기준으로 한 새로운 목표 분석이 별도로 추가돼요.
-                </p>
-              </div>
-            </div>
-          )}
-          {investmentStartedOn && (
-            <p className="mt-3 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-              투자 기간은 최초 매수일 {investmentStartedOn.replaceAll("-", ".")}
-              부터 자동 계산해요.
-            </p>
-          )}
-          <Form method="post" className="mt-5 grid gap-4 sm:grid-cols-2">
-            <input type="hidden" name="intent" value="analyze-managed" />
-            <div className="space-y-2">
-              <Label htmlFor="goalAmount">목표 금액</Label>
-              <Input
-                id="goalAmount"
-                name="goalAmount"
-                type="number"
-                min="100000000"
-                step="100000000"
-                placeholder="예: 100000000"
-                value={goalAmountInput}
-                onChange={(event) => setGoalAmountInput(event.target.value)}
-                required
-              />
-              <p className="text-right text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                {formatKoreanMoney(goalAmountInput) || "예: 1억원"}
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="monthlyContribution">매월 투자금</Label>
-              <Input
-                id="monthlyContribution"
-                name="monthlyContribution"
-                type="number"
-                min="0"
-                placeholder="예: 100000"
-                value={monthlyContributionInput}
-                onChange={(event) =>
-                  setMonthlyContributionInput(event.target.value)
-                }
-              />
-              <p className="text-right text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                {formatKoreanMoney(monthlyContributionInput) || "예: 10만원"}
-              </p>
-            </div>
-            {!isActive && (
-              <label className="bg-background/70 flex items-start gap-3 rounded-2xl border border-amber-500/25 p-4 text-sm leading-6 sm:col-span-2">
-                <input
-                  type="checkbox"
-                  name="confirmReset"
-                  className="mt-1 size-4"
-                  required
-                />
-                <span>
-                  기존 기록은 보관되며, 대시보드와 인사이트가 정밀 분석 기준으로
-                  전환되는 것을 확인했어요.
-                </span>
-              </label>
-            )}
-            <Button
-              type="submit"
-              size="lg"
-              className="sm:col-span-2"
-              disabled={!holdings.length}
-            >
-              {isActive ? "정밀 분석 업데이트" : "정밀 포트폴리오로 전환"}{" "}
-              <ArrowRightIcon />
-            </Button>
-          </Form>
         </section>
       </div>
     </main>

@@ -2,6 +2,7 @@ import {
   BriefcaseBusinessIcon,
   CalendarDaysIcon,
   ChartNoAxesCombinedIcon,
+  MicroscopeIcon,
   SparklesIcon,
 } from "lucide-react";
 import { Link, useLocation } from "react-router";
@@ -23,13 +24,26 @@ import {
 import SidebarUser from "./sidebar-user";
 
 const navigation = [
-  { title: "대시보드", url: "/dashboard", icon: ChartNoAxesCombinedIcon },
+  {
+    title: "대시보드",
+    url: "/dashboard",
+    icon: ChartNoAxesCombinedIcon,
+  },
   {
     title: "내 포트폴리오",
     url: "/dashboard/portfolio",
     icon: BriefcaseBusinessIcon,
   },
-  { title: "투자 인사이트", url: "/dashboard/insights", icon: SparklesIcon },
+  {
+    title: "정밀 분석",
+    url: "/dashboard/precise-analysis",
+    icon: MicroscopeIcon,
+  },
+  {
+    title: "투자 인사이트",
+    url: "/dashboard/insights",
+    icon: SparklesIcon,
+  },
   { title: "분석 기록", url: "/dashboard/history", icon: CalendarDaysIcon },
 ];
 
@@ -48,21 +62,21 @@ export default function DashboardSidebar({
       variant="inset"
       {...props}
     >
-      <SidebarHeader className="border-sidebar-border/60 border-b p-3">
+      <SidebarHeader className="border-sidebar-border/60 border-b p-3 group-data-[collapsible=icon]:p-1">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
               size="lg"
               tooltip="EOKKA 홈"
-              className="rounded-2xl hover:bg-gradient-to-r hover:from-emerald-500/10 hover:to-violet-500/10"
+              className="rounded-2xl group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:rounded-xl hover:bg-gradient-to-r hover:from-emerald-500/10 hover:to-violet-500/10"
             >
               <Link to="/" className="group/logo">
                 <EokkaLogo
-                  className="size-10 drop-shadow-[0_8px_18px_rgba(16,185,129,0.18)] transition-transform group-hover/logo:scale-105"
+                  className="size-10 shrink-0 drop-shadow-[0_8px_18px_rgba(16,185,129,0.18)] transition-transform group-hover/logo:scale-105 group-data-[collapsible=icon]:size-7"
                   priority
                 />
-                <div className="grid flex-1 text-left leading-tight">
+                <div className="grid flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
                   <span className="bg-gradient-to-r from-emerald-500 to-violet-500 bg-clip-text text-base font-black tracking-[-0.03em] text-transparent">
                     EOKKA
                   </span>
@@ -75,8 +89,8 @@ export default function DashboardSidebar({
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent className="px-1 py-2">
-        <SidebarGroup className="gap-1">
+      <SidebarContent className="px-1 py-2 group-data-[collapsible=icon]:px-0">
+        <SidebarGroup className="gap-1 group-data-[collapsible=icon]:p-1">
           <SidebarGroupLabel>
             <span className="mr-2 size-1.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]" />
             내 투자
@@ -103,7 +117,7 @@ export default function DashboardSidebar({
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="border-sidebar-border/60 border-t bg-gradient-to-t from-emerald-500/4 to-transparent p-3">
+      <SidebarFooter className="border-sidebar-border/60 border-t bg-gradient-to-t from-emerald-500/4 to-transparent p-3 group-data-[collapsible=icon]:p-1">
         <SidebarUser user={user} />
       </SidebarFooter>
       <SidebarRail />

@@ -5,6 +5,13 @@ import { stocks } from "~/features/stocks/schema";
 
 import { managedPortfolios, portfolioTransactions } from "./schema";
 
+async function markManagedPortfolioChanged(userId: string) {
+  await db
+    .update(managedPortfolios)
+    .set({ updated_at: new Date() })
+    .where(eq(managedPortfolios.user_id, userId));
+}
+
 export function investmentMonthsSince(
   firstBoughtOn: string,
   analyzedOn: string,
@@ -117,6 +124,7 @@ export async function addPortfolioTransaction({
     exchange_rate: currency === "USD" ? exchangeRate : 1,
     memo,
   });
+  await markManagedPortfolioChanged(userId);
 }
 
 export async function addPortfolioTransactions(
@@ -146,6 +154,7 @@ export async function addPortfolioTransactions(
       memo: "빠른 분석에서 가져온 평균 매수가",
     })),
   );
+  await markManagedPortfolioChanged(userId);
 }
 
 export async function deletePortfolioTransaction(userId: string, id: number) {
@@ -157,46 +166,59 @@ export async function deletePortfolioTransaction(userId: string, id: number) {
         eq(portfolioTransactions.user_id, userId),
       ),
     );
+  await markManagedPortfolioChanged(userId);
 }
 
-export async function updatePortfolioTransaction({
-  userId,
-  id,
-  type,
-  tradedOn,
-  quantity,
-  unitPrice,
-  exchangeRate,
-  memo,
-}: {
-  userId: string;
-  id: number;
-  type: "BUY" | "SELL";
-  tradedOn: string;
-  quantity: number;
-  unitPrice: number;
-  exchangeRate: number;
-  memo: string | null;
-}) {
-  const [updated] = await db
-    .update(portfolioTransactions)
-    .set({
-      transaction_type: type,
-      traded_on: tradedOn,
-      quantity,
-      unit_price: unitPrice,
-      exchange_rate: exchangeRate,
-      memo,
-      updated_at: new Date(),
-    })
-    .where(
-      and(
-        eq(portfolioTransactions.portfolio_transaction_id, id),
-        eq(portfolioTransactions.user_id, userId),
-      ),
-    )
-    .returning({ id: portfolioTransactions.portfolio_transaction_id });
-  if (!updated) throw new Error("수정할 거래를 찾지 못했어요.");
+export async function deleteAllPortfolioTransactions(userId: string) {
+  await db
+    .delete(portfolioTransactions)
+    .where(eq(portfolioTransactions.user_id, userId));
+  await markManagedPortfolioChanged(userId);
+}
+
+export async function updatePortfolioTransactions(
+  userId: string,
+  updates: Array<{
+    id: number;
+    type: "BUY" | "SELL";
+    tradedOn: string;
+    quantity: number;
+    unitPrice: number;
+    exchangeRate: number;
+    memo: string | null;
+  }>,
+) {
+  if (updates.length === 0) return;
+
+  await db.transaction(async (transaction) => {
+    for (const update of updates) {
+      const [updated] = await transaction
+        .update(portfolioTransactions)
+        .set({
+          transaction_type: update.type,
+          traded_on: update.tradedOn,
+          quantity: update.quantity,
+          unit_price: update.unitPrice,
+          exchange_rate: update.exchangeRate,
+          memo: update.memo,
+          updated_at: new Date(),
+        })
+        .where(
+          and(
+            eq(portfolioTransactions.portfolio_transaction_id, update.id),
+            eq(portfolioTransactions.user_id, userId),
+          ),
+        )
+        .returning({ id: portfolioTransactions.portfolio_transaction_id });
+
+      if (!updated) throw new Error("수정할 거래를 찾지 못했어요.");
+    }
+
+    await transaction
+      .update(managedPortfolios)
+      .set({ updated_at: new Date() })
+      .where(eq(managedPortfolios.user_id, userId));
+  });
 }
 
 export function calculateManagedHoldings(

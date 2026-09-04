@@ -325,11 +325,23 @@ export default function App() {
           description:
             "변경 내용을 매매일지에 저장해요. 정밀 분석에는 아직 반영하지 않아요.",
         };
+      case "apply-transaction-updates":
+        return {
+          title: "매매일지 수정사항을 저장하고 있어요",
+          description:
+            "대기 중인 변경을 한 번에 반영하고 보유 현황을 다시 계산해요.",
+        };
       case "delete-transaction":
         return {
           title: "매매 기록을 삭제하고 있어요",
           description:
             "남은 거래로 보유 현황만 정리해요. 정밀 분석에는 아직 반영하지 않아요.",
+        };
+      case "delete-all-transactions":
+        return {
+          title: "매매일지를 전부 삭제하고 있어요",
+          description:
+            "모든 거래 기록을 정리하고 포트폴리오 보유 현황을 비우고 있어요.",
         };
       case "import-quick-portfolio":
         return {
@@ -396,9 +408,6 @@ export default function App() {
     <Sheet>
       <Dialog>
         <Outlet />
-        {isBusy && (
-          <div className="fixed inset-0 z-[9998]" aria-hidden="true" />
-        )}
         {showBlockingLoader && (
           <div
             className="bg-background/55 fixed inset-0 z-[9999] flex cursor-wait items-center justify-center backdrop-blur-sm"

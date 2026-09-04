@@ -1,6 +1,5 @@
 import type { Route } from "./+types/dashboard";
 
-import { inArray } from "drizzle-orm";
 import {
   ActivityIcon,
   ArrowDownRightIcon,
@@ -44,30 +43,31 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/core/components/ui/tooltip";
-import db from "~/core/db/drizzle-client.server";
-import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
-import { analyzePortfolio } from "~/features/stocks/analysis.server";
-import {
-  FREE_HISTORY_LIMIT,
-  getActiveAnalysisHistory,
-  getPreferredGoalAmount,
-  saveDailyAnalysisSnapshot,
-  seoulDate,
-  setPreferredGoalAmount,
-} from "~/features/stocks/history/analysis-history.server";
-import {
-  calculateManagedHoldings,
-  getManagedPortfolio,
-  investmentMonthsSince,
-} from "~/features/stocks/portfolio/portfolio.server";
-import { stocks } from "~/features/stocks/schema";
 
 export const meta: Route.MetaFunction = () => [
   { title: `내 투자 대시보드 | ${import.meta.env.VITE_APP_NAME}` },
 ];
 
 export async function loader({ request }: Route.LoaderArgs) {
+  const [
+    { inArray },
+    { default: db },
+    { default: makeServerClient },
+    {
+      FREE_HISTORY_LIMIT,
+      getActiveAnalysisHistory,
+      getPreferredGoalAmount,
+      seoulDate,
+    },
+    { stocks },
+  ] = await Promise.all([
+    import("drizzle-orm"),
+    import("~/core/db/drizzle-client.server"),
+    import("~/core/lib/supa-client.server"),
+    import("~/features/stocks/history/analysis-history.server"),
+    import("~/features/stocks/schema"),
+  ]);
   const [client] = makeServerClient(request);
   const {
     data: { user },
@@ -160,6 +160,13 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  const [
+    { default: makeServerClient },
+    { getActiveAnalysisHistory, setPreferredGoalAmount },
+  ] = await Promise.all([
+    import("~/core/lib/supa-client.server"),
+    import("~/features/stocks/history/analysis-history.server"),
+  ]);
   const [client] = makeServerClient(request);
   const {
     data: { user },
@@ -168,58 +175,6 @@ export async function action({ request }: Route.ActionArgs) {
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "set-preferred-goal");
-  if (intent === "refresh-managed-analysis") {
-    const [history, preferredGoalAmount, managed] = await Promise.all([
-      getActiveAnalysisHistory(user.id),
-      getPreferredGoalAmount(user.id),
-      getManagedPortfolio(user.id),
-    ]);
-    if (!managed || managed.portfolio.status !== "active")
-      throw new Response("Managed portfolio is not active", { status: 400 });
-    const goalOptions = [
-      ...new Set(history.map((item) => item.goalAmount)),
-    ].sort((a, b) => a - b);
-    const goalAmount =
-      (preferredGoalAmount && goalOptions.includes(preferredGoalAmount)
-        ? preferredGoalAmount
-        : goalOptions.includes(100_000_000)
-          ? 100_000_000
-          : goalOptions[0]) ?? null;
-    const latest = goalAmount
-      ? history.filter((item) => item.goalAmount === goalAmount).at(-1)
-      : null;
-    if (!goalAmount || !latest)
-      throw new Response("Managed analysis configuration not found", {
-        status: 400,
-      });
-    const holdings = calculateManagedHoldings(managed.transactions);
-    const firstBoughtOn = managed.transactions.find(
-      (transaction) => transaction.type === "BUY",
-    )?.tradedOn;
-    if (!holdings.length || !firstBoughtOn)
-      throw new Response("Managed portfolio holdings not found", {
-        status: 400,
-      });
-    const result = await analyzePortfolio({
-      goalAmount,
-      monthlyContribution: latest.monthlyContribution,
-      investmentPeriodMonths: investmentMonthsSince(firstBoughtOn, seoulDate()),
-      holdings: holdings.map((holding) => ({
-        stockId: holding.stockId,
-        averagePrice: holding.averagePrice,
-        quantity: holding.quantity,
-        currency: holding.currency,
-        costKrw: holding.costKrw,
-      })),
-    });
-    await saveDailyAnalysisSnapshot({
-      userId: user.id,
-      result,
-      analysisMode: "managed",
-      managedPortfolioId: managed.portfolio.managed_portfolio_id,
-    });
-    return redirect("/dashboard");
-  }
   const goalAmount = Number(formData.get("goalAmount"));
   const history = await getActiveAnalysisHistory(user.id);
   const validGoals = new Set(history.map((item) => item.goalAmount));
@@ -231,7 +186,7 @@ export async function action({ request }: Route.ActionArgs) {
   return redirect("/dashboard");
 }
 
-type History = Awaited<ReturnType<typeof getActiveAnalysisHistory>>;
+type History = Route.ComponentProps["loaderData"]["history"];
 
 const won = new Intl.NumberFormat("ko-KR", {
   notation: "compact",
@@ -577,7 +532,13 @@ function useRevealOncePerVisit<T extends Element>() {
       { threshold: 0.2, rootMargin: "0px 0px -8% 0px" },
     );
     observer.observe(element);
-    return () => observer.disconnect();
+    // Never leave charts and numeric effects invisible when an observer
+    // notification is delayed or dropped during route/HMR transitions.
+    const fallback = window.setTimeout(() => setIsRevealed(true), 700);
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(fallback);
+    };
   }, [isRevealed, pageVisitKey]);
 
   return { ref, isRevealed };
@@ -2041,16 +2002,11 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             </div>
           </div>
           {latest.analysisMode === "managed" ? (
-            <Form method="post">
-              <input
-                type="hidden"
-                name="intent"
-                value="refresh-managed-analysis"
-              />
-              <Button type="submit" className="rounded-full">
+            <Button asChild className="rounded-full">
+              <Link to="/dashboard/precise-analysis">
                 <RefreshCwIcon /> 오늘 분석 업데이트
-              </Button>
-            </Form>
+              </Link>
+            </Button>
           ) : (
             <Button asChild className="rounded-full">
               <Link

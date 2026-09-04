@@ -39,15 +39,17 @@ export default function DashboardLayout({ loaderData }: Route.ComponentProps) {
     ? "프로필 설정"
     : pathname.startsWith("/dashboard/portfolio")
       ? "내 포트폴리오"
-      : pathname.startsWith("/dashboard/insights")
-        ? "투자 인사이트"
-        : pathname.startsWith("/dashboard/history")
-          ? "분석 기록"
-          : pathname.startsWith("/dashboard/pro")
-            ? "EOKKA Pro"
-            : pathname.startsWith("/dashboard/payments")
-              ? "결제내역"
-              : "내 투자 대시보드";
+      : pathname.startsWith("/dashboard/precise-analysis")
+        ? "정밀 분석"
+        : pathname.startsWith("/dashboard/insights")
+          ? "투자 인사이트"
+          : pathname.startsWith("/dashboard/history")
+            ? "분석 기록"
+            : pathname.startsWith("/dashboard/pro")
+              ? "EOKKA Pro"
+              : pathname.startsWith("/dashboard/payments")
+                ? "결제내역"
+                : "내 투자 대시보드";
   return (
     <SidebarProvider>
       <DashboardSidebar user={user} />

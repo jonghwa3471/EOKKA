@@ -264,6 +264,7 @@ function SidebarTrigger({
       data-slot="sidebar-trigger"
       variant="ghost"
       size="icon"
+      aria-label={props["aria-label"] ?? "사이드바 열기 또는 접기"}
       className={cn(
         "border-border/60 bg-background/70 size-8 rounded-xl border shadow-sm transition-all hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-500",
         className,
@@ -275,7 +276,7 @@ function SidebarTrigger({
       {...props}
     >
       <PanelLeftIcon />
-      <span className="sr-only">Toggle Sidebar</span>
+      <span className="sr-only">사이드바 열기 또는 접기</span>
     </Button>
   );
 }
