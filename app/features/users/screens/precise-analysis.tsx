@@ -5,7 +5,7 @@ import {
   BriefcaseBusinessIcon,
   SparklesIcon,
 } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useState } from "react";
 import { Form, Link, data, redirect, useActionData } from "react-router";
 import { z } from "zod";
 
@@ -15,7 +15,6 @@ import { Label } from "~/core/components/ui/label";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { generateAiStrategy } from "~/features/stocks/ai-strategy.server";
 import { analyzePortfolio } from "~/features/stocks/analysis.server";
-import { AnalysisResultView } from "~/features/stocks/components/analysis-result";
 import {
   getAnalysisHistory,
   getPreferredGoalAmount,
@@ -36,9 +35,16 @@ const analysisSchema = z.object({
 });
 
 function moneyLabel(value: number) {
-  const eok = Math.floor(value / 100_000_000);
-  const man = Math.floor((value % 100_000_000) / 10_000);
-  return `${eok ? `${eok.toLocaleString("ko-KR")}억` : ""}${eok && man ? " " : ""}${man ? `${man.toLocaleString("ko-KR")}만` : ""}원`;
+  const rounded = Math.max(0, Math.round(value));
+  const eok = Math.floor(rounded / 100_000_000);
+  const man = Math.floor((rounded % 100_000_000) / 10_000);
+  const won = rounded % 10_000;
+  const parts = [
+    eok ? `${eok.toLocaleString("ko-KR")}억` : "",
+    man ? `${man.toLocaleString("ko-KR")}만` : "",
+    won ? `${won.toLocaleString("ko-KR")}` : "",
+  ].filter(Boolean);
+  return `${parts.join(" ") || "0"}원`;
 }
 
 export const meta: Route.MetaFunction = () => [
@@ -136,29 +142,34 @@ export async function action({ request }: Route.ActionArgs) {
         costKrw: holding.costKrw,
       })),
     });
+    // AI receives only the already-calculated, alias-based summary created by
+    // generateAiStrategy. Raw transactions and user identity stay on-server.
     let aiStrategy = null;
     try {
       aiStrategy = await generateAiStrategy(result);
     } catch (error) {
+      // A failed AI explanation must not discard the deterministic analysis.
       console.error("Managed AI strategy generation failed", error);
     }
     const completeResult = { ...result, aiStrategy };
 
-    if (managed.portfolio.status === "active") {
-      await saveDailyAnalysisSnapshot({
-        userId: user.id,
-        result: completeResult,
-        analysisMode: "managed",
-        managedPortfolioId: managed.portfolio.managed_portfolio_id,
-      });
-    } else {
-      await startManagedAnalysisHistory({
-        userId: user.id,
-        portfolioId: managed.portfolio.managed_portfolio_id,
-        result: completeResult,
-      });
-    }
-    return data({ result: completeResult, error: null });
+    const saved =
+      managed.portfolio.status === "active"
+        ? await saveDailyAnalysisSnapshot({
+            userId: user.id,
+            result: completeResult,
+            analysisMode: "managed",
+            managedPortfolioId: managed.portfolio.managed_portfolio_id,
+          })
+        : await startManagedAnalysisHistory({
+            userId: user.id,
+            portfolioId: managed.portfolio.managed_portfolio_id,
+            result: completeResult,
+          });
+    const month = saved.savedOn.slice(0, 7);
+    return redirect(
+      `/dashboard/history?month=${month}&date=${saved.savedOn}&analysis=${saved.id}`,
+    );
   } catch (error) {
     return data(
       {
@@ -177,19 +188,17 @@ export async function action({ request }: Route.ActionArgs) {
 
 export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
-  const resultRef = useRef<HTMLElement>(null);
   const { managed, holdings, defaultGoalAmount, defaultMonthlyContribution } =
     loaderData;
+  const [goalAmount, setGoalAmount] = useState("");
+  const [monthlyContribution, setMonthlyContribution] = useState("");
   const isActive = managed?.portfolio.status === "active";
-  useEffect(() => {
-    if (!actionData?.result) return;
-    window.requestAnimationFrame(() =>
-      resultRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      }),
-    );
-  }, [actionData?.result]);
+  const goalPlaceholder = String(defaultGoalAmount);
+  const contributionPlaceholder = String(
+    defaultMonthlyContribution > 0 ? defaultMonthlyContribution : 100_000,
+  );
+  const parsedGoalAmount = Number(goalAmount);
+  const parsedMonthlyContribution = Number(monthlyContribution);
 
   return (
     <main className="flex flex-1 flex-col px-5 pt-8 pb-14 md:px-8 md:pt-12">
@@ -261,11 +270,15 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
                     type="number"
                     min="100000000"
                     step="100000000"
-                    defaultValue={defaultGoalAmount}
+                    value={goalAmount}
+                    placeholder={goalPlaceholder}
+                    onChange={(event) => setGoalAmount(event.target.value)}
                     required
                   />
                   <p className="text-right text-xs font-bold text-emerald-500">
-                    현재 기준 {moneyLabel(defaultGoalAmount)}
+                    {Number.isFinite(parsedGoalAmount) && parsedGoalAmount > 0
+                      ? `입력 금액 ${moneyLabel(parsedGoalAmount)}`
+                      : `예: ${moneyLabel(defaultGoalAmount)}`}
                   </p>
                 </div>
                 <div className="space-y-2">
@@ -275,10 +288,17 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
                     name="monthlyContribution"
                     type="number"
                     min="0"
-                    defaultValue={defaultMonthlyContribution}
+                    value={monthlyContribution}
+                    placeholder={contributionPlaceholder}
+                    onChange={(event) =>
+                      setMonthlyContribution(event.target.value)
+                    }
                   />
-                  <p className="text-muted-foreground text-right text-xs">
-                    추가 투자가 없다면 0원으로 분석해요.
+                  <p className="text-right text-xs font-bold text-violet-500">
+                    {Number.isFinite(parsedMonthlyContribution) &&
+                    parsedMonthlyContribution > 0
+                      ? `입력 금액 ${moneyLabel(parsedMonthlyContribution)}`
+                      : `예: ${moneyLabel(Number(contributionPlaceholder))} · 미입력 시 0원`}
                   </p>
                 </div>
                 {!isActive && (
@@ -293,27 +313,16 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
                     데 동의해요.
                   </label>
                 )}
+                <p className="rounded-2xl border border-violet-500/20 bg-violet-500/[0.06] px-4 py-3 text-xs leading-5 text-violet-700 sm:col-span-2 dark:text-violet-300">
+                  AI 분석에는 종목명을 익명 식별자로 바꾼 계산 요약만 사용해요.
+                  사용자 정보와 개별 매매일지 원문은 전달하지 않아요.
+                </p>
                 <Button type="submit" size="lg" className="sm:col-span-2">
                   {isActive ? "정밀 분석 업데이트" : "정밀 분석 시작"}
                   <ArrowRightIcon />
                 </Button>
               </Form>
             </section>
-            {actionData?.result && (
-              <section ref={resultRef} className="mt-10 scroll-mt-6">
-                <div className="mb-5">
-                  <p className="text-sm font-bold text-emerald-500">
-                    분석 완료
-                  </p>
-                  <h2 className="mt-1 text-2xl font-black">정밀 분석 결과</h2>
-                </div>
-                <AnalysisResultView
-                  result={actionData.result}
-                  showAuthCta={false}
-                  showContributionDetails
-                />
-              </section>
-            )}
           </>
         )}
       </div>

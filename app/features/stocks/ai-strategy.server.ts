@@ -249,7 +249,10 @@ export async function generateAiStrategy(
     holdings,
     investmentCriteriaScores: scores,
     investmentStyle: result.investmentStyle,
-    riskWarnings: result.riskWarnings,
+    riskWarnings:
+      result.riskWarnings.length > 0
+        ? ["포트폴리오에 레버리지·인버스 상품이 포함되어 있음"]
+        : [],
   };
 
   const client = new OpenAI({ apiKey, maxRetries: 1, timeout: 30_000 });

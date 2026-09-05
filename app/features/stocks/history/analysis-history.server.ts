@@ -58,7 +58,7 @@ export async function saveDailyAnalysisSnapshot({
     updated_at: new Date(),
   };
 
-  await db.transaction(async (transaction) => {
+  const snapshotId = await db.transaction(async (transaction) => {
     const updated = await transaction
       .update(analysisSnapshots)
       .set({
@@ -81,9 +81,13 @@ export async function saveDailyAnalysisSnapshot({
       )
       .returning({ id: analysisSnapshots.analysis_snapshot_id });
 
-    if (updated.length === 0) {
-      await transaction.insert(analysisSnapshots).values(values);
-    }
+    if (updated.length > 0) return updated[0].id;
+
+    const [inserted] = await transaction
+      .insert(analysisSnapshots)
+      .values(values)
+      .returning({ id: analysisSnapshots.analysis_snapshot_id });
+    return inserted.id;
   });
 
   if (!hasUnlimitedHistory) {
@@ -107,6 +111,8 @@ export async function saveDailyAnalysisSnapshot({
       )
     `);
   }
+
+  return { id: snapshotId, savedOn };
 }
 
 export async function startManagedAnalysisHistory({
@@ -134,8 +140,11 @@ export async function startManagedAnalysisHistory({
     updated_at: new Date(),
   };
 
-  await db.transaction(async (transaction) => {
-    await transaction.insert(analysisSnapshots).values(snapshot);
+  const snapshotId = await db.transaction(async (transaction) => {
+    const [inserted] = await transaction
+      .insert(analysisSnapshots)
+      .values(snapshot)
+      .returning({ id: analysisSnapshots.analysis_snapshot_id });
     await transaction
       .update(profiles)
       .set({ preferred_goal_amount: snapshot.goal_amount })
@@ -149,7 +158,10 @@ export async function startManagedAnalysisHistory({
           eq(managedPortfolios.user_id, userId),
         ),
       );
+    return inserted.id;
   });
+
+  return { id: snapshotId, savedOn };
 }
 
 export async function getAnalysisHistory(userId: string) {

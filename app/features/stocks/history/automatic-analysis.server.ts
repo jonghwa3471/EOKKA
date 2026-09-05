@@ -131,8 +131,8 @@ export async function runAutomaticPortfolioAnalysis(): Promise<AutomaticAnalysis
   };
 
   for (const snapshot of candidates) {
-    // A manual analysis already saved today contains the freshest inputs and AI
-    // response, so the automatic job must not replace it.
+    // A manual analysis already saved today contains the freshest inputs, so
+    // the automatic job must not replace it.
     if (snapshot.savedOn === today) {
       stats.skipped += 1;
       continue;

@@ -8,7 +8,6 @@ import {
   CalendarDaysIcon,
   CheckCircle2Icon,
   ChevronDownIcon,
-  ChevronUpIcon,
   CircleAlertIcon,
   PencilIcon,
   PlusIcon,
@@ -453,10 +452,9 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
   >({});
   const [holdingFilter, setHoldingFilter] = useState<number | null>(null);
   const [journalPeriod, setJournalPeriod] = useState<JournalPeriod>("all");
-  const [journalExpanded, setJournalExpanded] = useState(false);
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState(today);
-  const [visibleTransactionCount, setVisibleTransactionCount] = useState(20);
+  const [visibleTransactionCount, setVisibleTransactionCount] = useState(10);
   const [dismissedPortfolioPrompt, setDismissedPortfolioPrompt] =
     useState(false);
   const [quickImportCompleted, setQuickImportCompleted] = useState(false);
@@ -498,10 +496,10 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
     );
   const displayedJournalTransactions = journalTransactions.slice(
     0,
-    journalExpanded ? visibleTransactionCount : 5,
+    visibleTransactionCount,
   );
   useEffect(() => {
-    setVisibleTransactionCount(20);
+    setVisibleTransactionCount(10);
   }, [holdingFilter, journalPeriod, customStartDate, customEndDate]);
   useEffect(() => {
     setStockQuery("");
@@ -1005,9 +1003,7 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
               <div>
                 <h2 className="text-xl font-black">매매일지</h2>
                 <p className="text-muted-foreground mt-1 text-xs">
-                  {journalExpanded
-                    ? "스크롤하면 이전 기록을 계속 불러와요."
-                    : "최근 매매 기록 5건을 보여드려요."}
+                  최근 매매 기록을 10건씩 보여드려요.
                 </p>
               </div>
             </div>
@@ -1123,25 +1119,7 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
           {managed?.transactions.length ? (
             journalTransactions.length ? (
               <>
-                <div
-                  className={cn(
-                    "mt-4 overflow-x-auto",
-                    journalExpanded && "max-h-[620px] overflow-y-auto pr-1",
-                  )}
-                  onScroll={(event) => {
-                    if (!journalExpanded) return;
-                    const element = event.currentTarget;
-                    if (
-                      element.scrollHeight -
-                        element.scrollTop -
-                        element.clientHeight <
-                      120
-                    )
-                      setVisibleTransactionCount((count) =>
-                        Math.min(count + 20, journalTransactions.length),
-                      );
-                  }}
-                >
+                <div className="mt-4 overflow-x-auto">
                   <table className="w-full min-w-[760px] text-left text-sm">
                     <thead className="text-muted-foreground text-xs">
                       <tr className="border-b">
@@ -1384,37 +1362,29 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
                       })}
                     </tbody>
                   </table>
-                  {journalExpanded &&
-                    displayedJournalTransactions.length <
-                      journalTransactions.length && (
-                      <p className="text-muted-foreground py-4 text-center text-xs">
-                        아래로 스크롤하면 이전 기록을 더 불러와요.
-                      </p>
-                    )}
                 </div>
-                {(journalExpanded ||
-                  journalTransactions.length > 5 ||
+                {(displayedJournalTransactions.length <
+                  journalTransactions.length ||
                   pendingUpdateCount > 0 ||
                   (actionSuccess && portfolioChanged) ||
                   hasUnappliedChanges) && (
                   <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-                    {(journalExpanded || journalTransactions.length > 5) && (
+                    {displayedJournalTransactions.length <
+                      journalTransactions.length && (
                       <Button
                         type="button"
                         size="sm"
-                        variant={journalExpanded ? "secondary" : "outline"}
+                        variant="outline"
                         className="rounded-full px-5"
                         onClick={() => {
-                          setJournalExpanded((expanded) => !expanded);
+                          setVisibleTransactionCount((count) =>
+                            Math.min(count + 10, journalTransactions.length),
+                          );
                           setEditingTransactionId(null);
                         }}
                       >
-                        {journalExpanded ? "최근 기록만 보기" : "상세히 보기"}
-                        {journalExpanded ? (
-                          <ChevronUpIcon className="size-3.5" />
-                        ) : (
-                          <ChevronDownIcon className="size-3.5" />
-                        )}
+                        10건 더 보기
+                        <ChevronDownIcon className="size-3.5" />
                       </Button>
                     )}
                     {pendingUpdateCount > 0 ? (
