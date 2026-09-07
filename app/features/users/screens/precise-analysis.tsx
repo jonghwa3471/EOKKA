@@ -13,6 +13,7 @@ import { Button } from "~/core/components/ui/button";
 import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
 import makeServerClient from "~/core/lib/supa-client.server";
+import { cn } from "~/core/lib/utils";
 import { generateAiStrategy } from "~/features/stocks/ai-strategy.server";
 import { analyzePortfolio } from "~/features/stocks/analysis.server";
 import {
@@ -33,6 +34,10 @@ const analysisSchema = z.object({
   monthlyContribution: z.coerce.number().int().min(0).max(1_000_000_000),
   confirmReset: z.literal("on").optional(),
 });
+
+const GOAL_PRESETS = [100_000_000, 1_000_000_000, 10_000_000_000];
+const MONTHLY_CONTRIBUTION_PRESETS = [10_000, 50_000, 100_000];
+const MONTHLY_CONTRIBUTION_MAX = 1_000_000_000;
 
 function moneyLabel(value: number) {
   const rounded = Math.max(0, Math.round(value));
@@ -199,6 +204,17 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
   );
   const parsedGoalAmount = Number(goalAmount);
   const parsedMonthlyContribution = Number(monthlyContribution);
+  const addMonthlyContribution = (amount: number) =>
+    setMonthlyContribution(
+      String(
+        Math.min(
+          (Number.isFinite(parsedMonthlyContribution)
+            ? parsedMonthlyContribution
+            : 0) + amount,
+          MONTHLY_CONTRIBUTION_MAX,
+        ),
+      ),
+    );
 
   return (
     <main className="flex flex-1 flex-col px-5 pt-8 pb-14 md:px-8 md:pt-12">
@@ -255,6 +271,66 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
                   저장된 매매일지 변경사항을 이번 분석에 반영해요.
                 </p>
               )}
+              <div className="mt-5 border-t pt-5">
+                <div className="flex flex-wrap items-end justify-between gap-2">
+                  <div>
+                    <h3 className="font-black">이번 분석에 사용할 보유 종목</h3>
+                    <p className="text-muted-foreground mt-1 text-xs leading-5">
+                      매매일지의 매수·매도를 반영해 계산한 현재 보유 정보예요.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-black text-emerald-500">
+                    {holdings.length}개 종목
+                  </span>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {holdings.map((holding, index) => (
+                    <article
+                      key={holding.stockId}
+                      className={cn(
+                        "rounded-2xl border p-4",
+                        index % 3 === 0
+                          ? "border-emerald-500/20 bg-emerald-500/[0.05]"
+                          : index % 3 === 1
+                            ? "border-violet-500/20 bg-violet-500/[0.05]"
+                            : "border-sky-500/20 bg-sky-500/[0.05]",
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate font-black">{holding.name}</p>
+                          <p className="text-muted-foreground mt-0.5 text-xs font-bold">
+                            {holding.ticker}
+                          </p>
+                        </div>
+                        <span className="bg-background/70 shrink-0 rounded-full border px-2.5 py-1 text-xs font-black">
+                          {holding.quantity.toLocaleString("ko-KR", {
+                            maximumFractionDigits: 6,
+                          })}
+                          주
+                        </span>
+                      </div>
+                      <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <dt className="text-muted-foreground">평균 매수가</dt>
+                          <dd className="mt-1 font-black tabular-nums">
+                            {holding.averagePrice.toLocaleString("ko-KR", {
+                              maximumFractionDigits: 2,
+                            })}{" "}
+                            {holding.currency}
+                          </dd>
+                        </div>
+                        <div className="text-right">
+                          <dt className="text-muted-foreground">원화 매입원금</dt>
+                          <dd className="mt-1 font-black tabular-nums">
+                            {moneyLabel(holding.costKrw)}
+                          </dd>
+                        </div>
+                      </dl>
+                    </article>
+                  ))}
+                </div>
+              </div>
               {actionData?.error && (
                 <p className="mt-4 rounded-2xl border border-red-500/25 bg-red-500/[0.07] p-4 text-sm font-bold text-red-500">
                   {actionData.error}
@@ -275,6 +351,23 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
                     onChange={(event) => setGoalAmount(event.target.value)}
                     required
                   />
+                  <div className="grid grid-cols-3 gap-2">
+                    {GOAL_PRESETS.map((amount) => (
+                      <button
+                        key={amount}
+                        type="button"
+                        onClick={() => setGoalAmount(String(amount))}
+                        className={cn(
+                          "h-9 rounded-xl border text-xs font-black transition-colors",
+                          parsedGoalAmount === amount
+                            ? "border-emerald-500 bg-emerald-500 text-white"
+                            : "bg-background hover:border-emerald-500/50 hover:bg-emerald-500/[0.06]",
+                        )}
+                      >
+                        {moneyLabel(amount)}
+                      </button>
+                    ))}
+                  </div>
                   <p className="text-right text-xs font-bold text-emerald-500">
                     {Number.isFinite(parsedGoalAmount) && parsedGoalAmount > 0
                       ? `입력 금액 ${moneyLabel(parsedGoalAmount)}`
@@ -294,6 +387,19 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
                       setMonthlyContribution(event.target.value)
                     }
                   />
+                  <div className="flex flex-wrap gap-2">
+                    {MONTHLY_CONTRIBUTION_PRESETS.map((amount) => (
+                      <button
+                        key={amount}
+                        type="button"
+                        onClick={() => addMonthlyContribution(amount)}
+                        className="bg-background h-9 rounded-full border px-3 text-xs font-black transition-colors hover:border-violet-500/50 hover:bg-violet-500/[0.07] hover:text-violet-500"
+                        aria-label={`월 투자금에 ${moneyLabel(amount)} 추가`}
+                      >
+                        +{moneyLabel(amount)}
+                      </button>
+                    ))}
+                  </div>
                   <p className="text-right text-xs font-bold text-violet-500">
                     {Number.isFinite(parsedMonthlyContribution) &&
                     parsedMonthlyContribution > 0

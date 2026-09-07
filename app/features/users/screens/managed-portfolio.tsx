@@ -161,6 +161,14 @@ function formatWon(value: number) {
   return `${Math.round(value).toLocaleString("ko-KR")}원`;
 }
 
+function formatAveragePrice(value: number, currency: "KRW" | "USD") {
+  const formatted = value.toLocaleString("ko-KR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: currency === "USD" ? 2 : 0,
+  });
+  return currency === "USD" ? `$${formatted}` : `${formatted}원`;
+}
+
 export async function loader({ request }: Route.LoaderArgs) {
   const [client] = makeServerClient(request);
   const {
@@ -460,6 +468,10 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
   const [quickImportCompleted, setQuickImportCompleted] = useState(false);
   const journalRef = useRef<HTMLElement>(null);
   const transactionCount = managed?.transactions.length ?? 0;
+  const totalHoldingCostKrw = holdings.reduce(
+    (total, holding) => total + holding.costKrw,
+    0,
+  );
   const effectiveTransactions = (managed?.transactions ?? []).map(
     (transaction) => {
       const update = pendingTransactionUpdates[transaction.id];
@@ -818,7 +830,7 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
           </section>
         )}
 
-        <section className="mt-7 grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+        <section className="mt-7 space-y-5">
           <div className="bg-card rounded-3xl border p-5 shadow-sm md:p-6">
             <div className="flex items-center gap-2">
               <PlusIcon className="size-5 text-emerald-500" />
@@ -925,39 +937,35 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
               <BookOpenIcon className="size-5 text-violet-500" />
             </div>
             {holdings.length ? (
-              <div className="mt-5 space-y-3">
+              <div className="mt-5 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
                 {holdings.map((holding) => {
                   const tone = getPortfolioTone(holding.stockId);
+                  const costWeight = totalHoldingCostKrw
+                    ? (holding.costKrw / totalHoldingCostKrw) * 100
+                    : 0;
                   return (
                     <div
                       key={holding.stockId}
                       className={cn(
-                        "flex items-center justify-between gap-4 rounded-2xl border p-4",
+                        "rounded-2xl border p-4",
                         tone.card,
                       )}
                     >
-                      <div className="min-w-0">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <span
-                            className={cn(
-                              "size-2 shrink-0 rounded-full",
-                              tone.dot,
-                            )}
-                          />
-                          <p className="truncate font-black">{holding.name}</p>
-                        </div>
-                        <p className="text-muted-foreground mt-1 text-xs">
-                          {holding.ticker} ·{" "}
-                          {holding.quantity.toLocaleString("ko-KR")}주
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <div className="text-right">
-                          <p className="text-sm font-black">
-                            {formatWon(holding.costKrw)}
-                          </p>
-                          <p className="text-muted-foreground mt-1 text-[11px]">
-                            원화 매입원금
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span
+                              className={cn(
+                                "size-2 shrink-0 rounded-full",
+                                tone.dot,
+                              )}
+                            />
+                            <p className="truncate font-black">
+                              {holding.name}
+                            </p>
+                          </div>
+                          <p className="text-muted-foreground mt-1 text-xs">
+                            {holding.ticker}
                           </p>
                         </div>
                         <Button
@@ -980,6 +988,50 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
                         >
                           <PencilIcon className="size-4" />
                         </Button>
+                      </div>
+                      <div className="mt-4 grid grid-cols-2 gap-2">
+                        <div className="rounded-xl border border-black/5 bg-background/55 px-3 py-2.5 dark:border-white/5 dark:bg-black/15">
+                          <p className="text-muted-foreground text-[11px] font-bold">
+                            평균 매수가
+                          </p>
+                          <p className="mt-1 truncate text-sm font-black tabular-nums">
+                            {formatAveragePrice(
+                              holding.averagePrice,
+                              holding.currency,
+                            )}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-black/5 bg-background/55 px-3 py-2.5 dark:border-white/5 dark:bg-black/15">
+                          <p className="text-muted-foreground text-[11px] font-bold">
+                            보유 수량
+                          </p>
+                          <p className="mt-1 truncate text-sm font-black tabular-nums">
+                            {holding.quantity.toLocaleString("ko-KR", {
+                              maximumFractionDigits: 6,
+                            })}
+                            주
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-black/5 bg-background/55 px-3 py-2.5 dark:border-white/5 dark:bg-black/15">
+                          <p className="text-muted-foreground text-[11px] font-bold">
+                            원화 매입원금
+                          </p>
+                          <p className="mt-1 truncate text-sm font-black tabular-nums">
+                            {formatWon(holding.costKrw)}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-black/5 bg-background/55 px-3 py-2.5 dark:border-white/5 dark:bg-black/15">
+                          <p className="text-muted-foreground text-[11px] font-bold">
+                            매입원금 비중
+                          </p>
+                          <p className="mt-1 truncate text-sm font-black tabular-nums">
+                            {costWeight.toLocaleString("ko-KR", {
+                              minimumFractionDigits: 1,
+                              maximumFractionDigits: 1,
+                            })}
+                            %
+                          </p>
+                        </div>
                       </div>
                     </div>
                   );
@@ -1032,12 +1084,17 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
                   size="sm"
                   variant="outline"
                   className="rounded-full"
+                  aria-label="종목 필터 해제"
+                  title="종목 필터 해제"
                   onClick={() => {
                     setHoldingFilter(null);
                     setEditingTransactionId(null);
                   }}
                 >
-                  전체 종목 보기 <XIcon className="size-3.5" />
+                  {holdings.find(
+                    (holding) => holding.stockId === holdingFilter,
+                  )?.name ?? "선택 종목"}{" "}
+                  <XIcon className="size-3.5" />
                 </Button>
               )}
             </div>
