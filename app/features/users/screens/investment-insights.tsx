@@ -448,9 +448,6 @@ export default function InvestmentInsights({
             <p className="text-muted-foreground mt-2 text-sm">
               {rangeLabel(range.start, range.end)} · 한국 시간 기준
             </p>
-            <Button asChild className="mt-6 rounded-full">
-              <Link to="/">오늘 분석 시작하기</Link>
-            </Button>
           </section>
         )}
       </div>

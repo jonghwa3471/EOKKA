@@ -1,6 +1,7 @@
 import { desc, inArray } from "drizzle-orm";
 
 import db from "~/core/db/drizzle-client.server";
+import { generateAiStrategy } from "~/features/stocks/ai-strategy.server";
 import {
   calculateManagedHoldings,
   getManagedPortfolio,
@@ -23,6 +24,8 @@ type AutomaticAnalysisStats = {
   skipped: number;
   failed: number;
 };
+
+const AUTO_ANALYSIS_ACTIVE_DAYS = 30;
 
 function latestConfigurationKey(userId: string, goalAmount: number) {
   return `${userId}:${goalAmount}`;
@@ -77,10 +80,26 @@ export async function runAutomaticPortfolioAnalysis(): Promise<AutomaticAnalysis
     .select({
       userId: profiles.profile_id,
       preferredGoalAmount: profiles.preferred_goal_amount,
+      automaticGoalAmount: profiles.automatic_analysis_goal_amount,
+      automaticMonthlyContribution:
+        profiles.automatic_analysis_monthly_contribution,
+      lastActiveOn: profiles.last_active_on,
     })
     .from(profiles);
   const preferredGoalByUser = new Map(
     profileRows.map((profile) => [profile.userId, profile.preferredGoalAmount]),
+  );
+  const automaticSettingsByUser = new Map(
+    profileRows.map((profile) => [
+      profile.userId,
+      {
+        goalAmount: profile.automaticGoalAmount,
+        monthlyContribution: profile.automaticMonthlyContribution,
+      },
+    ]),
+  );
+  const lastActiveByUser = new Map(
+    profileRows.map((profile) => [profile.userId, profile.lastActiveOn]),
   );
   const configurationsByUser = new Map<string, (typeof snapshots)[number][]>();
   for (const configuration of latestConfigurations.values()) {
@@ -91,11 +110,12 @@ export async function runAutomaticPortfolioAnalysis(): Promise<AutomaticAnalysis
 
   const candidates = [...configurationsByUser.entries()].flatMap(
     ([userId, configurations]) => {
-      const sortedConfigurations = configurations.sort(
+      const sortedConfigurations = [...configurations].sort(
         (a, b) => a.goalAmount - b.goalAmount,
       );
+      const automaticSettings = automaticSettingsByUser.get(userId);
       const savedPreferredGoal = preferredGoalByUser.get(userId);
-      const selectedGoal =
+      const fallbackGoal =
         savedPreferredGoal != null &&
         sortedConfigurations.some(
           (configuration) => configuration.goalAmount === savedPreferredGoal,
@@ -104,16 +124,32 @@ export async function runAutomaticPortfolioAnalysis(): Promise<AutomaticAnalysis
           : (sortedConfigurations.find(
               (configuration) => configuration.goalAmount === 100_000_000,
             )?.goalAmount ?? sortedConfigurations[0]?.goalAmount);
-      const selectedConfiguration = sortedConfigurations.find(
+      const selectedGoal = automaticSettings?.goalAmount ?? fallbackGoal;
+      const exactConfiguration = sortedConfigurations.find(
         (configuration) => configuration.goalAmount === selectedGoal,
       );
+      const latestConfiguration = [...configurations].sort((a, b) => {
+        const dateDifference = b.savedOn.localeCompare(a.savedOn);
+        return dateDifference !== 0 ? dateDifference : b.id - a.id;
+      })[0];
+      const selectedConfiguration = exactConfiguration ?? latestConfiguration;
 
-      return selectedConfiguration ? [selectedConfiguration] : [];
+      return selectedConfiguration
+        ? [
+            {
+              snapshot: selectedConfiguration,
+              goalAmount: selectedGoal,
+              monthlyContribution:
+                automaticSettings?.monthlyContribution ??
+                selectedConfiguration.monthlyContribution,
+            },
+          ]
+        : [];
     },
   );
   const tickers = [
     ...new Set(
-      candidates.flatMap((snapshot) =>
+      candidates.flatMap(({ snapshot }) =>
         snapshot.result.holdings.map((holding) => holding.ticker),
       ),
     ),
@@ -123,6 +159,9 @@ export async function runAutomaticPortfolioAnalysis(): Promise<AutomaticAnalysis
       ? await db.select().from(stocks).where(inArray(stocks.ticker, tickers))
       : [];
   const today = seoulDate();
+  const activeSince = new Date(`${today}T00:00:00+09:00`);
+  activeSince.setDate(activeSince.getDate() - AUTO_ANALYSIS_ACTIVE_DAYS);
+  const activeSinceDate = seoulDate(activeSince);
   const stats: AutomaticAnalysisStats = {
     candidates: candidates.length,
     analyzed: 0,
@@ -130,14 +169,12 @@ export async function runAutomaticPortfolioAnalysis(): Promise<AutomaticAnalysis
     failed: 0,
   };
 
-  for (const snapshot of candidates) {
-    // A manual analysis already saved today contains the freshest inputs, so
-    // the automatic job must not replace it.
-    if (snapshot.savedOn === today) {
+  for (const candidate of candidates) {
+    const { snapshot, goalAmount, monthlyContribution } = candidate;
+    if ((lastActiveByUser.get(snapshot.userId) ?? "") < activeSinceDate) {
       stats.skipped += 1;
       continue;
     }
-
     try {
       const managed = await getManagedPortfolio(snapshot.userId);
       const managedHoldings =
@@ -197,8 +234,8 @@ export async function runAutomaticPortfolioAnalysis(): Promise<AutomaticAnalysis
             };
           });
       const input: AnalysisInput = {
-        goalAmount: snapshot.goalAmount,
-        monthlyContribution: snapshot.monthlyContribution,
+        goalAmount,
+        monthlyContribution,
         investmentPeriodMonths: managedHoldings
           ? managedInvestmentMonths
           : snapshot.result.investmentPeriodMonths === undefined
@@ -212,11 +249,22 @@ export async function runAutomaticPortfolioAnalysis(): Promise<AutomaticAnalysis
         continue;
       }
 
+      let aiStrategy = null;
+      try {
+        aiStrategy = await generateAiStrategy(result);
+      } catch (error) {
+        console.error(
+          `Automatic AI strategy generation failed for snapshot ${snapshot.id}`,
+          error,
+        );
+      }
+
       await saveDailyAnalysisSnapshot({
         userId: snapshot.userId,
-        result: { ...result, aiStrategy: null },
+        result: { ...result, aiStrategy },
         analysisMode: snapshot.analysisMode as "quick" | "managed",
         managedPortfolioId: snapshot.managedPortfolioId,
+        updateSource: "automatic",
       });
       stats.analyzed += 1;
     } catch (error) {

@@ -111,7 +111,7 @@ type AnalysisRecord = Awaited<ReturnType<typeof getAnalysisHistory>>[number];
 
 type DailyHoldingMove = {
   name: string;
-  returnRate: number;
+  changeRate: number;
 };
 
 function SavedAnalysisResult({
@@ -251,12 +251,16 @@ function DailyAnalysisInsights({
   const weakestPerformer = [...holdings].sort(
     (a, b) => a.returnRate - b.returnRate,
   )[0];
-  const dailyWinner = [...dailyMovements].sort(
-    (a, b) => b.returnRate - a.returnRate,
-  )[0];
-  const dailyLoser = [...dailyMovements].sort(
-    (a, b) => a.returnRate - b.returnRate,
-  )[0];
+  const dailyWinner = dailyMovements
+    .filter((item) => item.changeRate > 0)
+    .sort((a, b) => b.changeRate - a.changeRate)[0];
+  const dailyLoser = dailyMovements
+    .filter((item) => item.changeRate < 0)
+    .sort((a, b) => a.changeRate - b.changeRate)[0];
+  const hasDailyMovementData = dailyMovements.length > 0;
+  const allUnchanged =
+    hasDailyMovementData &&
+    dailyMovements.every((item) => Math.abs(item.changeRate) < 0.005);
   const topWeight =
     topWeightHolding && record.currentValue > 0
       ? (topWeightHolding.valueKrw / record.currentValue) * 100
@@ -288,7 +292,7 @@ function DailyAnalysisInsights({
             이날의 포트폴리오 인사이트
           </h4>
           <p className="text-muted-foreground mt-1 text-sm">
-            {record.savedOn.replaceAll("-", ".")}에 저장된 분석 결과만 바탕으로
+            {record.savedOn.replaceAll("-", ".")} 종가 기준 분석 결과만 바탕으로
             정리했어요.
           </p>
         </div>
@@ -347,28 +351,46 @@ function DailyAnalysisInsights({
         <DailyInsightCard
           icon={TrendingUpIcon}
           eyebrow="당일 상승 1위"
-          title={dailyWinner?.name ?? "비교 기록이 더 필요해요"}
+          title={
+            dailyWinner?.name ??
+            (hasDailyMovementData ? "상승 종목 없음" : "당일 등락 정보 없음")
+          }
           value={
             dailyWinner
-              ? `${dailyWinner.returnRate >= 0 ? "+" : ""}${dailyWinner.returnRate.toFixed(1)}%`
-              : "—"
+              ? `+${dailyWinner.changeRate.toFixed(1)}%`
+              : allUnchanged
+                ? "0.0%"
+                : "—"
           }
           detail={
             dailyWinner
-              ? "직전 저장 기록과 비교한 해당 종목의 당일 가격 변화예요."
-              : "같은 목표의 직전 분석 기록이 있어야 계산할 수 있어요."
+              ? `${record.savedOn.replaceAll("-", ".")} 종가를 전 거래일 종가와 비교했을 때 가장 많이 오른 종목이에요.`
+              : hasDailyMovementData
+                ? `${record.savedOn.replaceAll("-", ".")}에는 전 거래일보다 오른 종목이 없어요.`
+                : "새 종가가 제공된 뒤 분석하면 당일 등락률을 확인할 수 있어요."
           }
           tone="rose"
         />
         <DailyInsightCard
           icon={TrendingDownIcon}
           eyebrow="당일 하락 1위"
-          title={dailyLoser?.name ?? "비교 기록이 더 필요해요"}
-          value={dailyLoser ? `${dailyLoser.returnRate.toFixed(1)}%` : "—"}
+          title={
+            dailyLoser?.name ??
+            (hasDailyMovementData ? "하락 종목 없음" : "당일 등락 정보 없음")
+          }
+          value={
+            dailyLoser
+              ? `${dailyLoser.changeRate.toFixed(1)}%`
+              : allUnchanged
+                ? "0.0%"
+                : "—"
+          }
           detail={
             dailyLoser
-              ? "직전 저장 기록과 비교한 해당 종목의 당일 가격 변화예요."
-              : "같은 목표의 직전 분석 기록이 있어야 계산할 수 있어요."
+              ? `${record.savedOn.replaceAll("-", ".")} 종가를 전 거래일 종가와 비교했을 때 가장 많이 내린 종목이에요.`
+              : hasDailyMovementData
+                ? `${record.savedOn.replaceAll("-", ".")}에는 전 거래일보다 내린 종목이 없어요.`
+                : "새 종가가 제공된 뒤 분석하면 당일 등락률을 확인할 수 있어요."
           }
           tone="blue"
         />
@@ -487,31 +509,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     dayRecords[0] ??
     null;
 
-  const previousSameGoal = selected
-    ? [...history]
-        .reverse()
-        .find(
-          (item) =>
-            item.goalAmount === selected.goalAmount &&
-            item.analysisMode === selected.analysisMode &&
-            item.savedOn < selected.savedOn,
-        )
-    : null;
-  const previousPrices = new Map(
-    previousSameGoal?.result.holdings.map((holding) => [
-      holding.ticker,
-      holding.currentPrice,
-    ]) ?? [],
-  );
   const dailyMovements = selected
     ? selected.result.holdings.flatMap((holding) => {
-        const previousPrice = previousPrices.get(holding.ticker);
-        if (!previousPrice || previousPrice <= 0) return [];
+        if (!Number.isFinite(holding.dailyChangeRate)) return [];
         return [
           {
             name: holding.name,
-            returnRate:
-              ((holding.currentPrice - previousPrice) / previousPrice) * 100,
+            changeRate: holding.dailyChangeRate!,
           },
         ];
       })
@@ -902,9 +906,19 @@ export default function AnalysisHistory({ loaderData }: Route.ComponentProps) {
                   {goalLabel(selected.goalAmount)} 목표 분석
                 </h2>
               </div>
-              <span className="text-muted-foreground text-sm">
-                기준일 {selected.result.asOf}
-              </span>
+              <div className="text-muted-foreground text-right text-xs sm:text-sm">
+                <p>{selected.result.asOf} 종가 기준</p>
+                <p className="mt-1">
+                  {new Intl.DateTimeFormat("ko-KR", {
+                    month: "long",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                    timeZone: "Asia/Seoul",
+                  }).format(new Date(selected.updatedAt))}{" "}
+                  업데이트 · 실시간 시세 미반영
+                </p>
+              </div>
             </div>
             <SavedAnalysisResult
               key={selected.id}

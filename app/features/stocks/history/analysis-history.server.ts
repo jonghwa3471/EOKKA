@@ -35,14 +35,18 @@ export async function saveDailyAnalysisSnapshot({
   hasUnlimitedHistory = false,
   analysisMode = "quick",
   managedPortfolioId = null,
+  updateSource = "manual",
 }: {
   userId: string;
   result: AnalysisResult;
   hasUnlimitedHistory?: boolean;
   analysisMode?: "quick" | "managed";
   managedPortfolioId?: number | null;
+  updateSource?: "manual" | "automatic";
 }) {
-  const savedOn = seoulDate();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(result.asOf))
+    throw new Error("분석 결과의 종가 기준일이 올바르지 않습니다.");
+  const savedOn = result.asOf;
   const values = {
     user_id: userId,
     saved_on: savedOn,
@@ -53,6 +57,7 @@ export async function saveDailyAnalysisSnapshot({
     goal_month: goalMonthFor(result),
     monthly_contribution: Math.round(result.monthlyContribution),
     analysis_mode: analysisMode,
+    update_source: updateSource,
     managed_portfolio_id: managedPortfolioId,
     result: jsonSafeResult(result),
     updated_at: new Date(),
@@ -68,6 +73,7 @@ export async function saveDailyAnalysisSnapshot({
         goal_month: values.goal_month,
         monthly_contribution: values.monthly_contribution,
         managed_portfolio_id: values.managed_portfolio_id,
+        update_source: values.update_source,
         result: values.result,
         updated_at: values.updated_at,
       })
@@ -124,7 +130,9 @@ export async function startManagedAnalysisHistory({
   portfolioId: number;
   result: AnalysisResult;
 }) {
-  const savedOn = seoulDate();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(result.asOf))
+    throw new Error("분석 결과의 종가 기준일이 올바르지 않습니다.");
+  const savedOn = result.asOf;
   const snapshot = {
     user_id: userId,
     saved_on: savedOn,
@@ -135,6 +143,7 @@ export async function startManagedAnalysisHistory({
     goal_month: goalMonthFor(result),
     monthly_contribution: Math.round(result.monthlyContribution),
     analysis_mode: "managed",
+    update_source: "manual",
     managed_portfolio_id: portfolioId,
     result: jsonSafeResult(result),
     updated_at: new Date(),
@@ -176,6 +185,7 @@ export async function getAnalysisHistory(userId: string) {
       goalMonth: analysisSnapshots.goal_month,
       monthlyContribution: analysisSnapshots.monthly_contribution,
       analysisMode: analysisSnapshots.analysis_mode,
+      updateSource: analysisSnapshots.update_source,
       managedPortfolioId: analysisSnapshots.managed_portfolio_id,
       result: analysisSnapshots.result,
       updatedAt: analysisSnapshots.updated_at,

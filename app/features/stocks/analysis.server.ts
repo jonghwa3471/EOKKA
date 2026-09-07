@@ -326,6 +326,7 @@ export async function analyzePortfolio(
       valueKrw: value,
       profitKrw: value - cost,
       returnRate: ((value - cost) / cost) * 100,
+      dailyChangeRate: data.dailyChangeRate,
       fundamentals: data.fundamentals ?? null,
       purchasePosition: {
         tenYearPosition: priceRangePosition(

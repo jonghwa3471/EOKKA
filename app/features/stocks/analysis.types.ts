@@ -31,6 +31,7 @@ export interface AnalysisResult {
     valueKrw: number;
     profitKrw: number;
     returnRate: number;
+    dailyChangeRate?: number | null;
     fundamentals?: HoldingFundamentals | null;
     purchasePosition?: {
       tenYearPosition: number;

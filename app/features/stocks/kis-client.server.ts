@@ -15,6 +15,7 @@ export interface KisMarketData {
   asOf: string;
   priceBasis: "adjusted_close";
   history: PricePoint[];
+  dailyChangeRate: number | null;
   fundamentals?: HoldingFundamentals | null;
 }
 
@@ -164,6 +165,23 @@ function yyyymmdd(date: Date) {
   return date.toISOString().slice(0, 10).replaceAll("-", "");
 }
 
+function previousCalendarDate(timeZone: string, now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const value = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
+  const date = new Date(
+    Date.UTC(Number(value.year), Number(value.month) - 1, Number(value.day)),
+  );
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date;
+}
+
 function isoDate(value: string) {
   return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
 }
@@ -171,13 +189,14 @@ function isoDate(value: string) {
 export async function getKisDomesticMarketData(
   ticker: string,
 ): Promise<KisMarketData> {
-  const end = new Date();
+  const end = previousCalendarDate("Asia/Seoul");
   const start = new Date(end);
   start.setFullYear(start.getFullYear() - 10);
-  const [price, chart] = await Promise.all([
+  const dailyStart = new Date(end);
+  dailyStart.setDate(dailyStart.getDate() - 14);
+  const [price, chart, dailyChart] = await Promise.all([
     kisGet<{
       output: {
-        stck_prpr: string;
         per?: string;
         pbr?: string;
         eps?: string;
@@ -203,6 +222,18 @@ export async function getKisDomesticMarketData(
         FID_ORG_ADJ_PRC: "0",
       }),
     ),
+    kisGet<{ output2: Array<{ stck_bsop_date: string; stck_clpr: string }> }>(
+      "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
+      "FHKST03010100",
+      new URLSearchParams({
+        FID_COND_MRKT_DIV_CODE: "J",
+        FID_INPUT_ISCD: ticker,
+        FID_INPUT_DATE_1: yyyymmdd(dailyStart),
+        FID_INPUT_DATE_2: yyyymmdd(end),
+        FID_PERIOD_DIV_CODE: "D",
+        FID_ORG_ADJ_PRC: "0",
+      }),
+    ),
   ]);
   const history = chart.output2
     .map((point) => ({
@@ -211,14 +242,28 @@ export async function getKisDomesticMarketData(
     }))
     .filter((point) => point.close > 0)
     .sort((a, b) => a.date.localeCompare(b.date));
-  if (!history.length || Number(price.output.stck_prpr) <= 0)
+  const dailyCloses = dailyChart.output2
+    .map((point) => ({
+      date: point.stck_bsop_date,
+      close: Number(point.stck_clpr),
+    }))
+    .filter((point) => point.close > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const latestClose = dailyCloses.at(-1);
+  const previousClose = dailyCloses.at(-2);
+  if (!history.length || !latestClose)
     throw new Error("KIS 국내 시세 데이터가 부족합니다.");
   return {
-    currentPrice: Number(price.output.stck_prpr),
+    currentPrice: latestClose.close,
     exchangeRate: 1,
-    asOf: isoDate(history.at(-1)!.date),
+    asOf: isoDate(latestClose.date),
     priceBasis: "adjusted_close",
     history,
+    dailyChangeRate:
+      previousClose && previousClose.close > 0
+        ? ((latestClose.close - previousClose.close) / previousClose.close) *
+          100
+        : null,
     fundamentals: kisValuationFundamentals(price.output),
   };
 }
@@ -230,10 +275,10 @@ export async function getKisUsMarketData(
   exchange: keyof typeof exchangeCodes,
 ): Promise<KisMarketData> {
   const exchangeCode = exchangeCodes[exchange];
-  const [price, chart] = await Promise.all([
+  const latestCompletedDate = previousCalendarDate("America/New_York");
+  const [price, chart, dailyChart] = await Promise.all([
     kisGet<{
       output: {
-        last: string;
         t_rate?: string;
         e_perx?: string;
         e_pbrx?: string;
@@ -257,7 +302,19 @@ export async function getKisUsMarketData(
         EXCD: exchangeCode,
         SYMB: ticker,
         GUBN: "2",
-        BYMD: "",
+        BYMD: yyyymmdd(latestCompletedDate),
+        MODP: "1",
+      }),
+    ),
+    kisGet<{ output2: Array<{ xymd: string; clos: string }> }>(
+      "/uapi/overseas-price/v1/quotations/dailyprice",
+      "HHDFS76240000",
+      new URLSearchParams({
+        AUTH: "",
+        EXCD: exchangeCode,
+        SYMB: ticker,
+        GUBN: "0",
+        BYMD: yyyymmdd(latestCompletedDate),
         MODP: "1",
       }),
     ),
@@ -266,14 +323,25 @@ export async function getKisUsMarketData(
     .map((point) => ({ date: point.xymd, close: Number(point.clos) }))
     .filter((point) => point.close > 0)
     .sort((a, b) => a.date.localeCompare(b.date));
-  if (!history.length || Number(price.output.last) <= 0)
+  const dailyCloses = dailyChart.output2
+    .map((point) => ({ date: point.xymd, close: Number(point.clos) }))
+    .filter((point) => point.close > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const latestClose = dailyCloses.at(-1);
+  const previousClose = dailyCloses.at(-2);
+  if (!history.length || !latestClose)
     throw new Error("KIS 미국 시세 데이터가 부족합니다.");
   return {
-    currentPrice: Number(price.output.last),
+    currentPrice: latestClose.close,
     exchangeRate: Number(price.output.t_rate) || 1_350,
-    asOf: isoDate(history.at(-1)!.date),
+    asOf: isoDate(latestClose.date),
     priceBasis: "adjusted_close",
     history,
+    dailyChangeRate:
+      previousClose && previousClose.close > 0
+        ? ((latestClose.close - previousClose.close) / previousClose.close) *
+          100
+        : null,
     fundamentals: kisValuationFundamentals({
       per: price.output.e_perx ?? price.output.perx,
       pbr: price.output.e_pbrx ?? price.output.pbrx,

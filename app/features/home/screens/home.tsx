@@ -34,6 +34,7 @@ import { cn } from "~/core/lib/utils";
 import type { AnalysisResult } from "~/features/stocks/analysis.types";
 import { AnalysisResultView } from "~/features/stocks/components/analysis-result";
 import { StockAutocomplete } from "~/features/stocks/components/stock-autocomplete";
+import { getLatestCachedMarketDate } from "~/features/stocks/fsc-client.server";
 import {
   getActiveAnalysisHistory,
   getPreferredGoalAmount,
@@ -42,6 +43,7 @@ import {
 import { getStockMarketMode } from "~/features/stocks/market-mode.server";
 import { isManagedPortfolioActive } from "~/features/stocks/portfolio/portfolio.server";
 import type { StockSearchResult } from "~/features/stocks/types";
+import { markUserActive } from "~/features/users/activity.server";
 
 export const meta: Route.MetaFunction = ({ data }) => [
   { title: data?.title ?? "억까 — 내 주식, 목표까지" },
@@ -55,6 +57,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     data: { user },
   } = await client.auth.getUser();
 
+  const marketMode = getStockMarketMode();
+  if (user) await markUserActive(user.id);
   const [allHistory, savedPreferredGoal, managedAnalysisActive] = user
     ? await Promise.all([
         getActiveAnalysisHistory(user.id),
@@ -126,19 +130,23 @@ export async function loader({ request }: Route.LoaderArgs) {
           : b.change - a.change,
       )[0]
     : null;
+  const latestCachedMarketDate =
+    marketMode === "domestic" ? await getLatestCachedMarketDate() : null;
 
   return {
     title: "억까 — 내 주식, 목표까지",
     subtitle: "보유 주식을 입력하고 목표까지 얼마나 남았는지 확인해보세요.",
-    marketMode: getStockMarketMode(),
+    marketMode,
+    analysisAsOfPreview: latestCachedMarketDate ?? latest?.result.asOf ?? null,
     isAuthenticated: user !== null,
     managedAnalysisActive,
     moneyInsights:
       latest && preferredGoal
         ? {
             goalAmount: preferredGoal,
-            latestSavedOn: latest.savedOn,
-            isLatestToday: latest.savedOn === seoulDate(),
+            latestUpdatedAt: latest.updatedAt.toISOString(),
+            marketAsOf: latest.result.asOf,
+            isLatestToday: seoulDate(latest.updatedAt) === seoulDate(),
             dailyProfitChange: previous
               ? Math.round(latest.currentValue - previous.currentValue)
               : null,
@@ -396,7 +404,8 @@ function formatKoreanMoney(amount: number) {
 
 type MoneyInsight = {
   goalAmount: number;
-  latestSavedOn: string;
+  latestUpdatedAt: string;
+  marketAsOf: string;
   isLatestToday: boolean;
   dailyProfitChange: number | null;
   monthlyProfitChange: number | null;
@@ -654,10 +663,20 @@ function ProfitMetaphorCard({
 }
 
 function MyEokkaSummary({ insight }: { insight: MoneyInsight }) {
-  const latestDate = new Intl.DateTimeFormat("ko-KR", {
+  const latestUpdatedAt = new Date(insight.latestUpdatedAt);
+  const latestUpdateLabel = new Intl.DateTimeFormat("ko-KR", {
+    ...(insight.isLatestToday
+      ? {}
+      : { month: "long" as const, day: "numeric" as const }),
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "Asia/Seoul",
+  }).format(latestUpdatedAt);
+  const marketDate = new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
     month: "long",
     day: "numeric",
-  }).format(new Date(`${insight.latestSavedOn}T12:00:00+09:00`));
+  }).format(new Date(`${insight.marketAsOf}T12:00:00+09:00`));
 
   return (
     <div className="bg-card/90 rounded-3xl border p-5 text-left shadow-2xl shadow-black/5 backdrop-blur sm:p-8">
@@ -673,7 +692,17 @@ function MyEokkaSummary({ insight }: { insight: MoneyInsight }) {
           </p>
         </div>
         <p className="text-muted-foreground text-xs">
-          {insight.isLatestToday ? "오늘 업데이트" : `${latestDate} 업데이트`}
+          {insight.isLatestToday
+            ? `오늘 ${latestUpdateLabel} 업데이트`
+            : `${latestUpdateLabel} 업데이트`}
+        </p>
+      </div>
+
+      <div className="mt-5 flex items-start gap-2 rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+        <Clock3Icon className="mt-0.5 size-4 shrink-0" />
+        <p>
+          <strong>{marketDate} 종가 기준</strong>이에요. 실시간 가격이 아닌 해당
+          거래일의 마감 가격으로 계산했어요.
         </p>
       </div>
 
@@ -967,8 +996,13 @@ function JackpotGoal() {
 }
 
 export default function Home() {
-  const { marketMode, isAuthenticated, managedAnalysisActive, moneyInsights } =
-    useLoaderData<typeof loader>();
+  const {
+    marketMode,
+    analysisAsOfPreview,
+    isAuthenticated,
+    managedAnalysisActive,
+    moneyInsights,
+  } = useLoaderData<typeof loader>();
   const location = useLocation();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
@@ -986,6 +1020,7 @@ export default function Home() {
   const [investmentMonths, setInvestmentMonths] = useState("");
   const [investmentPeriodUnknown, setInvestmentPeriodUnknown] = useState(false);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const displayedAnalysisDate = analysis?.asOf ?? analysisAsOfPreview;
   const [analysisError, setAnalysisError] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisSecondsLeft, setAnalysisSecondsLeft] = useState(
@@ -1538,6 +1573,30 @@ export default function Home() {
                       void analyze();
                     }}
                   >
+                    <div className="flex items-start gap-3 rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3.5 text-sm leading-6 text-amber-800 dark:text-amber-200">
+                      <Clock3Icon className="mt-1 size-4 shrink-0" />
+                      <p>
+                        {displayedAnalysisDate ? (
+                          <>
+                            현재 확인된{" "}
+                            <strong>
+                              {displayedAnalysisDate.replaceAll("-", ".")} 종가
+                            </strong>
+                            를 기준으로 분석해요. 더 최근 종가가 제공됐다면
+                            분석할 때 자동으로 최신 날짜가 적용돼요.
+                          </>
+                        ) : (
+                          <>
+                            분석을 시작하면 사용할{" "}
+                            <strong>가장 최근 확정 종가 날짜</strong>를
+                            확인해요.
+                          </>
+                        )}{" "}
+                        로그인 상태에서 기록은 분석한 날이 아니라 실제 사용한
+                        종가 날짜에 저장돼요.
+                      </p>
+                    </div>
+
                     <div className="space-y-4">
                       {holdings.map((holding, index) => (
                         <div

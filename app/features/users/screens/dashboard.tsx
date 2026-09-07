@@ -51,8 +51,6 @@ export const meta: Route.MetaFunction = () => [
 
 export async function loader({ request }: Route.LoaderArgs) {
   const [
-    { inArray },
-    { default: db },
     { default: makeServerClient },
     {
       FREE_HISTORY_LIMIT,
@@ -60,13 +58,9 @@ export async function loader({ request }: Route.LoaderArgs) {
       getPreferredGoalAmount,
       seoulDate,
     },
-    { stocks },
   ] = await Promise.all([
-    import("drizzle-orm"),
-    import("~/core/db/drizzle-client.server"),
     import("~/core/lib/supa-client.server"),
     import("~/features/stocks/history/analysis-history.server"),
-    import("~/features/stocks/schema"),
   ]);
   const [client] = makeServerClient(request);
   const {
@@ -96,59 +90,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     new Map(goalHistory.map((item) => [item.savedOn, item])).values(),
   );
   const today = seoulDate();
-  const latestResult = history.at(-1)?.result;
-  const tickers = latestResult?.holdings.map((holding) => holding.ticker) ?? [];
-  const stockRows =
-    tickers.length > 0
-      ? await db.select().from(stocks).where(inArray(stocks.ticker, tickers))
-      : [];
-  const exchangeRate = latestResult?.exchangeRate ?? 1;
-  const updateDraft = latestResult
-    ? latestResult.holdings.flatMap((holding, index) => {
-        const stock = stockRows.find(
-          (item) =>
-            item.ticker === holding.ticker &&
-            item.currency === holding.currency,
-        );
-        if (!stock || holding.currentPrice <= 0) return [];
-        const valueRate = holding.currency === "USD" ? exchangeRate : 1;
-        const quantity = holding.valueKrw / (holding.currentPrice * valueRate);
-        if (!Number.isFinite(quantity) || quantity <= 0) return [];
-        const averagePrice = holding.costKrw / (quantity * valueRate);
-        if (!Number.isFinite(averagePrice) || averagePrice <= 0) return [];
-        return [
-          {
-            id: index + 1,
-            symbol: stock.name,
-            averagePrice: String(Math.round(averagePrice)),
-            currency: stock.currency as "KRW" | "USD",
-            quantity: String(Number(quantity.toFixed(6))),
-            costKrw: holding.costKrw,
-            selectedStock: {
-              stockId: stock.stock_id,
-              name: stock.name,
-              nameEn: stock.name_en,
-              ticker: stock.ticker,
-              country: stock.country as "KR" | "US",
-              exchange: stock.exchange as
-                | "KOSPI"
-                | "KOSDAQ"
-                | "NASDAQ"
-                | "NYSE"
-                | "AMEX",
-              currency: stock.currency as "KRW" | "USD",
-              securityType: stock.security_type as "STOCK" | "ETF" | "ETN",
-            },
-          },
-        ];
-      })
-    : [];
 
   return {
     history,
     goalOptions,
     preferredGoal,
-    updateDraft,
     name:
       user?.user_metadata.name ??
       user?.user_metadata.full_name ??
@@ -1875,15 +1821,8 @@ function WeeklyAwardCard({
 }
 
 export default function Dashboard({ loaderData }: Route.ComponentProps) {
-  const {
-    history,
-    name,
-    historyLimit,
-    goalOptions,
-    preferredGoal,
-    updateDraft,
-    today,
-  } = loaderData;
+  const { history, name, historyLimit, goalOptions, preferredGoal, today } =
+    loaderData;
   const [dimmedTrendSeries, setDimmedTrendSeries] = useState<TrendSeries[]>([]);
   const toggleTrendSeries = (series: TrendSeries) =>
     setDimmedTrendSeries((current) =>
@@ -1910,9 +1849,9 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
               첫 분석 기록을 만들어 보세요
             </h1>
             <p className="text-muted-foreground mx-auto mt-5 max-w-xl leading-7">
-              로그인 상태로 홈에서 포트폴리오를 분석하면 오늘의 결과가 자동
-              저장되고, 내일부터 목표 달성 기간과 수익률의 변화를 비교할 수
-              있어요.
+              로그인 상태로 첫 포트폴리오 분석을 저장하면 이후 새 종가가 제공될
+              때 자동 분석 기록이 쌓이고, 목표 달성 기간과 수익률의 변화를
+              비교할 수 있어요.
             </p>
             <Button asChild size="lg" className="mt-8 rounded-full px-7">
               <Link to="/">
@@ -1925,10 +1864,21 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
     );
   }
 
-  const todayAnalysis = history.find((item) => item.savedOn === today);
-  const todayAnalysisHref = todayAnalysis
-    ? `/dashboard/history?month=${today.slice(0, 7)}&date=${today}&analysis=${todayAnalysis.id}`
+  const checkedTodayAnalysis = [...history].reverse().find(
+    (item) =>
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Seoul",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date(item.updatedAt)) === today,
+  );
+  const checkedAnalysisHref = checkedTodayAnalysis
+    ? `/dashboard/history?month=${checkedTodayAnalysis.savedOn.slice(0, 7)}&date=${checkedTodayAnalysis.savedOn}&analysis=${checkedTodayAnalysis.id}`
     : null;
+  const todayCloseAvailable = latest.savedOn === today;
+  const wasAutomaticallyUpdated =
+    checkedTodayAnalysis?.updateSource === "automatic";
 
   const assetChange = difference(
     latest.currentValue,
@@ -1975,17 +1925,17 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
   return (
     <main className="flex flex-1 flex-col px-5 pt-8 pb-10 md:px-8 md:pt-12">
       <div className="mx-auto w-full max-w-7xl">
-        <header className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+        <header>
           <div>
             <div className="flex items-center gap-2 text-sm font-bold text-emerald-500">
-              <SparklesIcon className="size-4" /> 오늘의 투자 리포트
+              <SparklesIcon className="size-4" /> 투자 리포트
             </div>
             <h1 className="mt-2 text-3xl font-black tracking-tight md:text-4xl">
               {name}님의 목표 현황
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <p className="text-muted-foreground">
-                마지막 분석 {latest.savedOn} · 최근 {historyLimit}개 기록
+                최근 종가 {latest.savedOn} · 최근 {historyLimit}개 기록
               </p>
               <span
                 className={cn(
@@ -2001,46 +1951,12 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
               </span>
             </div>
           </div>
-          {latest.analysisMode === "managed" ? (
-            <Button asChild className="rounded-full">
-              <Link to="/dashboard/precise-analysis">
-                <RefreshCwIcon /> 오늘 분석 업데이트
-              </Link>
-            </Button>
-          ) : (
-            <Button asChild className="rounded-full">
-              <Link
-                to="/"
-                state={{
-                  portfolioDraft: {
-                    holdings: updateDraft,
-                    targetEok: String(latest.goalAmount / 100_000_000),
-                    monthlyContribution: String(
-                      latest.monthlyContribution || "",
-                    ),
-                    investmentYears: latest.result.investmentPeriodMonths
-                      ? String(
-                          Math.floor(latest.result.investmentPeriodMonths / 12),
-                        )
-                      : "",
-                    investmentMonths: latest.result.investmentPeriodMonths
-                      ? String(latest.result.investmentPeriodMonths % 12)
-                      : "",
-                    investmentPeriodUnknown:
-                      latest.result.investmentPeriodMonths == null,
-                  },
-                }}
-              >
-                <RefreshCwIcon /> 오늘 분석 업데이트
-              </Link>
-            </Button>
-          )}
         </header>
 
         <section
           className={cn(
             "mt-6 flex flex-col gap-4 rounded-2xl border px-5 py-4 sm:flex-row sm:items-center sm:justify-between",
-            todayAnalysis
+            checkedTodayAnalysis
               ? "border-emerald-500/25 bg-emerald-500/[0.07]"
               : "border-amber-500/25 bg-amber-500/[0.07]",
           )}
@@ -2049,12 +1965,12 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             <span
               className={cn(
                 "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl",
-                todayAnalysis
+                checkedTodayAnalysis
                   ? "bg-emerald-500/15 text-emerald-500"
                   : "bg-amber-500/15 text-amber-500",
               )}
             >
-              {todayAnalysis ? (
+              {checkedTodayAnalysis ? (
                 <CheckCircle2Icon className="size-5" />
               ) : (
                 <RefreshCwIcon className="size-5" />
@@ -2062,23 +1978,34 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             </span>
             <div>
               <p className="font-black">
-                {todayAnalysis
-                  ? "오늘 분석을 완료했어요"
-                  : "오늘은 아직 분석하지 않았어요"}
+                {checkedTodayAnalysis
+                  ? wasAutomaticallyUpdated
+                    ? "새 종가 분석이 자동 업데이트됐어요"
+                    : todayCloseAvailable
+                      ? "오늘 종가까지 분석에 반영했어요"
+                      : "오늘 최신 종가를 확인했어요"
+                  : "최신 종가 자동 분석을 기다리고 있어요"}
               </p>
               <p className="text-muted-foreground mt-1 text-sm leading-6">
-                {todayAnalysis
-                  ? "오늘 저장된 최신 결과와 변화를 분석 기록에서 확인할 수 있어요."
-                  : "오늘의 가격과 포트폴리오 변화를 반영하려면 분석을 업데이트해 주세요."}
+                {checkedTodayAnalysis
+                  ? wasAutomaticallyUpdated
+                    ? `${latest.savedOn} 새 종가가 반영되어 분석 기록과 대시보드가 자동 업데이트됐어요.`
+                    : todayCloseAvailable
+                      ? `${latest.savedOn} 종가 기준으로 수동 업데이트했어요.`
+                      : `${latest.savedOn} 종가 기준이에요. 오늘 종가는 아직 제공되지 않아 같은 종가 기록을 갱신했어요.`
+                  : `${latest.savedOn} 종가까지 반영돼 있어요. 새 종가가 제공되면 예약된 자동 분석이 해당 날짜의 기록을 추가해요.`}
+              </p>
+              <p className="text-muted-foreground mt-2 text-xs font-semibold">
+                거래일마다 오후 2:30 자동 업데이트
               </p>
             </div>
           </div>
-          {todayAnalysisHref && (
+          {checkedAnalysisHref && (
             <Link
-              to={todayAnalysisHref}
+              to={checkedAnalysisHref}
               className="inline-flex shrink-0 items-center gap-1.5 self-start text-sm font-black text-emerald-500 transition-colors hover:text-emerald-400 sm:self-center"
             >
-              해당 분석 보러가기 <ArrowRightIcon className="size-4" />
+              분석 보기 <ArrowRightIcon className="size-4" />
             </Link>
           )}
         </section>

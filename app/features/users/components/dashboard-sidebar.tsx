@@ -1,5 +1,6 @@
 import {
   BriefcaseBusinessIcon,
+  CalendarClockIcon,
   CalendarDaysIcon,
   ChartNoAxesCombinedIcon,
   MicroscopeIcon,
@@ -38,6 +39,11 @@ const navigation = [
     title: "정밀 분석",
     url: "/dashboard/precise-analysis",
     icon: MicroscopeIcon,
+  },
+  {
+    title: "자동 분석 설정",
+    url: "/dashboard/automatic-analysis",
+    icon: CalendarClockIcon,
   },
   {
     title: "투자 인사이트",

@@ -8,6 +8,7 @@ import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
+  date,
   pgPolicy,
   pgTable,
   text,
@@ -40,6 +41,11 @@ export const profiles = pgTable(
     avatar_url: text(),
     marketing_consent: boolean("marketing_consent").notNull().default(false),
     preferred_goal_amount: bigint({ mode: "number" }),
+    automatic_analysis_goal_amount: bigint({ mode: "number" }),
+    automatic_analysis_monthly_contribution: bigint({ mode: "number" }),
+    last_active_on: date()
+      .notNull()
+      .default(sql`current_date`),
     // Adds created_at and updated_at timestamp columns
     ...timestamps,
   },

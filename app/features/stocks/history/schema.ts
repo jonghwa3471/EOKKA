@@ -34,6 +34,7 @@ export const analysisSnapshots = pgTable(
     goal_month: integer(),
     monthly_contribution: bigint({ mode: "number" }).notNull().default(0),
     analysis_mode: text().notNull().default("quick"),
+    update_source: text().notNull().default("manual"),
     managed_portfolio_id: bigint({ mode: "number" }).references(
       () => managedPortfolios.managed_portfolio_id,
       { onDelete: "set null" },

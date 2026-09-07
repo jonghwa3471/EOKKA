@@ -108,6 +108,10 @@ export default [
           "/precise-analysis",
           "features/users/screens/precise-analysis.tsx",
         ),
+        route(
+          "/automatic-analysis",
+          "features/users/screens/automatic-analysis-settings.tsx",
+        ),
         route("/insights", "features/users/screens/investment-insights.tsx"),
         route("/history", "features/users/screens/analysis-history.tsx"),
         route("/pro", "features/users/screens/eokka-pro.tsx"),

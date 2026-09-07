@@ -9,6 +9,7 @@ import {
 } from "~/core/components/ui/sidebar";
 import makeServerClient from "~/core/lib/supa-client.server";
 
+import { markUserActive } from "../activity.server";
 import DashboardSidebar from "../components/dashboard-sidebar";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -16,6 +17,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const {
     data: { user },
   } = await client.auth.getUser();
+  if (user) await markUserActive(user.id);
   return {
     user: user
       ? {
@@ -41,15 +43,17 @@ export default function DashboardLayout({ loaderData }: Route.ComponentProps) {
       ? "내 포트폴리오"
       : pathname.startsWith("/dashboard/precise-analysis")
         ? "정밀 분석"
-        : pathname.startsWith("/dashboard/insights")
-          ? "투자 인사이트"
-          : pathname.startsWith("/dashboard/history")
-            ? "분석 기록"
-            : pathname.startsWith("/dashboard/pro")
-              ? "EOKKA Pro"
-              : pathname.startsWith("/dashboard/payments")
-                ? "결제내역"
-                : "내 투자 대시보드";
+        : pathname.startsWith("/dashboard/automatic-analysis")
+          ? "자동 분석 설정"
+          : pathname.startsWith("/dashboard/insights")
+            ? "투자 인사이트"
+            : pathname.startsWith("/dashboard/history")
+              ? "분석 기록"
+              : pathname.startsWith("/dashboard/pro")
+                ? "EOKKA Pro"
+                : pathname.startsWith("/dashboard/payments")
+                  ? "결제내역"
+                  : "내 투자 대시보드";
   return (
     <SidebarProvider>
       <DashboardSidebar user={user} />

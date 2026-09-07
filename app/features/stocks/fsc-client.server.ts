@@ -1,6 +1,6 @@
 import type { HoldingFundamentals } from "./fundamentals.types";
 
-import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, max, sql } from "drizzle-orm";
 
 import db from "~/core/db/drizzle-client.server";
 
@@ -46,7 +46,15 @@ export interface DomesticMarketData {
   asOf: string;
   priceBasis: "raw_close";
   history: PricePoint[];
+  dailyChangeRate: number | null;
   fundamentals?: HoldingFundamentals | null;
+}
+
+export async function getLatestCachedMarketDate() {
+  const [latest] = await db
+    .select({ date: max(stockPrices.trading_date) })
+    .from(stockPrices);
+  return latest?.date ?? null;
 }
 
 function apiKey() {
@@ -287,13 +295,18 @@ export async function getDomesticMarketData(
     .from(stockPrices)
     .where(eq(stockPrices.stock_id, stockId))
     .orderBy(desc(stockPrices.trading_date))
-    .limit(1);
+    .limit(2);
   if (!latest[0]) throw new Error("저장된 주가 데이터가 없습니다.");
+  const previousClose = latest[1]?.close;
 
   return {
     currentPrice: latest[0].close,
     asOf: latest[0].date,
     priceBasis: "raw_close",
     history: toMonthlyHistory(rows),
+    dailyChangeRate:
+      previousClose && previousClose > 0
+        ? ((latest[0].close - previousClose) / previousClose) * 100
+        : null,
   };
 }

@@ -3,6 +3,7 @@ import type { Route } from "./+types/precise-analysis";
 import {
   ArrowRightIcon,
   BriefcaseBusinessIcon,
+  Clock3Icon,
   SparklesIcon,
 } from "lucide-react";
 import { useState } from "react";
@@ -16,6 +17,7 @@ import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
 import { generateAiStrategy } from "~/features/stocks/ai-strategy.server";
 import { analyzePortfolio } from "~/features/stocks/analysis.server";
+import { getLatestCachedMarketDate } from "~/features/stocks/fsc-client.server";
 import {
   getAnalysisHistory,
   getPreferredGoalAmount,
@@ -23,6 +25,7 @@ import {
   seoulDate,
   startManagedAnalysisHistory,
 } from "~/features/stocks/history/analysis-history.server";
+import { getStockMarketMode } from "~/features/stocks/market-mode.server";
 import {
   calculateManagedHoldings,
   getManagedPortfolio,
@@ -89,12 +92,17 @@ export async function loader({ request }: Route.LoaderArgs) {
         : latestDate,
     null,
   );
+  const latestCachedMarketDate =
+    getStockMarketMode() === "domestic"
+      ? await getLatestCachedMarketDate()
+      : null;
 
   return {
     managed,
     holdings,
     defaultGoalAmount: latest?.goalAmount ?? 100_000_000,
     defaultMonthlyContribution: latest?.monthlyContribution ?? 0,
+    analysisAsOfPreview: latestCachedMarketDate ?? latest?.result.asOf ?? null,
     hasUnappliedChanges: Boolean(
       managed?.portfolio.status === "active" &&
         (!lastAnalysisAt ||
@@ -204,6 +212,7 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
   );
   const parsedGoalAmount = Number(goalAmount);
   const parsedMonthlyContribution = Number(monthlyContribution);
+  const displayedAnalysisDate = loaderData.analysisAsOfPreview;
   const addMonthlyContribution = (amount: number) =>
     setMonthlyContribution(
       String(
@@ -229,6 +238,27 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
           <p className="text-muted-foreground mt-2 leading-6">
             매매일지의 거래일과 당시 환율을 반영해 포트폴리오를 분석해요.
           </p>
+          <div className="mt-5 flex max-w-3xl items-start gap-3 rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3.5 text-sm leading-6 text-amber-800 dark:text-amber-200">
+            <Clock3Icon className="mt-1 size-4 shrink-0" />
+            <p>
+              {displayedAnalysisDate ? (
+                <>
+                  현재 확인된{" "}
+                  <strong>
+                    {displayedAnalysisDate.replaceAll("-", ".")} 종가
+                  </strong>
+                  를 기준으로 분석해요. 더 최근 종가가 제공됐다면 분석할 때
+                  자동으로 최신 날짜가 적용돼요.
+                </>
+              ) : (
+                <>
+                  분석을 시작하면 사용할{" "}
+                  <strong>가장 최근 확정 종가 날짜</strong>를 확인해요.
+                </>
+              )}{" "}
+              기록은 분석한 날이 아니라 실제 사용한 종가 날짜에 저장돼요.
+            </p>
+          </div>
         </header>
 
         {!holdings.length ? (
@@ -321,7 +351,9 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
                           </dd>
                         </div>
                         <div className="text-right">
-                          <dt className="text-muted-foreground">원화 매입원금</dt>
+                          <dt className="text-muted-foreground">
+                            원화 매입원금
+                          </dt>
                           <dd className="mt-1 font-black tabular-nums">
                             {moneyLabel(holding.costKrw)}
                           </dd>

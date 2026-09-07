@@ -2123,17 +2123,18 @@ export function AnalysisResultView({
         <div className="text-muted-foreground text-xs sm:text-right">
           <p className="font-semibold">
             {new Date(`${result.asOf}T00:00:00`).toLocaleDateString("ko-KR")}{" "}
-            {result.marketMode === "domestic"
-              ? "전 거래일 종가 기준"
-              : "KIS 시세 기준"}
+            종가 기준
           </p>
-          <p className="mt-1">
-            {result.marketMode === "domestic"
-              ? "매일 오후 2시 이후 갱신"
-              : "로컬 테스트 모드"}{" "}
-            · 투자 조언이 아닙니다
-          </p>
+          <p className="mt-1">실시간 시세 미반영 · 투자 조언이 아닙니다</p>
         </div>
+      </div>
+
+      <div className="mt-5 flex items-start gap-2 rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+        <CircleAlertIcon className="mt-0.5 size-4 shrink-0" />
+        <p>
+          실시간 가격이 아닌 <strong>해당 거래일의 마감 종가</strong>로
+          평가금액과 분석 결과를 계산했어요.
+        </p>
       </div>
 
       <PortfolioAllocation result={result} />
