@@ -1,3 +1,5 @@
+import type { HoldingFundamentals } from "./fundamentals.types";
+
 export interface AnalysisResult {
   asOf: string;
   marketMode: "domestic" | "global-test";
@@ -21,12 +23,15 @@ export interface AnalysisResult {
   holdings: Array<{
     name: string;
     ticker: string;
+    country?: string;
+    exchange?: string;
     currentPrice: number;
     currency: "KRW" | "USD";
     costKrw: number;
     valueKrw: number;
     profitKrw: number;
     returnRate: number;
+    fundamentals?: HoldingFundamentals | null;
     purchasePosition?: {
       tenYearPosition: number;
       oneYearPosition: number;
@@ -115,8 +120,15 @@ export interface AnalysisResult {
 }
 
 export interface AiStrategy {
+  framework?: "buffett_principles";
   headline: string;
   diagnosis: string;
+  principleChecks?: Array<{
+    principle: string;
+    status: "좋아요" | "조금 더 살펴봐요" | "현재 확인 범위예요";
+    observation: string;
+    question: string;
+  }>;
   scores: Array<{
     key:
       | "currentAssets"

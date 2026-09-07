@@ -318,12 +318,15 @@ export async function analyzePortfolio(
     return {
       name: stock.name,
       ticker: stock.ticker,
+      country: stock.country,
+      exchange: stock.exchange,
       currentPrice: data.currentPrice,
       currency: stock.currency as "KRW" | "USD",
       costKrw: cost,
       valueKrw: value,
       profitKrw: value - cost,
       returnRate: ((value - cost) / cost) * 100,
+      fundamentals: data.fundamentals ?? null,
       purchasePosition: {
         tenYearPosition: priceRangePosition(
           tenYearPrices,

@@ -1,3 +1,5 @@
+import type { HoldingFundamentals } from "./fundamentals.types";
+
 import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
 
 import db from "~/core/db/drizzle-client.server";
@@ -44,6 +46,7 @@ export interface DomesticMarketData {
   asOf: string;
   priceBasis: "raw_close";
   history: PricePoint[];
+  fundamentals?: HoldingFundamentals | null;
 }
 
 function apiKey() {

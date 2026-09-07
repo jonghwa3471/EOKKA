@@ -1,3 +1,5 @@
+import type { HoldingFundamentals } from "./fundamentals.types";
+
 const KIS_BASE_URL = "https://openapi.koreainvestment.com:9443";
 
 interface PricePoint {
@@ -13,6 +15,45 @@ export interface KisMarketData {
   asOf: string;
   priceBasis: "adjusted_close";
   history: PricePoint[];
+  fundamentals?: HoldingFundamentals | null;
+}
+
+function optionalNumber(...values: Array<string | undefined>) {
+  for (const value of values) {
+    if (value == null || value.trim() === "") continue;
+    const parsed = Number(value.replaceAll(",", ""));
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function kisValuationFundamentals(values: {
+  per?: string;
+  pbr?: string;
+  eps?: string;
+  bps?: string;
+}): HoldingFundamentals | null {
+  const per = optionalNumber(values.per);
+  const pbr = optionalNumber(values.pbr);
+  const eps = optionalNumber(values.eps);
+  const bps = optionalNumber(values.bps);
+  if ([per, pbr, eps, bps].every((value) => value == null)) return null;
+  return {
+    source: "한국투자증권",
+    asOf: new Date().toISOString().slice(0, 10),
+    coverage: "partial",
+    periods: 1,
+    revenueGrowthPercent: null,
+    operatingProfitGrowthPercent: null,
+    netIncomeGrowthPercent: null,
+    operatingMarginPercent: null,
+    debtRatioPercent: null,
+    returnOnEquityPercent: null,
+    per,
+    pbr,
+    eps,
+    bps,
+  };
 }
 
 const globalKisState = globalThis as typeof globalThis & {
@@ -134,7 +175,15 @@ export async function getKisDomesticMarketData(
   const start = new Date(end);
   start.setFullYear(start.getFullYear() - 10);
   const [price, chart] = await Promise.all([
-    kisGet<{ output: { stck_prpr: string } }>(
+    kisGet<{
+      output: {
+        stck_prpr: string;
+        per?: string;
+        pbr?: string;
+        eps?: string;
+        bps?: string;
+      };
+    }>(
       "/uapi/domestic-stock/v1/quotations/inquire-price",
       "FHKST01010100",
       new URLSearchParams({
@@ -170,6 +219,7 @@ export async function getKisDomesticMarketData(
     asOf: isoDate(history.at(-1)!.date),
     priceBasis: "adjusted_close",
     history,
+    fundamentals: kisValuationFundamentals(price.output),
   };
 }
 
@@ -181,7 +231,20 @@ export async function getKisUsMarketData(
 ): Promise<KisMarketData> {
   const exchangeCode = exchangeCodes[exchange];
   const [price, chart] = await Promise.all([
-    kisGet<{ output: { last: string; t_rate?: string } }>(
+    kisGet<{
+      output: {
+        last: string;
+        t_rate?: string;
+        e_perx?: string;
+        e_pbrx?: string;
+        e_epsx?: string;
+        e_bpsx?: string;
+        perx?: string;
+        pbrx?: string;
+        epsx?: string;
+        bpsx?: string;
+      };
+    }>(
       "/uapi/overseas-price/v1/quotations/price-detail",
       "HHDFS76200200",
       new URLSearchParams({ AUTH: "", EXCD: exchangeCode, SYMB: ticker }),
@@ -211,6 +274,12 @@ export async function getKisUsMarketData(
     asOf: isoDate(history.at(-1)!.date),
     priceBasis: "adjusted_close",
     history,
+    fundamentals: kisValuationFundamentals({
+      per: price.output.e_perx ?? price.output.perx,
+      pbr: price.output.e_pbrx ?? price.output.pbrx,
+      eps: price.output.e_epsx ?? price.output.epsx,
+      bps: price.output.e_bpsx ?? price.output.bpsx,
+    }),
   };
 }
 

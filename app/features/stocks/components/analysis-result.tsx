@@ -71,6 +71,90 @@ const projectionAnnualRate = (
 const goalLabel = (value: number) =>
   `${(value / 100_000_000).toLocaleString("ko-KR")}억`;
 
+export function restoreStoredHoldingAliases(
+  text: string,
+  holdings: AnalysisResult["holdings"],
+) {
+  const namesByLetter = new Map(
+    holdings.map((holding, index) => [
+      String.fromCharCode(65 + index),
+      holding.name,
+    ]),
+  );
+  const expandRange = (startLetter: string, endLetter: string) => {
+    const start = startLetter.charCodeAt(0) - 65;
+    const end = endLetter.charCodeAt(0) - 65;
+    if (start < 0 || end < start || end >= holdings.length)
+      return `${startLetter}~${endLetter}`;
+    return holdings
+      .slice(start, end + 1)
+      .map((holding) => holding.name)
+      .join("·");
+  };
+  const escapeRegExp = (value: string) =>
+    value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  let restored = text;
+  holdings.forEach((holding, start) => {
+    restored = restored.replace(
+      new RegExp(
+        `${escapeRegExp(holding.name)}\\s*[~～-]\\s*(?:종목\\s*)?([A-J])`,
+        "g",
+      ),
+      (matched, endLetter: string) => {
+        const end = endLetter.charCodeAt(0) - 65;
+        return end >= start && end < holdings.length
+          ? holdings
+              .slice(start, end + 1)
+              .map((item) => item.name)
+              .join("·")
+          : matched;
+      },
+    );
+  });
+
+  const namesRestored = restored
+    .replace(
+      /종목\s*([A-J])\s*[~～-]\s*(?:종목\s*)?([A-J])/g,
+      (_, start: string, end: string) => expandRange(start, end),
+    )
+    .replace(
+      /종목\s*([A-J])|\b([A-J])\s*종목/g,
+      (matched, afterPrefix, beforeSuffix) =>
+        namesByLetter.get(afterPrefix ?? beforeSuffix) ?? matched,
+    )
+    .replace(
+      /([·,/]+\s*)([A-J])\b/g,
+      (matched, separator: string, letter: string) =>
+        `${separator}${namesByLetter.get(letter) ?? matched}`,
+    );
+
+  return holdings.reduce((sentence, holding) => {
+    const lastHangul = [...holding.name]
+      .reverse()
+      .find((character) => /[가-힣]/.test(character));
+    if (!lastHangul) return sentence;
+    const finalConsonant = (lastHangul.charCodeAt(0) - 0xac00) % 28;
+    const hasFinalConsonant = finalConsonant > 0;
+    const escapedName = escapeRegExp(holding.name);
+    const particles = [
+      ["은|는", hasFinalConsonant ? "은" : "는"],
+      ["이|가", hasFinalConsonant ? "이" : "가"],
+      ["을|를", hasFinalConsonant ? "을" : "를"],
+      ["과|와", hasFinalConsonant ? "과" : "와"],
+      ["으로|로", hasFinalConsonant && finalConsonant !== 8 ? "으로" : "로"],
+    ] as const;
+    return particles.reduce(
+      (result, [pattern, particle]) =>
+        result.replace(
+          new RegExp(`${escapedName}(?:${pattern})`, "g"),
+          `${holding.name}${particle}`,
+        ),
+      sentence,
+    );
+  }, namesRestored);
+}
+
 function useChartRevealOnce<T extends Element>(threshold = 0.2) {
   const ref = useRef<T>(null);
   const [isRevealed, setIsRevealed] = useState(false);
@@ -1959,6 +2043,11 @@ export function AnalysisResultView({
   const [dimmedScenarioSeries, setDimmedScenarioSeries] = useState<
     ScenarioSeries[]
   >([]);
+  const aiText = (text: string) =>
+    restoreStoredHoldingAliases(text, result.holdings).replaceAll(
+      "정보가 더 필요해요",
+      "현재 확인된 범위로 살펴봤어요",
+    );
   const toggleScenarioSeries = (series: ScenarioSeries) => {
     setDimmedScenarioSeries((current) =>
       current.includes(series)
@@ -2662,19 +2751,103 @@ export function AnalysisResultView({
       <GoalMomentumCard result={result} />
 
       {result.aiStrategy && (
-        <section className="via-background mt-5 overflow-hidden rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-emerald-500/10">
-          <div className="border-b border-violet-500/15 p-5 sm:p-6">
-            <p className="flex items-center gap-2 text-xs font-black tracking-[0.16em] text-violet-600 uppercase dark:text-violet-400">
-              <SparklesIcon className="size-4" />
-              AI Strategy
-            </p>
-            <h3 className="mt-2 text-xl font-black">
-              {result.aiStrategy.headline}
-            </h3>
-            <p className="text-muted-foreground mt-2 text-sm leading-6">
-              {result.aiStrategy.diagnosis}
-            </p>
+        <section className="via-background via-background mt-5 overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-violet-500/10">
+          <div
+            className={cn(
+              "grid border-b border-emerald-500/15",
+              result.aiStrategy.framework === "buffett_principles" &&
+                "md:grid-cols-[minmax(0,1fr)_280px]",
+            )}
+          >
+            <div className="p-5 sm:p-6 md:py-8">
+              <p className="flex items-center gap-2 text-xs font-black tracking-[0.16em] text-emerald-600 uppercase dark:text-emerald-400">
+                <SparklesIcon className="size-4" />
+                {result.aiStrategy.framework === "buffett_principles"
+                  ? "Buffett Principles AI"
+                  : "AI Strategy"}
+              </p>
+              {result.aiStrategy.framework === "buffett_principles" && (
+                <h3 className="mt-3 text-2xl font-black">
+                  버핏의 원칙으로 본다면
+                </h3>
+              )}
+              <p className="mt-3 text-lg font-black">
+                {aiText(result.aiStrategy.headline)}
+              </p>
+              <p className="text-muted-foreground mt-2 text-sm leading-6">
+                {aiText(result.aiStrategy.diagnosis)}
+              </p>
+              {result.aiStrategy.framework === "buffett_principles" && (
+                <p className="text-muted-foreground mt-4 text-[11px] leading-5">
+                  실제 워런 버핏이나 버크셔 해서웨이의 의견이 아닌, 공개적으로
+                  알려진 가치투자 원칙을 적용한 AI 시뮬레이션이에요.
+                </p>
+              )}
+            </div>
+            {result.aiStrategy.framework === "buffett_principles" && (
+              <div className="relative min-h-56 overflow-hidden border-t border-emerald-500/15 bg-[#07100f] md:min-h-full md:border-t-0 md:border-l">
+                <img
+                  src="/images/buffett-principles-advisor.webp"
+                  alt="가치투자 원칙을 설명하는 버핏풍 AI 캐릭터"
+                  className="absolute inset-0 size-full object-cover object-center"
+                  loading="lazy"
+                />
+                <div className="from-background/35 md:from-background/20 absolute inset-0 bg-gradient-to-r via-transparent to-transparent" />
+              </div>
+            )}
           </div>
+
+          {(result.aiStrategy.principleChecks?.length ?? 0) > 0 && (
+            <div className="border-b border-emerald-500/15 px-5 py-5 sm:px-6">
+              <div>
+                <h4 className="text-sm font-black">
+                  버핏이라면 먼저 물어볼 4가지
+                </h4>
+                <p className="text-muted-foreground mt-1 text-xs leading-5">
+                  어려운 숫자는 잠시 내려놓고, 좋은 투자인지 쉽게 확인해 봐요.
+                </p>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {result.aiStrategy.principleChecks?.map((item) => (
+                  <article
+                    key={item.principle}
+                    className="bg-background/70 rounded-xl border p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-black">
+                        {aiText(item.principle)}
+                      </p>
+                      <span
+                        className={cn(
+                          "rounded-full px-2.5 py-1 text-[10px] font-black",
+                          item.status === "좋아요"
+                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300"
+                            : item.status === "조금 더 살펴봐요"
+                              ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                              : "bg-slate-500/15 text-slate-600 dark:text-slate-300",
+                        )}
+                      >
+                        {item.status === ("정보가 더 필요해요" as string)
+                          ? "현재 확인 범위예요"
+                          : item.status}
+                      </span>
+                    </div>
+                    <p className="text-muted-foreground mt-2 text-xs leading-5">
+                      {aiText(item.observation)}
+                    </p>
+                    <div className="mt-3 rounded-lg bg-emerald-500/[0.08] p-3">
+                      <p className="text-[10px] font-black tracking-wide text-emerald-600 uppercase dark:text-emerald-400">
+                        다음에 사기 전에 생각해 볼 것
+                      </p>
+                      <p className="mt-1 text-sm leading-6">
+                        {aiText(item.question)}
+                      </p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
 
           {result.aiStrategy.scores?.length === 6 && (
             <AiStrategyRadar scores={result.aiStrategy.scores} />
@@ -2686,13 +2859,44 @@ export function AnalysisResultView({
 
           {(result.aiStrategy.holdingInsights?.length ?? 0) > 0 && (
             <div className="border-t border-violet-500/15 px-5 pt-5 sm:px-6 sm:pt-6">
-              <div>
-                <p className="text-sm font-black">종목별 매수 전략</p>
-                <p className="text-muted-foreground mt-1 text-xs leading-5">
-                  종목명과 실제 금액은 AI에 보내지 않고, 익명화한 비중·수익률·
-                  매수 위치만으로 분석했어요.
-                </p>
-              </div>
+              {result.aiStrategy.framework === "buffett_principles" ? (
+                <div className="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-[#07100f] sm:grid sm:min-h-52 sm:grid-cols-[220px_minmax(0,1fr)]">
+                  <div className="relative min-h-48 sm:min-h-full">
+                    <img
+                      src="/images/buffett-stock-advisor.webp"
+                      alt="종목별 투자 조언을 가리키는 버핏풍 AI 캐릭터"
+                      className="absolute inset-0 size-full object-cover object-left"
+                      loading="lazy"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#07100f] via-transparent to-transparent sm:bg-gradient-to-r sm:from-transparent sm:to-[#07100f]" />
+                  </div>
+                  <div className="flex flex-col justify-center p-5 sm:p-6">
+                    <p className="text-xs font-black tracking-[0.14em] text-emerald-400 uppercase">
+                      What would Buffett consider?
+                    </p>
+                    <h4 className="mt-2 text-xl font-black text-white">
+                      만약 버핏이었다면?
+                    </h4>
+                    <p className="mt-2 text-sm leading-6 text-slate-300">
+                      주식 가격만 보지 않고 회사의 일부를 산다고 생각해 볼
+                      거예요. 지금 숫자에서 알 수 있는 점과, 다음에 더 사기 전
+                      꼭 확인할 점을 종목마다 쉽게 설명해 드릴게요.
+                    </p>
+                    <p className="mt-3 text-[11px] leading-5 text-slate-500">
+                      종목명과 실제 금액은 AI에 보내지 않아요. 회사의 재무
+                      정보가 필요한 내용은 아는 척하지 않고 따로 알려드려요.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-sm font-black">종목별 매수 전략</p>
+                  <p className="text-muted-foreground mt-1 text-xs leading-5">
+                    종목명과 실제 금액은 AI에 보내지 않고, 익명화한
+                    비중·수익률·매수 위치만으로 분석했어요.
+                  </p>
+                </div>
+              )}
               <div className="mt-4 grid gap-3">
                 {result.aiStrategy.holdingInsights?.map((insight) => (
                   <article
@@ -2700,7 +2904,7 @@ export function AnalysisResultView({
                     className="bg-background/70 rounded-xl border p-4"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="font-black">{insight.name}</p>
+                      <p className="font-black">{aiText(insight.name)}</p>
                       <span
                         className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
                           insight.verdict === "좋은 위치"
@@ -2710,18 +2914,24 @@ export function AnalysisResultView({
                               : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
                         }`}
                       >
-                        {insight.verdict}
+                        {insight.verdict === "좋은 위치"
+                          ? "괜찮아 보여요"
+                          : insight.verdict === "주의 필요"
+                            ? "한번 점검해 봐요"
+                            : "조금 더 지켜봐요"}
                       </span>
                     </div>
                     <p className="text-muted-foreground mt-2 text-xs leading-5">
-                      {insight.evidence}
+                      {aiText(insight.evidence)}
                     </p>
                     <div className="mt-3 rounded-lg bg-violet-500/[0.08] p-3">
                       <p className="text-[10px] font-black tracking-wide text-violet-600 uppercase dark:text-violet-400">
-                        다음 매수 기준
+                        {result.aiStrategy?.framework === "buffett_principles"
+                          ? "버핏의 원칙으로 생각해 보면"
+                          : "다음 매수 기준"}
                       </p>
                       <p className="mt-1 text-sm leading-6">
-                        {insight.strategy}
+                        {aiText(insight.strategy)}
                       </p>
                     </div>
                   </article>
@@ -2739,9 +2949,9 @@ export function AnalysisResultView({
               <ul className="mt-3 space-y-3">
                 {(result.aiStrategy.strengths ?? []).map((item) => (
                   <li key={item.title}>
-                    <p className="text-sm font-bold">{item.title}</p>
+                    <p className="text-sm font-bold">{aiText(item.title)}</p>
                     <p className="text-muted-foreground mt-1 text-xs leading-5">
-                      {item.detail}
+                      {aiText(item.detail)}
                     </p>
                   </li>
                 ))}
@@ -2755,9 +2965,9 @@ export function AnalysisResultView({
               <ul className="mt-3 space-y-3">
                 {(result.aiStrategy.improvements ?? []).map((item) => (
                   <li key={item.title}>
-                    <p className="text-sm font-bold">{item.title}</p>
+                    <p className="text-sm font-bold">{aiText(item.title)}</p>
                     <p className="text-muted-foreground mt-1 text-xs leading-5">
-                      {item.detail}
+                      {aiText(item.detail)}
                     </p>
                   </li>
                 ))}
@@ -2771,7 +2981,7 @@ export function AnalysisResultView({
                 월 투자 전략
               </p>
               <p className="mt-2 text-sm leading-6">
-                {result.aiStrategy.monthlyPlan}
+                {aiText(result.aiStrategy.monthlyPlan)}
               </p>
             </div>
             <div className="bg-background/70 rounded-xl border p-4">
@@ -2779,7 +2989,7 @@ export function AnalysisResultView({
                 포트폴리오 점검
               </p>
               <p className="mt-2 text-sm leading-6">
-                {result.aiStrategy.diversification}
+                {aiText(result.aiStrategy.diversification)}
               </p>
             </div>
           </div>
@@ -2800,15 +3010,17 @@ export function AnalysisResultView({
                       우선순위 {action.priority}
                     </span>
                   </div>
-                  <p className="mt-2 text-sm font-bold">{action.title}</p>
+                  <p className="mt-2 text-sm font-bold">
+                    {aiText(action.title)}
+                  </p>
                   <p className="text-muted-foreground mt-1 text-xs leading-5">
-                    {action.detail}
+                    {aiText(action.detail)}
                   </p>
                 </li>
               ))}
             </ol>
             <p className="text-muted-foreground mt-4 text-[11px] leading-5">
-              {result.aiStrategy.disclaimer}
+              {aiText(result.aiStrategy.disclaimer)}
             </p>
           </div>
         </section>

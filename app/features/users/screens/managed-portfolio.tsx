@@ -72,6 +72,21 @@ const transactionSchema = z.object({
   memo: z.string().trim().max(300),
 });
 
+const MAX_MANAGED_HOLDINGS = 10;
+const managedHoldingLimitMessage =
+  "현재 포트폴리오는 최대 10개 종목까지 보유할 수 있어요. 기존 종목을 전량 매도하거나 관련 거래를 삭제한 후 새 종목을 추가해 주세요.";
+
+function assertManagedHoldingLimit(
+  holdingCount: number,
+  previousHoldingCount = MAX_MANAGED_HOLDINGS,
+) {
+  if (
+    holdingCount > MAX_MANAGED_HOLDINGS &&
+    holdingCount > previousHoldingCount
+  )
+    throw new Error(managedHoldingLimitMessage);
+}
+
 const pendingTransactionUpdateSchema = transactionSchema
   .omit({ stockId: true })
   .extend({
@@ -246,21 +261,26 @@ export async function action({ request }: Route.ActionArgs) {
           { status: 400 },
         );
 
+      const managed = await getManagedPortfolio(user.id);
+      const currentHoldings = managed
+        ? calculateManagedHoldings(managed.transactions)
+        : [];
+      const currentHolding = currentHoldings.find(
+        (holding) => holding.stockId === stock.stock_id,
+      );
+
+      if (parsed.type === "BUY" && !currentHolding)
+        assertManagedHoldingLimit(currentHoldings.length + 1);
+
+      if (parsed.type === "SELL") {
+        if (!currentHolding || parsed.quantity > currentHolding.quantity + 1e-8)
+          throw new Error("매도 수량이 현재 보유 수량보다 많아요.");
+      }
+
       const historicalRate =
         stock.currency === "USD"
           ? await getHistoricalUsdKrwRate(parsed.tradedOn)
           : { rate: 1, basedOn: parsed.tradedOn };
-
-      if (parsed.type === "SELL") {
-        const managed = await getManagedPortfolio(user.id);
-        const currentHolding = managed
-          ? calculateManagedHoldings(managed.transactions).find(
-              (holding) => holding.stockId === stock.stock_id,
-            )
-          : null;
-        if (!currentHolding || parsed.quantity > currentHolding.quantity + 1e-8)
-          throw new Error("매도 수량이 현재 보유 수량보다 많아요.");
-      }
 
       await addPortfolioTransaction({
         userId: user.id,
@@ -286,10 +306,17 @@ export async function action({ request }: Route.ActionArgs) {
         throw new Error("삭제할 거래를 확인하지 못했어요.");
       const managed = await getManagedPortfolio(user.id);
       if (!managed) throw new Error("포트폴리오를 찾지 못했어요.");
-      calculateManagedHoldings(
+      const currentHoldingCount = calculateManagedHoldings(
+        managed.transactions,
+      ).length;
+      const remainingHoldings = calculateManagedHoldings(
         managed.transactions.filter(
           (transaction) => transaction.id !== transactionId,
         ),
+      );
+      assertManagedHoldingLimit(
+        remainingHoldings.length,
+        currentHoldingCount,
       );
       await deletePortfolioTransaction(user.id, transactionId);
       return data({
@@ -324,6 +351,16 @@ export async function action({ request }: Route.ActionArgs) {
         );
       if (stockRows.length !== stockIds.length)
         throw new Error("가져올 종목 정보를 다시 확인해 주세요.");
+
+      const managed = await getManagedPortfolio(user.id);
+      const currentHoldings = managed
+        ? calculateManagedHoldings(managed.transactions)
+        : [];
+      const currentStockIds = new Set(
+        currentHoldings.map((holding) => holding.stockId),
+      );
+      stockIds.forEach((stockId) => currentStockIds.add(stockId));
+      assertManagedHoldingLimit(currentStockIds.size, currentHoldings.length);
 
       const transactions = await Promise.all(
         parsed.map(async (holding) => {
@@ -399,7 +436,11 @@ export async function action({ request }: Route.ActionArgs) {
             : transaction;
         })
         .sort((a, b) => a.tradedOn.localeCompare(b.tradedOn) || a.id - b.id);
-      calculateManagedHoldings(transactions);
+      const updatedHoldings = calculateManagedHoldings(transactions);
+      const currentHoldingCount = calculateManagedHoldings(
+        managed.transactions,
+      ).length;
+      assertManagedHoldingLimit(updatedHoldings.length, currentHoldingCount);
       await updatePortfolioTransactions(user.id, preparedUpdates);
 
       return data({
@@ -931,7 +972,7 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
               <div>
                 <h2 className="text-xl font-black">현재 보유 현황</h2>
                 <p className="text-muted-foreground mt-1 text-xs">
-                  매매일지 기준 {holdings.length}개 종목
+                  매매일지 기준 {holdings.length}/{MAX_MANAGED_HOLDINGS}개 종목
                 </p>
               </div>
               <BookOpenIcon className="size-5 text-violet-500" />
