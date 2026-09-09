@@ -4,6 +4,7 @@ import {
   ArrowRightIcon,
   BarChart3Icon,
   CheckIcon,
+  ChevronRightIcon,
   Clock3Icon,
   LoaderCircleIcon,
   LockKeyholeIcon,
@@ -26,6 +27,14 @@ import {
 
 import { Button } from "~/core/components/ui/button";
 import { Checkbox } from "~/core/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "~/core/components/ui/dialog";
 import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
 import i18next from "~/core/lib/i18next.server";
@@ -110,6 +119,9 @@ export async function loader({ request }: Route.LoaderArgs) {
       holding.valueKrw,
     ]) ?? [],
   );
+  const previousHoldingsByTicker = new Map(
+    previous?.result.holdings.map((holding) => [holding.ticker, holding]) ?? [],
+  );
   const holdingChanges =
     latest?.result.holdings
       .filter((holding) => previousHoldingValues.has(holding.ticker))
@@ -123,6 +135,55 @@ export async function loader({ request }: Route.LoaderArgs) {
     latest && previous
       ? Math.round(latest.currentValue - previous.currentValue)
       : null;
+  const latestTickers = new Set(
+    latest?.result.holdings.map((holding) => holding.ticker) ?? [],
+  );
+  const portfolioChanges = latest
+    ? [
+        ...latest.result.holdings.map((holding) => {
+          const previousHolding = previousHoldingsByTicker.get(holding.ticker);
+          const previousValue = previousHolding?.valueKrw;
+          return {
+            ticker: holding.ticker,
+            name: holding.name,
+            currentValue: holding.valueKrw,
+            previousValue: previousValue ?? null,
+            change:
+              previousValue === undefined
+                ? null
+                : holding.valueKrw - previousValue,
+            weight:
+              latest.currentValue > 0
+                ? (holding.valueKrw / latest.currentValue) * 100
+                : 0,
+            returnRateChange:
+              previousHolding === undefined
+                ? null
+                : holding.returnRate - previousHolding.returnRate,
+            status:
+              previousValue === undefined
+                ? ("added" as const)
+                : ("held" as const),
+          };
+        }),
+        ...(previous?.result.holdings
+          .filter((holding) => !latestTickers.has(holding.ticker))
+          .map((holding) => ({
+            ticker: holding.ticker,
+            name: holding.name,
+            currentValue: 0,
+            previousValue: holding.valueKrw,
+            change: -holding.valueKrw,
+            weight: 0,
+            returnRateChange: null,
+            status: "removed" as const,
+          })) ?? []),
+      ].sort(
+        (a, b) =>
+          b.weight - a.weight ||
+          (b.previousValue ?? 0) - (a.previousValue ?? 0),
+      )
+    : [];
   const leadingHolding = holdingChanges.length
     ? [...holdingChanges].sort((a, b) =>
         dailyChange !== null && dailyChange < 0
@@ -178,6 +239,8 @@ export async function loader({ request }: Route.LoaderArgs) {
             topHoldingName: topHolding?.name ?? null,
             topHoldingWeight,
             leadingHolding,
+            comparisonDate: previous?.savedOn ?? null,
+            portfolioChanges,
             trend: history.slice(-7).map((item) => ({
               savedOn: item.savedOn,
               currentValue: item.currentValue,
@@ -422,6 +485,17 @@ type MoneyInsight = {
   topHoldingName: string | null;
   topHoldingWeight: number | null;
   leadingHolding: { name: string; change: number } | null;
+  comparisonDate: string | null;
+  portfolioChanges: Array<{
+    ticker: string;
+    name: string;
+    currentValue: number;
+    previousValue: number | null;
+    change: number | null;
+    weight: number;
+    returnRateChange: number | null;
+    status: "added" | "held" | "removed";
+  }>;
   trend: Array<{ savedOn: string; currentValue: number }>;
 };
 
@@ -843,61 +917,199 @@ function MyEokkaSummary({ insight }: { insight: MoneyInsight }) {
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <section className="bg-muted/25 rounded-2xl border p-5 sm:p-6">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-muted-foreground flex items-center gap-2 text-xs font-bold tracking-[0.12em] uppercase">
-                <TrophyIcon className="size-4 text-amber-500" /> Portfolio check
-              </p>
-              <h3 className="mt-2 text-lg font-black">
-                오늘의 포트폴리오 한눈에
-              </h3>
-            </div>
-            <PieChartIcon className="text-muted-foreground size-6" />
-          </div>
-          <div className="mt-5 space-y-3 text-sm">
-            <p>
-              <strong>
-                {insight.holdingCount}개 종목 중{" "}
-                {insight.profitableHoldingCount}개
-              </strong>
-              가 수익 구간이에요.
-            </p>
-            {insight.topHoldingName && insight.topHoldingWeight !== null && (
-              <p className="text-muted-foreground leading-6">
-                <strong className="text-foreground">
-                  {insight.topHoldingName}
-                </strong>
-                {koreanParticle(insight.topHoldingName, "이", "가")} 현재 자산의{" "}
-                <strong className="text-foreground">
-                  {insight.topHoldingWeight.toFixed(1)}%
-                </strong>
-                를 차지해요.
-              </p>
-            )}
-            {insight.leadingHolding && (
-              <p className="text-muted-foreground leading-6">
-                최근 변화에 가장 크게 영향을 준 종목은{" "}
-                <strong className="text-foreground">
-                  {insight.leadingHolding.name}
-                </strong>
-                {koreanParticle(insight.leadingHolding.name, "이에요", "예요")}
-                <span
-                  className={
-                    insight.leadingHolding.change >= 0
-                      ? "text-red-500"
-                      : "text-blue-500"
-                  }
-                >
-                  {" "}
-                  ({insight.leadingHolding.change >= 0 ? "+" : "-"}
-                  {formatKoreanMoney(Math.abs(insight.leadingHolding.change))})
+        <Dialog>
+          <DialogTrigger asChild>
+            <button
+              type="button"
+              className="bg-muted/25 group w-full cursor-pointer rounded-2xl border p-5 text-left transition-all hover:-translate-y-0.5 hover:border-emerald-500/35 hover:bg-emerald-500/[0.05] hover:shadow-lg focus-visible:ring-2 focus-visible:ring-emerald-500/50 focus-visible:outline-none sm:p-6"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-muted-foreground flex items-center gap-2 text-xs font-bold tracking-[0.12em] uppercase">
+                    <TrophyIcon className="size-4 text-amber-500" /> Portfolio
+                    check
+                  </p>
+                  <h3 className="mt-2 text-lg font-black">
+                    오늘의 포트폴리오 한눈에
+                  </h3>
+                </div>
+                <span className="bg-background/70 text-muted-foreground flex size-9 items-center justify-center rounded-xl border transition-all group-hover:border-emerald-500/30 group-hover:text-emerald-500">
+                  <ChevronRightIcon className="size-5 transition-transform group-hover:translate-x-0.5" />
                 </span>
-                .
+              </div>
+              <div className="mt-5 space-y-3 text-sm">
+                <p>
+                  <strong>
+                    {insight.holdingCount}개 종목 중{" "}
+                    {insight.profitableHoldingCount}개
+                  </strong>
+                  가 수익 구간이에요.
+                </p>
+                {insight.topHoldingName &&
+                  insight.topHoldingWeight !== null && (
+                    <p className="text-muted-foreground leading-6">
+                      <strong className="text-foreground">
+                        {insight.topHoldingName}
+                      </strong>
+                      {koreanParticle(insight.topHoldingName, "이", "가")} 현재
+                      자산의{" "}
+                      <strong className="text-foreground">
+                        {insight.topHoldingWeight.toFixed(1)}%
+                      </strong>
+                      를 차지해요.
+                    </p>
+                  )}
+                {insight.leadingHolding && (
+                  <p className="text-muted-foreground leading-6">
+                    최근 변화에 가장 크게 영향을 준 종목은{" "}
+                    <strong className="text-foreground">
+                      {insight.leadingHolding.name}
+                    </strong>
+                    {koreanParticle(
+                      insight.leadingHolding.name,
+                      "이에요",
+                      "예요",
+                    )}
+                    <span
+                      className={
+                        insight.leadingHolding.change >= 0
+                          ? "text-red-500"
+                          : "text-blue-500"
+                      }
+                    >
+                      {" "}
+                      ({insight.leadingHolding.change >= 0 ? "+" : "-"}
+                      {formatKoreanMoney(
+                        Math.abs(insight.leadingHolding.change),
+                      )}
+                      )
+                    </span>
+                    .
+                  </p>
+                )}
+              </div>
+              <p className="mt-4 flex items-center justify-end gap-1 text-xs font-bold text-emerald-500 opacity-80">
+                변경 사항 자세히 보기 <ChevronRightIcon className="size-3.5" />
               </p>
-            )}
-          </div>
-        </section>
+            </button>
+          </DialogTrigger>
+          <DialogContent className="max-h-[85vh] overflow-y-auto rounded-3xl p-0 sm:max-w-2xl">
+            <DialogHeader className="border-b bg-gradient-to-br from-emerald-500/10 via-transparent to-violet-500/10 p-6 pr-14 text-left">
+              <p className="flex items-center gap-2 text-xs font-black tracking-[0.14em] text-emerald-500 uppercase">
+                <PieChartIcon className="size-4" /> Portfolio changes
+              </p>
+              <DialogTitle className="mt-1 text-2xl font-black">
+                포트폴리오 변경 사항
+              </DialogTitle>
+              <DialogDescription className="leading-6">
+                {insight.comparisonDate
+                  ? `${insight.comparisonDate.replaceAll("-", ".")} 기록과 ${insight.marketAsOf.replaceAll("-", ".")} 종가 기록을 비교했어요.`
+                  : `${insight.marketAsOf.replaceAll("-", ".")} 첫 기록의 현재 보유 현황이에요.`}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3 p-5 sm:p-6">
+              {!insight.comparisonDate && (
+                <div className="bg-muted/30 text-muted-foreground rounded-2xl border border-dashed p-4 text-sm leading-6">
+                  아직 비교할 이전 기록이 없어요. 다음 종가 기록이 쌓이면 종목별
+                  평가금액 변화를 보여드릴게요.
+                </div>
+              )}
+              {insight.portfolioChanges.map((holding) => {
+                const isGain = (holding.change ?? 0) > 0;
+                const isLoss = (holding.change ?? 0) < 0;
+                return (
+                  <article
+                    key={holding.ticker}
+                    className="bg-muted/20 rounded-2xl border p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="truncate font-black">
+                            {holding.name}
+                          </h4>
+                          {holding.status !== "held" && (
+                            <span
+                              className={cn(
+                                "rounded-full px-2 py-0.5 text-[10px] font-black",
+                                holding.status === "added"
+                                  ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400"
+                                  : "bg-blue-500/12 text-blue-600 dark:text-blue-400",
+                              )}
+                            >
+                              {holding.status === "added"
+                                ? "새로 추가"
+                                : "보유 종료"}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-muted-foreground mt-1 text-xs font-bold">
+                          {holding.ticker}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="font-black tabular-nums">
+                          {formatKoreanMoney(holding.currentValue)}
+                        </p>
+                        <p className="text-muted-foreground mt-1 text-xs">
+                          현재 비중 {holding.weight.toFixed(1)}%
+                        </p>
+                      </div>
+                    </div>
+
+                    {holding.change !== null && (
+                      <div className="mt-4 space-y-2 border-t pt-3 text-sm">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground">
+                            이전 {formatKoreanMoney(holding.previousValue ?? 0)}
+                          </span>
+                          <strong
+                            className={cn(
+                              "tabular-nums",
+                              isGain
+                                ? "text-red-500"
+                                : isLoss
+                                  ? "text-blue-500"
+                                  : "text-muted-foreground",
+                            )}
+                          >
+                            {isGain ? "+" : isLoss ? "-" : ""}
+                            {formatKoreanMoney(Math.abs(holding.change))}
+                          </strong>
+                        </div>
+                        {holding.returnRateChange !== null && (
+                          <div className="flex items-center justify-between gap-3 text-xs">
+                            <span className="text-muted-foreground">
+                              수익률 변화
+                            </span>
+                            <strong
+                              className={cn(
+                                "tabular-nums",
+                                holding.returnRateChange > 0
+                                  ? "text-red-500"
+                                  : holding.returnRateChange < 0
+                                    ? "text-blue-500"
+                                    : "text-muted-foreground",
+                              )}
+                            >
+                              {holding.returnRateChange > 0
+                                ? "+"
+                                : holding.returnRateChange < 0
+                                  ? "-"
+                                  : ""}
+                              {Math.abs(holding.returnRateChange).toFixed(2)}%p
+                            </strong>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <section className="bg-muted/25 rounded-2xl border p-5 sm:p-6">
           <div className="flex items-center justify-between">
@@ -2094,26 +2306,31 @@ export default function Home() {
                 result={analysis}
                 showAuthCta={!isAuthenticated}
                 showContributionDetails
-                onStartManagedAnalysis={() =>
-                  navigate("/dashboard/portfolio?from=quick", {
-                    state: {
-                      quickPortfolioDraft: {
-                        holdings: holdings.flatMap((holding) =>
-                          holding.selectedStock &&
-                          Number(holding.averagePrice) > 0 &&
-                          Number(holding.quantity) > 0
-                            ? [
-                                {
-                                  stock: holding.selectedStock,
-                                  averagePrice: Number(holding.averagePrice),
-                                  quantity: Number(holding.quantity),
-                                },
-                              ]
-                            : [],
-                        ),
-                      },
-                    },
-                  })
+                onStartManagedAnalysis={
+                  managedAnalysisActive
+                    ? undefined
+                    : () =>
+                        navigate("/dashboard/portfolio?from=quick", {
+                          state: {
+                            quickPortfolioDraft: {
+                              holdings: holdings.flatMap((holding) =>
+                                holding.selectedStock &&
+                                Number(holding.averagePrice) > 0 &&
+                                Number(holding.quantity) > 0
+                                  ? [
+                                      {
+                                        stock: holding.selectedStock,
+                                        averagePrice: Number(
+                                          holding.averagePrice,
+                                        ),
+                                        quantity: Number(holding.quantity),
+                                      },
+                                    ]
+                                  : [],
+                              ),
+                            },
+                          },
+                        })
                 }
               />
             </div>
