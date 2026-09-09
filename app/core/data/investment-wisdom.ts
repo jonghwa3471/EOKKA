@@ -1,6 +1,6 @@
 type QuotePair = readonly [english: string, korean: string];
 
-const investors: ReadonlyArray<{
+export const INVESTMENT_MASTERS: ReadonlyArray<{
   author: string;
   image: string;
   quotes: readonly QuotePair[];
@@ -437,7 +437,7 @@ const investors: ReadonlyArray<{
   },
 ];
 
-export const INVESTMENT_WISDOM = investors.flatMap((investor) =>
+export const INVESTMENT_WISDOM = INVESTMENT_MASTERS.flatMap((investor) =>
   investor.quotes.map(([english, korean]) => ({
     english,
     korean,

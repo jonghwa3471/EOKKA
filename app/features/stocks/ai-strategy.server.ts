@@ -6,20 +6,21 @@ import { z } from "zod";
 
 const aiStrategySchema = z.object({
   framework: z.literal("investment_committee"),
-  headline: z.string().min(1).max(80),
-  diagnosis: z.string().min(1).max(700),
+  headline: z.string().min(1).max(200),
+  diagnosis: z.string().min(1).max(900),
   committeeDiscussion: z.object({
-    warrenBuffett: z.string().min(1).max(240),
-    charlieMunger: z.string().min(1).max(240),
-    benjaminGraham: z.string().min(1).max(240),
-    peterLynch: z.string().min(1).max(240),
-    philipFisher: z.string().min(1).max(240),
-    johnTempleton: z.string().min(1).max(240),
-    johnBogle: z.string().min(1).max(240),
-    howardMarks: z.string().min(1).max(240),
-    rayDalio: z.string().min(1).max(240),
-    joelGreenblatt: z.string().min(1).max(240),
+    warrenBuffett: z.string().min(1).max(320),
+    charlieMunger: z.string().min(1).max(320),
+    benjaminGraham: z.string().min(1).max(320),
+    peterLynch: z.string().min(1).max(320),
+    philipFisher: z.string().min(1).max(320),
+    johnTempleton: z.string().min(1).max(320),
+    johnBogle: z.string().min(1).max(320),
+    howardMarks: z.string().min(1).max(320),
+    rayDalio: z.string().min(1).max(320),
+    joelGreenblatt: z.string().min(1).max(320),
   }),
+  committeeConclusion: z.string().min(1).max(900),
   strengths: z
     .array(
       z.object({
@@ -40,13 +41,6 @@ const aiStrategySchema = z.object({
     .array(
       z.object({
         holdingAlias: z.string().min(1).max(20),
-        verdict: z.enum(["좋은 위치", "중립", "주의 필요"]),
-        consensus: z.enum(["긍정", "중립", "신중"]),
-        votes: z.object({
-          positive: z.number().int().min(0).max(10),
-          neutral: z.number().int().min(0).max(10),
-          cautious: z.number().int().min(0).max(10),
-        }),
         evidence: z.string().min(1).max(300),
         strategy: z.string().min(1).max(500),
       }),
@@ -83,40 +77,108 @@ function period(months: number | null) {
 const clampScore = (score: number) =>
   Math.round(Math.max(0, Math.min(100, score)));
 
-function normalizeCommitteeVotes(votes: {
-  positive: number;
-  neutral: number;
-  cautious: number;
-}) {
-  const entries = [
-    ["positive", votes.positive],
-    ["neutral", votes.neutral],
-    ["cautious", votes.cautious],
-  ] as const;
-  const safe = entries.map(([key, value]) => ({
-    key,
-    value: Math.max(0, Math.round(value)),
-  }));
-  const total = safe.reduce((sum, item) => sum + item.value, 0);
-  if (total === 0) return { positive: 3, neutral: 4, cautious: 3 };
+type CommitteeVote = "positive" | "neutral" | "cautious";
 
-  const scaled = safe.map((item) => ({
-    ...item,
-    exact: (item.value / total) * 10,
-    value: Math.floor((item.value / total) * 10),
-  }));
-  let remaining = 10 - scaled.reduce((sum, item) => sum + item.value, 0);
-  scaled
-    .sort((a, b) => b.exact - b.value - (a.exact - a.value))
-    .forEach((item) => {
-      if (remaining <= 0) return;
-      item.value += 1;
-      remaining -= 1;
-    });
+export interface HoldingConsensusInput {
+  portfolioWeightPercent: number;
+  returnRatePercent: number;
+  longTermPurchasePositionPercent: number | null;
+  recentPurchasePositionPercent: number | null;
+  financialProfile: {
+    revenueGrowthPercent: number | null;
+    operatingProfitGrowthPercent: number | null;
+    netIncomeGrowthPercent: number | null;
+    operatingMarginPercent: number | null;
+    debtRatioPercent: number | null;
+    returnOnEquityPercent: number | null;
+  } | null;
+}
 
-  return Object.fromEntries(
-    scaled.map(({ key, value }) => [key, value]),
-  ) as typeof votes;
+function thresholdVote(
+  value: number | null | undefined,
+  positive: (value: number) => boolean,
+  cautious: (value: number) => boolean,
+): CommitteeVote {
+  if (value == null || !Number.isFinite(value)) return "neutral";
+  if (positive(value)) return "positive";
+  if (cautious(value)) return "cautious";
+  return "neutral";
+}
+
+export function calculateHoldingConsensus(input: HoldingConsensusInput) {
+  const financial = input.financialProfile;
+  const ballots: CommitteeVote[] = [
+    thresholdVote(
+      input.longTermPurchasePositionPercent,
+      (value) => value <= 40,
+      (value) => value >= 75,
+    ),
+    thresholdVote(
+      input.recentPurchasePositionPercent,
+      (value) => value <= 35,
+      (value) => value >= 75,
+    ),
+    thresholdVote(
+      input.returnRatePercent,
+      (value) => value >= 10,
+      (value) => value <= -10,
+    ),
+    thresholdVote(
+      input.portfolioWeightPercent,
+      (value) => value >= 5 && value <= 30,
+      (value) => value >= 35,
+    ),
+    thresholdVote(
+      financial?.revenueGrowthPercent,
+      (value) => value >= 5,
+      (value) => value < 0,
+    ),
+    thresholdVote(
+      financial?.operatingProfitGrowthPercent,
+      (value) => value >= 5,
+      (value) => value < 0,
+    ),
+    thresholdVote(
+      financial?.netIncomeGrowthPercent,
+      (value) => value >= 5,
+      (value) => value < 0,
+    ),
+    thresholdVote(
+      financial?.operatingMarginPercent,
+      (value) => value >= 10,
+      (value) => value < 0,
+    ),
+    thresholdVote(
+      financial?.debtRatioPercent,
+      (value) => value <= 100,
+      (value) => value >= 200,
+    ),
+    thresholdVote(
+      financial?.returnOnEquityPercent,
+      (value) => value >= 10,
+      (value) => value < 0,
+    ),
+  ];
+  const votes = ballots.reduce(
+    (counts, ballot) => ({ ...counts, [ballot]: counts[ballot] + 1 }),
+    { positive: 0, neutral: 0, cautious: 0 },
+  );
+  const consensus =
+    votes.positive > votes.neutral && votes.positive > votes.cautious
+      ? ("긍정" as const)
+      : votes.cautious > votes.positive && votes.cautious > votes.neutral
+        ? ("신중" as const)
+        : ("중립" as const);
+  return {
+    votes,
+    consensus,
+    verdict:
+      consensus === "긍정"
+        ? ("좋은 위치" as const)
+        : consensus === "신중"
+          ? ("주의 필요" as const)
+          : ("중립" as const),
+  };
 }
 
 function purchasePositionBand(position: number | null) {
@@ -126,6 +188,26 @@ function purchasePositionBand(position: number | null) {
   if (position <= 60) return "중간 가격 구간";
   if (position <= 80) return "비교적 높은 구간";
   return "높은 가격 구간";
+}
+
+function inferBroadBusinessCategory(
+  holding: AnalysisResult["holdings"][number],
+) {
+  const value = `${holding.ticker} ${holding.name}`.toUpperCase();
+  const categories = [
+    [
+      "기술·디지털",
+      /AAPL|MSFT|NVDA|GOOGL|GOOG|META|ORCL|AMD|SOFTWARE|SEMICONDUCTOR|TECH|전자|반도체|소프트웨어|인터넷|IT/,
+    ],
+    ["금융", /BANK|FINANC|INSURANCE|은행|금융|증권|보험|카드/],
+    ["헬스케어", /HEALTH|PHARMA|BIO|제약|바이오|헬스/],
+    ["소비재·유통", /RETAIL|CONSUMER|FOOD|BEVERAGE|유통|식품|음료|화장품/],
+    ["산업재·자동차", /INDUSTRIAL|AUTO|MOTOR|MACHIN|자동차|기계|조선|건설/],
+    ["에너지·소재", /ENERGY|OIL|GAS|CHEMICAL|STEEL|에너지|정유|화학|철강|소재/],
+    ["통신·미디어", /TELECOM|MEDIA|ENTERTAINMENT|통신|미디어|엔터/],
+    ["부동산", /REIT|REAL ESTATE|리츠|부동산/],
+  ] as const;
+  return categories.find(([, pattern]) => pattern.test(value))?.[0] ?? null;
 }
 
 function buildStrategyScores(result: AnalysisResult): AiStrategy["scores"] {
@@ -200,6 +282,116 @@ function buildStrategyScores(result: AnalysisResult): AiStrategy["scores"] {
   ];
 }
 
+function buildCommitteeEvaluation(result: AnalysisResult) {
+  type CommitteeScores = NonNullable<AiStrategy["committeeScores"]>;
+  const strategyScores = buildStrategyScores(result);
+  const score = (key: AiStrategy["scores"][number]["key"]) =>
+    strategyScores.find((item) => item.key === key)?.score ?? 50;
+  const weightedPosition = (period: "tenYearPosition" | "oneYearPosition") => {
+    const positions = result.holdings
+      .map((holding) => ({
+        value: holding.purchasePosition?.[period] ?? null,
+        weight: Math.max(0, holding.valueKrw),
+      }))
+      .filter(
+        (item): item is { value: number; weight: number } =>
+          item.value !== null,
+      );
+    const totalWeight = positions.reduce((sum, item) => sum + item.weight, 0);
+    return totalWeight > 0
+      ? positions.reduce((sum, item) => sum + item.value * item.weight, 0) /
+          totalWeight
+      : 50;
+  };
+  const averageLongTermPosition = weightedPosition("tenYearPosition");
+  const averageRecentPosition = weightedPosition("oneYearPosition");
+  const longTermPriceDiscipline = clampScore(100 - averageLongTermPosition);
+  const recentPriceDiscipline = clampScore(100 - averageRecentPosition);
+  const categoryWeights = new Map<string, number>();
+  result.holdings.forEach((holding) => {
+    const category = inferBroadBusinessCategory(holding);
+    if (!category || result.currentValue <= 0) return;
+    categoryWeights.set(
+      category,
+      (categoryWeights.get(category) ?? 0) +
+        (holding.valueKrw / result.currentValue) * 100,
+    );
+  });
+  const largestCategoryWeight = Math.max(0, ...categoryWeights.values());
+  const categoryBalance =
+    categoryWeights.size === 0
+      ? 50
+      : clampScore(100 - Math.max(0, largestCategoryWeight - 30) * 1.7);
+  const average = (...values: number[]) =>
+    values.reduce((sum, value) => sum + value, 0) / values.length;
+  const toTen = (value: number) =>
+    Number((Math.max(0, Math.min(100, value)) / 10).toFixed(1));
+
+  const scores: CommitteeScores = {
+    warrenBuffett: toTen(
+      average(
+        score("profitability"),
+        score("growthPotential"),
+        score("stability"),
+      ),
+    ),
+    charlieMunger: toTen(average(score("stability"), score("diversification"))),
+    benjaminGraham: toTen(longTermPriceDiscipline),
+    peterLynch: toTen(
+      average(score("profitability"), score("growthPotential")),
+    ),
+    philipFisher: toTen(score("growthPotential")),
+    johnTempleton: toTen(
+      average(longTermPriceDiscipline, recentPriceDiscipline),
+    ),
+    johnBogle: toTen(score("diversification")),
+    howardMarks: toTen(average(score("stability"), score("diversification"))),
+    rayDalio: toTen(average(categoryBalance, score("diversification"))),
+    joelGreenblatt: toTen(
+      average(score("profitability"), longTermPriceDiscipline),
+    ),
+  };
+  const percent = (value: number) => `${value.toFixed(1)}%`;
+  const reasons: Record<keyof CommitteeScores, string[]> = {
+    warrenBuffett: [
+      `수익 상태 점수 ${score("profitability")}점`,
+      `성장 기대 점수 ${score("growthPotential")}점`,
+      `변동 안정성 점수 ${score("stability")}점`,
+    ],
+    charlieMunger: [
+      `변동 안정성 점수 ${score("stability")}점`,
+      `분산 수준 점수 ${score("diversification")}점`,
+    ],
+    benjaminGraham: [
+      `평가금액 비중을 반영한 장기 평균 매수 위치 ${percent(averageLongTermPosition)}`,
+    ],
+    peterLynch: [
+      `수익 상태 점수 ${score("profitability")}점`,
+      `성장 기대 점수 ${score("growthPotential")}점`,
+    ],
+    philipFisher: [`성장 기대 점수 ${score("growthPotential")}점`],
+    johnTempleton: [
+      `평가금액 비중을 반영한 장기 평균 매수 위치 ${percent(averageLongTermPosition)}`,
+      `평가금액 비중을 반영한 최근 평균 매수 위치 ${percent(averageRecentPosition)}`,
+    ],
+    johnBogle: [`분산 수준 점수 ${score("diversification")}점`],
+    howardMarks: [
+      `변동 안정성 점수 ${score("stability")}점`,
+      `분산 수준 점수 ${score("diversification")}점`,
+    ],
+    rayDalio: [
+      `가장 큰 사업군 비중 ${percent(largestCategoryWeight)}`,
+      `분산 수준 점수 ${score("diversification")}점`,
+    ],
+    joelGreenblatt: [
+      `수익 상태 점수 ${score("profitability")}점`,
+      `평가금액 비중을 반영한 장기 평균 매수 위치 ${percent(averageLongTermPosition)}`,
+    ],
+  };
+
+  return { scores, reasons };
+}
+
 export async function generateAiStrategy(
   result: AnalysisResult,
 ): Promise<AiStrategy | null> {
@@ -247,7 +439,7 @@ export async function generateAiStrategy(
         namesByLetter.get(afterPrefix ?? beforeSuffix ?? standalone) ?? matched,
     );
 
-    return aliases.reduce((restored, { name }) => {
+    const particlesRestored = aliases.reduce((restored, { name }) => {
       const lastHangul = [...name]
         .reverse()
         .find((character) => /[가-힣]/.test(character));
@@ -271,16 +463,66 @@ export async function generateAiStrategy(
         restored,
       );
     }, namesRestored);
+
+    return particlesRestored
+      .replace(
+        /오래 들고 갈 생각이라면 종목별로 이익이 이어질지보다,? 한 종목이 흔들려도 전체가 버틸 수 있는 비중인지 먼저 보겠습니다\.?/g,
+        "오래 보유하려면 기업의 이익이 꾸준히 이어질지와, 한 종목이 흔들려도 전체가 버틸 수 있는 비중인지 함께 봐야 해요.",
+      )
+      .replace(/현재 확인 범위(?:예요|입니다)[.!]?\s*/g, "")
+      .replace(
+        /tinyHoldingCountBelowFivePercent/g,
+        "비중이 5%보다 작은 종목 수",
+      )
+      .replace(/effectiveHoldingCount/g, "실제 비중을 반영한 종목 수")
+      .replace(/holdingCount/g, "보유 종목 수")
+      .replace(/largestHoldingWeightPercent/g, "가장 큰 종목의 비중")
+      .replace(/topThreeWeightPercent/g, "상위 3개 종목의 합산 비중")
+      .replace(/averageValuePerHoldingWon/g, "종목당 평균 평가금액")
+      .replace(/businessCategoryWeights/g, "사업군별 비중")
+      .replace(/uncategorizedHoldingCount/g, "사업군을 구분하지 못한 종목 수")
+      .replace(/calculatedConsensus/g, "계산된 종목 평가")
+      .replace(/financialProfile/g, "재무정보")
+      .replace(/\s{2,}/g, " ")
+      .trim();
   };
   const holdings = result.holdings.map((holding, index) => {
     const longTermPosition = holding.purchasePosition?.tenYearPosition ?? null;
     const recentPosition = holding.purchasePosition?.oneYearPosition ?? null;
+    const portfolioWeightPercent =
+      result.currentValue > 0
+        ? Number(((holding.valueKrw / result.currentValue) * 100).toFixed(1))
+        : 0;
+    const financialProfile = holding.fundamentals
+      ? {
+          source: holding.fundamentals.source,
+          asOf: holding.fundamentals.asOf,
+          coverage: holding.fundamentals.coverage,
+          statementPeriods: holding.fundamentals.periods,
+          revenueGrowthPercent: holding.fundamentals.revenueGrowthPercent,
+          operatingProfitGrowthPercent:
+            holding.fundamentals.operatingProfitGrowthPercent,
+          netIncomeGrowthPercent: holding.fundamentals.netIncomeGrowthPercent,
+          operatingMarginPercent: holding.fundamentals.operatingMarginPercent,
+          debtRatioPercent: holding.fundamentals.debtRatioPercent,
+          returnOnEquityPercent: holding.fundamentals.returnOnEquityPercent,
+          priceEarningsRatio: holding.fundamentals.per,
+          priceBookRatio: holding.fundamentals.pbr,
+          earningsPerShare: holding.fundamentals.eps,
+          bookValuePerShare: holding.fundamentals.bps,
+        }
+      : null;
+    const consensus = calculateHoldingConsensus({
+      portfolioWeightPercent,
+      returnRatePercent: holding.returnRate,
+      longTermPurchasePositionPercent: longTermPosition,
+      recentPurchasePositionPercent: recentPosition,
+      financialProfile,
+    });
     return {
       holdingAlias: aliases[index].alias,
-      portfolioWeightPercent:
-        result.currentValue > 0
-          ? Number(((holding.valueKrw / result.currentValue) * 100).toFixed(1))
-          : 0,
+      broadBusinessCategory: inferBroadBusinessCategory(holding),
+      portfolioWeightPercent,
       returnRatePercent: Number(holding.returnRate.toFixed(1)),
       profitDirection:
         holding.profitKrw > 0
@@ -294,25 +536,8 @@ export async function generateAiStrategy(
       recentPurchasePositionPercent:
         recentPosition === null ? null : Number(recentPosition.toFixed(1)),
       recentPurchasePositionBand: purchasePositionBand(recentPosition),
-      financialProfile: holding.fundamentals
-        ? {
-            source: holding.fundamentals.source,
-            asOf: holding.fundamentals.asOf,
-            coverage: holding.fundamentals.coverage,
-            statementPeriods: holding.fundamentals.periods,
-            revenueGrowthPercent: holding.fundamentals.revenueGrowthPercent,
-            operatingProfitGrowthPercent:
-              holding.fundamentals.operatingProfitGrowthPercent,
-            netIncomeGrowthPercent: holding.fundamentals.netIncomeGrowthPercent,
-            operatingMarginPercent: holding.fundamentals.operatingMarginPercent,
-            debtRatioPercent: holding.fundamentals.debtRatioPercent,
-            returnOnEquityPercent: holding.fundamentals.returnOnEquityPercent,
-            priceEarningsRatio: holding.fundamentals.per,
-            priceBookRatio: holding.fundamentals.pbr,
-            earningsPerShare: holding.fundamentals.eps,
-            bookValuePerShare: holding.fundamentals.bps,
-          }
-        : null,
+      financialProfile,
+      calculatedConsensus: consensus,
     };
   });
   const sortedWeights = holdings
@@ -324,7 +549,43 @@ export async function generateAiStrategy(
       .reduce((sum, weight) => sum + weight, 0)
       .toFixed(1),
   );
+  const concentrationIndex = sortedWeights.reduce(
+    (sum, weight) => sum + (weight / 100) ** 2,
+    0,
+  );
+  const effectiveHoldingCount = Number(
+    (concentrationIndex > 0 ? 1 / concentrationIndex : 0).toFixed(1),
+  );
+  const tinyHoldingCount = holdings.filter(
+    (holding) =>
+      holding.portfolioWeightPercent > 0 && holding.portfolioWeightPercent < 5,
+  ).length;
+  const categorizedWeight = new Map<string, number>();
+  holdings.forEach((holding) => {
+    if (!holding.broadBusinessCategory) return;
+    categorizedWeight.set(
+      holding.broadBusinessCategory,
+      (categorizedWeight.get(holding.broadBusinessCategory) ?? 0) +
+        holding.portfolioWeightPercent,
+    );
+  });
+  const businessCategoryWeights = [...categorizedWeight.entries()]
+    .map(([category, weightPercent]) => ({
+      category,
+      weightPercent: Number(weightPercent.toFixed(1)),
+    }))
+    .sort((a, b) => b.weightPercent - a.weightPercent);
   const scores = buildStrategyScores(result);
+  const committeeEvaluation = buildCommitteeEvaluation(result);
+  const committeeScores = committeeEvaluation.scores;
+  const overallCommitteeScore = Number(
+    (
+      Object.values(committeeScores).reduce(
+        (sum, committeeScore) => sum + committeeScore,
+        0,
+      ) / Object.values(committeeScores).length
+    ).toFixed(1),
+  );
   const responseSchema = aiStrategySchema.extend({
     holdingInsights: aiStrategySchema.shape.holdingInsights.length(
       holdings.length,
@@ -379,9 +640,22 @@ export async function generateAiStrategy(
       holdingCount: holdings.length,
       largestHoldingWeightPercent: sortedWeights[0] ?? 0,
       topThreeWeightPercent,
+      effectiveHoldingCount,
+      tinyHoldingCountBelowFivePercent: tinyHoldingCount,
+      averageValuePerHoldingWon:
+        holdings.length > 0
+          ? Math.round(result.currentValue / holdings.length)
+          : 0,
+      businessCategoryWeights,
+      uncategorizedHoldingCount: holdings.filter(
+        (holding) => !holding.broadBusinessCategory,
+      ).length,
     },
     holdings,
     investmentCriteriaScores: scores,
+    committeeScores,
+    committeeScoreReasons: committeeEvaluation.reasons,
+    overallCommitteeScore,
     investmentStyle: result.investmentStyle,
     riskWarnings:
       result.riskWarnings.length > 0
@@ -405,10 +679,23 @@ export async function generateAiStrategy(
           "반드시 제공된 계산 결과와 financialProfile만 해석하고 가격, 뉴스, 재무 상태, 미래 수익률을 새로 만들지 마세요.",
           "핵심 관점은 가격 대비 가치, 지속 가능한 경쟁우위와 성장, 재무 건전성, 장기 보유 규율, 분산과 비용, 시장 사이클, 여러 경제 환경에서의 회복력입니다.",
           "financialProfile이 있으면 매출·영업이익·순이익의 변화, 영업이익률, 부채비율, 자기자본이익률, PER·PBR 중 실제 값이 있는 항목을 쉬운 말로 풀어 근거에 사용하세요. 한 해 변화만으로 회사의 장기 경쟁력을 단정하지 마세요.",
-          "financialProfile이 없거나 일부 값만 있더라도 서비스 밖의 추가 자료를 사용자에게 요구하거나 종목을 알 수 없다고 말하지 마세요. 대신 '현재 확인된 가격과 포트폴리오 흐름으로 보면'이라고 범위를 자연스럽게 밝히고, 확인 가능한 수치만으로 실천 가능한 조언을 작성하세요. 이때 status는 '현재 확인 범위예요'를 사용하세요.",
+          "financialProfile이 없거나 일부 값만 있더라도 서비스 밖의 추가 자료를 사용자에게 요구하거나 종목을 알 수 없다고 말하지 마세요. 별도의 제한 안내 문구를 붙이지 말고, 확인 가능한 가격과 포트폴리오 수치만으로 바로 실천 가능한 조언을 작성하세요.",
           "현금흐름, 경영진, 사업의 경쟁력처럼 financialProfile에 없는 항목은 평가하지 말고, 굳이 부족하다고 지적하지도 마세요. 서비스가 가진 다른 수치로 설명을 이어가세요.",
-          "committeeDiscussion은 실제 회의가 진행되는 순서처럼 작성하세요. 열 명 모두 자신의 담당 관점에서 현재 포트폴리오의 구체적인 수치 하나 이상을 짚고, 앞선 의견에 동의하거나 다른 걱정을 덧붙이는 한두 문장의 쉬운 한국어 대화로 작성하세요. 워런 버핏은 좋은 회사를 오래 보유할 수 있는지, 찰리 멍거는 성급한 판단과 피해야 할 실수, 벤저민 그레이엄은 가격과 안전 여유, 피터 린치는 회사가 무엇으로 돈을 버는지 이해하는지, 필립 피셔는 오래 성장할 힘, 존 템플턴은 공포와 과열 속 기회, 존 보글은 분산과 비용, 하워드 막스는 손실 위험과 시장의 반복되는 흐름, 레이 달리오는 경제 상황이 달라져도 버틸 분산, 조엘 그린블라트는 좋은 회사를 너무 비싸지 않게 샀는지를 맡습니다.",
-          "committeeDiscussion에서 실제 인물의 말투를 흉내 내거나 가짜 인용문을 만들지 마세요. '제가 보기에는' 같은 역할극 대신 '현재 비중을 보면', '앞선 의견에 덧붙이면'처럼 분석 회의 메모에 가까운 자연스러운 대화로 쓰세요. 어려운 용어는 쓰지 말고, 꼭 필요하면 괄호로 바로 풀어 설명하세요.",
+          "committeeDiscussion은 친한 사람들이 단체 메시지방에서 실제로 짧은 문자를 주고받듯 작성하세요. 보고서 문장이나 발표문처럼 쓰지 마세요. 첫 메시지 이후에는 '버핏이 말한 장기 보유에는 동의해요.', '맞아요. 그런데 가격도 같이 봐야 해요.', '그 부분에 하나만 더 보탤게요.'처럼 앞사람의 핵심 의견을 구체적으로 받아서 답하세요. 각 메시지는 두세 문장으로 끝내고 문장 중간에서 끊지 마세요.",
+          "'살펴보겠습니다', '확인하겠습니다', '평가하겠습니다', '먼저 보겠습니다'처럼 발표하는 말투를 반복하지 마세요. 대신 '~해 보여요', '~도 같이 봐야 해요', '~는 조금 걱정돼요', '~라면 더 편하게 오래 가져갈 수 있어요'처럼 친근하고 자연스러운 존댓말을 사용하세요.",
+          "확인된 수치에서 잘하고 있는 점이 보이면 '오, 이 부분은 정말 잘하고 있어요.', '이 선택은 꽤 든든하네요.', '이건 좋은 습관이에요.'처럼 먼저 구체적으로 반응한 뒤 이유를 말하세요. 아쉬운 점이 보이면 '음, 이 부분은 조금 아쉬워요.', '여기는 한 번만 더 생각해 보면 좋겠어요.', '이 정도 쏠림은 마음이 조금 쓰이네요.'처럼 부드럽게 반응하고 바로 개선 방법을 이어 주세요.",
+          "모든 인물이 똑같은 감탄사를 쓰지 말고 반응의 표현과 강도를 다양하게 바꾸세요. 한 메시지에는 감탄이나 리액션을 최대 한 번만 사용하고, 느낌표와 이모지는 과하게 사용하지 마세요. 앞사람의 좋은 지적에는 짧게 공감하고, 다른 생각이 있으면 예의를 갖춰 자연스럽게 덧붙이세요.",
+          "좋은 점과 아쉬운 점을 억지로 하나씩 만들 필요는 없습니다. 제공된 숫자로 확인되는 경우에만 반응하고, 칭찬이나 걱정 뒤에는 반드시 그 근거가 되는 수치와 사용자가 할 수 있는 행동을 붙이세요.",
+          "문장 사이의 논리를 분명히 연결하세요. 기업의 이익 지속성과 포트폴리오 비중처럼 둘 다 중요한 항목을 'A보다 B를 먼저 본다'고 억지로 비교하지 말고, 왜 함께 봐야 하는지 쉬운 말로 설명하세요.",
+          "열 명은 반드시 자기 담당 역할에 집중하고 다른 사람의 분석을 반복하지 마세요. 워런 버핏은 좋은 회사를 오래 보유할 수 있는지, 찰리 멍거는 성급한 판단과 피해야 할 실수, 벤저민 그레이엄은 매수 가격과 안전 여유, 피터 린치는 사업을 쉽게 이해할 수 있는지, 필립 피셔는 오래 성장할 힘, 존 템플턴은 공포·과열과 반대 기회, 존 보글은 종목 수·작은 비중·비용을 포함한 분산의 실효성, 하워드 막스는 손실 위험과 시장 흐름, 레이 달리오는 사업군 쏠림과 여러 경제 환경에서의 균형, 조엘 그린블라트는 회사의 질과 지불한 가격의 균형만 맡습니다.",
+          "committeeScores는 각 담당 관점의 포트폴리오 점수를 서버가 10점 만점으로 계산한 값이며 화면에서 이름 옆에 따로 표시됩니다. 각 인물은 점수 자체를 메시지에서 반복하지 말고, 왜 그 점수가 나왔는지를 자기 담당 수치로 자연스럽게 설명하세요. 점수를 바꾸거나 다른 인물의 점수를 평가하지 마세요.",
+          "각 인물의 점수를 설명할 때는 반드시 같은 이름의 committeeScoreReasons에 적힌 근거를 사용하세요. 다른 관찰을 덧붙일 수는 있지만 그것을 본인 점수가 높거나 낮은 이유로 연결하지 마세요. 7점 이상은 분명한 장점으로, 4점 이상 7점 미만은 장점과 아쉬움을 함께, 4점 미만은 짧게 인정할 점이 있더라도 개선이 더 필요한 상태로 표현하세요.",
+          "JSON의 영문 필드명은 내부 계산용입니다. tinyHoldingCountBelowFivePercent, effectiveHoldingCount, holdingCount 같은 필드명을 응답에 절대 쓰지 말고 각각 '비중이 5%보다 작은 종목 수', '실제 비중을 반영한 종목 수', '보유 종목 수'처럼 자연스러운 한국어 문장으로 풀어 쓰세요.",
+          "'현재 확인 범위예요', '정보가 더 필요해요', '데이터가 부족해요' 같은 서비스 내부 사정이나 제한을 알리는 문구는 사용하지 마세요. 확인된 사실을 먼저 말하고 곧바로 의미와 행동 기준을 설명하세요.",
+          "존 보글은 holdingCount, tinyHoldingCountBelowFivePercent, effectiveHoldingCount를 사용해 종목을 너무 잘게 나눴는지 대화 속에서 설명하세요. 레이 달리오는 businessCategoryWeights를 사용해 기술·디지털 같은 특정 사업군 쏠림을 대화 속에서 설명하세요. 워런 버핏이나 하워드 막스는 largestHoldingWeightPercent와 topThreeWeightPercent를 사용해 특정 종목 의존도를 자연스럽게 짚으세요.",
+          "committeeDiscussion에서 실제 인물의 고유한 말투를 흉내 내거나 가짜 인용문을 만들지는 마세요. 이는 각 투자 원칙을 맡은 AI 캐릭터들의 대화입니다. 어려운 용어는 쓰지 말고, 꼭 필요하면 괄호로 바로 풀어 설명하세요.",
+          "committeeConclusion에는 열 명의 대화에서 나온 핵심을 종합해 '현재 상태', '가장 먼저 할 일', '다음 매수 원칙'이 모두 드러나는 완결된 쉬운 문장 3~5개로 정리하세요. 대화에 없던 사실은 새로 만들지 마세요.",
+          "headline과 diagnosis를 포함한 모든 텍스트는 반드시 완결된 문장으로 끝내세요. 글자 제한에 맞추기 위해 문장 중간을 잘라 제출하지 마세요.",
           "목표 기간과 기간 단축 수치는 입력 데이터의 값을 그대로 사용하세요.",
           "누적 수익률을 평가할 때 투자 기간과 연환산 수익률이 제공되었다면 반드시 함께 고려하고, 짧은 기간의 성과를 장기 실력으로 단정하지 마세요.",
           "개별 종목을 단정적으로 매수·매도하라고 지시하지 마세요.",
@@ -421,7 +708,7 @@ export async function generateAiStrategy(
           "장기 매수 위치가 20% 이하이면 상대적으로 낮은 구간에서 매수한 점을 인정하되 과거 최저가 부근이라는 이유만으로 추가 매수를 권하지 마세요.",
           "한 종목 비중이 35% 이상이거나 상위 3종목 합계가 75% 이상이면 집중 위험을 해당 수치와 함께 분명히 지적하세요.",
           "급등주·우량주 여부는 제공된 데이터로 확인할 수 없습니다. 공격성 점수나 위험 경고가 높다면 특정 종목명을 지어내지 말고, 이익 지속성·부채·현금흐름을 확인한 대형 우량주 또는 광범위 시장 ETF를 고르는 기준을 제시하세요.",
-          "holdingInsights에는 제공된 모든 보유 종목을 빠짐없이 하나씩 작성하세요. 10명의 관점을 종합해 consensus를 긍정·중립·신중 중 하나로 정하고, votes의 positive·neutral·cautious 합계는 반드시 10이 되게 하세요. consensus가 긍정이면 verdict는 좋은 위치, 중립이면 중립, 신중이면 주의 필요로 맞추세요. evidence는 financialProfile의 실제 재무 수치가 있으면 우선 사용하고 비중·수익률·평균 매수가 위치까지 쉬운 말로 풀어 주세요. strategy에는 위원회의 합의된 다음 행동과 추가 매수 전에 확인할 조건을 명확히 적으세요. 확인되지 않은 전망이나 적정가는 추측하지 마세요.",
+          "holdingInsights에는 제공된 모든 보유 종목을 빠짐없이 하나씩 작성하세요. 각 종목의 calculatedConsensus와 votes는 서버가 같은 입력에 항상 같은 결과가 나오도록 계산한 최종 판정입니다. 이를 바꾸거나 새 투표를 만들지 말고, evidence와 strategy에서 그 판정의 이유와 다음 행동만 설명하세요. evidence는 financialProfile의 실제 재무 수치가 있으면 우선 사용하고 비중·수익률·평균 매수가 위치까지 쉬운 말로 풀어 주세요. strategy에는 추가 매수 전에 확인할 조건을 명확히 적으세요. 확인되지 않은 전망이나 적정가는 추측하지 마세요.",
           "monthlyPlan에는 월 투자금이 0원이면 임의의 투자 금액이나 단축 기간을 만들지 말고 감당 가능한 금액을 정하는 방법을 설명하세요. 입력값이 있으면 계산된 단축 기간을 그대로 인용하세요.",
           "diversification에는 단순히 분산하라는 말 대신 최대 비중과 상위 3종목 비중을 인용하고 신규 자금으로 쏠림을 완화하는 순서를 제시하세요.",
           "strengths에는 계산 결과로 확인되는 잘하고 있는 점을 정확히 2개 작성하세요.",
@@ -455,6 +742,9 @@ export async function generateAiStrategy(
         restoreHoldingNames(message),
       ]),
     ) as AiStrategy["committeeDiscussion"],
+    committeeConclusion: restoreHoldingNames(strategy.committeeConclusion),
+    committeeScores,
+    overallCommitteeScore,
     strengths: strategy.strengths.map((item) => ({
       title: restoreHoldingNames(item.title),
       detail: restoreHoldingNames(item.detail),
@@ -472,25 +762,20 @@ export async function generateAiStrategy(
     })),
     disclaimer: restoreHoldingNames(strategy.disclaimer),
     holdingInsights: holdingInsights.map((insight) => {
-      const votes = normalizeCommitteeVotes(insight.votes);
-      const consensus =
-        votes.positive > votes.neutral && votes.positive > votes.cautious
-          ? "긍정"
-          : votes.cautious > votes.positive && votes.cautious > votes.neutral
-            ? "신중"
-            : "중립";
+      const calculated = holdings.find(
+        (holding) => holding.holdingAlias === insight.holdingAlias,
+      )?.calculatedConsensus ?? {
+        votes: { positive: 0, neutral: 10, cautious: 0 },
+        consensus: "중립" as const,
+        verdict: "중립" as const,
+      };
       return {
         name:
           aliasToName.get(insight.holdingAlias) ??
           restoreHoldingNames(insight.holdingAlias),
-        verdict:
-          consensus === "긍정"
-            ? ("좋은 위치" as const)
-            : consensus === "신중"
-              ? ("주의 필요" as const)
-              : ("중립" as const),
-        consensus,
-        votes,
+        verdict: calculated.verdict,
+        consensus: calculated.consensus,
+        votes: calculated.votes,
         evidence: restoreHoldingNames(insight.evidence),
         strategy: restoreHoldingNames(insight.strategy),
       };

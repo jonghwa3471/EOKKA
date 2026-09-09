@@ -136,6 +136,25 @@ export interface AiStrategy {
     rayDalio: string;
     joelGreenblatt: string;
   };
+  committeeConclusion?: string;
+  overallCommitteeScore?: number;
+  committeeScores?: {
+    warrenBuffett: number;
+    charlieMunger: number;
+    benjaminGraham: number;
+    peterLynch: number;
+    philipFisher: number;
+    johnTempleton: number;
+    johnBogle: number;
+    howardMarks: number;
+    rayDalio: number;
+    joelGreenblatt: number;
+  };
+  portfolioReview?: {
+    concentration: string;
+    diversificationEfficiency: string;
+    sectorBalance: string;
+  };
   scores: Array<{
     key:
       | "currentAssets"
