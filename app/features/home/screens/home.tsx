@@ -25,6 +25,7 @@ import {
   useRevalidator,
 } from "react-router";
 
+import { InvestmentActionLoader } from "~/core/components/investment-action-loader";
 import { Button } from "~/core/components/ui/button";
 import { Checkbox } from "~/core/components/ui/checkbox";
 import {
@@ -1598,54 +1599,16 @@ export default function Home() {
       }}
     >
       {isAnalyzing && (
-        <div
-          className="bg-background/60 fixed inset-0 z-[9999] flex cursor-wait items-center justify-center backdrop-blur-sm"
-          role="status"
-          aria-live="polite"
-          aria-label="포트폴리오 분석 중"
-        >
-          <div className="border-border/70 bg-card/95 w-[min(90vw,380px)] rounded-2xl border px-5 py-4 shadow-2xl">
-            <div className="flex items-center gap-3">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/12 text-emerald-500">
-                <LoaderCircleIcon className="size-5 animate-spin" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-black">
-                    포트폴리오를 분석하고 있어요
-                  </p>
-                  <span className="text-xs font-black text-emerald-500 tabular-nums">
-                    {Math.round(
-                      Math.min(
-                        95,
-                        ((ANALYSIS_ESTIMATED_SECONDS - analysisSecondsLeft) /
-                          ANALYSIS_ESTIMATED_SECONDS) *
-                          100,
-                      ),
-                    )}
-                    %
-                  </span>
-                </div>
-                <p className="text-muted-foreground mt-0.5 text-xs">
-                  시세와 목표 달성 시점을 계산하고 있어요.
-                </p>
-              </div>
-            </div>
-            <div className="bg-muted mt-3 h-1.5 overflow-hidden rounded-full">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-violet-500 transition-[width] duration-1000 ease-linear"
-                style={{
-                  width: `${Math.min(
-                    95,
-                    ((ANALYSIS_ESTIMATED_SECONDS - analysisSecondsLeft) /
-                      ANALYSIS_ESTIMATED_SECONDS) *
-                      100,
-                  )}%`,
-                }}
-              />
-            </div>
-          </div>
-        </div>
+        <InvestmentActionLoader
+          title="포트폴리오를 분석하고 있어요"
+          description="시세와 목표 달성 시점, 투자 인사이트를 차례로 계산하고 있어요."
+          progress={Math.min(
+            95,
+            ((ANALYSIS_ESTIMATED_SECONDS - analysisSecondsLeft) /
+              ANALYSIS_ESTIMATED_SECONDS) *
+              100,
+          )}
+        />
       )}
       <CurrencyMatrixSpotlight
         canvasRef={matrixCanvasRef}

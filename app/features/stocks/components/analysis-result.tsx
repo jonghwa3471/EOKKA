@@ -543,6 +543,88 @@ function GoalProbabilityChart({ result }: { result: AnalysisResult }) {
 }
 
 type StrategyScores = NonNullable<AnalysisResult["aiStrategy"]>["scores"];
+type CommitteeDiscussion = NonNullable<
+  AnalysisResult["aiStrategy"]
+>["committeeDiscussion"];
+
+const COMMITTEE_MEMBERS: Array<{
+  key: keyof CommitteeDiscussion;
+  name: string;
+  role: string;
+  description: string;
+  image: string;
+}> = [
+  {
+    key: "warrenBuffett",
+    name: "워런 버핏",
+    role: "좋은 회사와 긴 시간",
+    description: "오래 믿고 보유할 만한 회사인지 살펴봐요.",
+    image: "/images/buffett-principles-advisor.webp",
+  },
+  {
+    key: "charlieMunger",
+    name: "찰리 멍거",
+    role: "피해야 할 실수",
+    description: "조급함이나 반복되는 판단 실수가 없는지 봐요.",
+    image: "/images/charlie-munger-loading-character.webp",
+  },
+  {
+    key: "benjaminGraham",
+    name: "벤저민 그레이엄",
+    role: "가격과 안전 여유",
+    description: "좋은 주식도 너무 비싸게 산 것은 아닌지 확인해요.",
+    image: "/images/benjamin-graham-loading-character.webp",
+  },
+  {
+    key: "peterLynch",
+    name: "피터 린치",
+    role: "이해하기 쉬운 회사",
+    description: "회사가 무엇으로 돈을 버는지 쉽게 설명할 수 있는지 봐요.",
+    image: "/images/peter-lynch-loading-character.webp",
+  },
+  {
+    key: "philipFisher",
+    name: "필립 피셔",
+    role: "오래 성장할 힘",
+    description: "매출과 이익이 꾸준히 커질 힘이 있는지 살펴봐요.",
+    image: "/images/philip-fisher-loading-character.webp",
+  },
+  {
+    key: "johnTempleton",
+    name: "존 템플턴",
+    role: "공포 속 기회",
+    description: "사람들이 지나치게 겁먹거나 들떠 있지는 않은지 봐요.",
+    image: "/images/john-templeton-loading-character.webp",
+  },
+  {
+    key: "johnBogle",
+    name: "존 보글",
+    role: "분산과 낮은 비용",
+    description: "한곳에 몰리지 않고 꾸준히 투자할 수 있는지 확인해요.",
+    image: "/images/john-bogle-loading-character.webp",
+  },
+  {
+    key: "howardMarks",
+    name: "하워드 막스",
+    role: "손실 위험과 시장 흐름",
+    description: "좋은 전망 뒤에 가려진 위험까지 한 번 더 생각해요.",
+    image: "/images/howard-marks-loading-character.webp",
+  },
+  {
+    key: "rayDalio",
+    name: "레이 달리오",
+    role: "경제 변화에 대비",
+    description: "경제 상황이 달라져도 자산이 버틸 수 있는지 살펴봐요.",
+    image: "/images/ray-dalio-loading-character.webp",
+  },
+  {
+    key: "joelGreenblatt",
+    name: "조엘 그린블라트",
+    role: "좋은 회사를 좋은 가격에",
+    description: "회사의 힘과 내가 지불한 가격을 함께 비교해요.",
+    image: "/images/joel-greenblatt-loading-character.webp",
+  },
+];
 
 function AiStrategyRadar({ scores }: { scores: StrategyScores }) {
   const { ref, isRevealed } = useChartRevealOnce<HTMLDivElement>();
@@ -565,7 +647,7 @@ function AiStrategyRadar({ scores }: { scores: StrategyScores }) {
     .join(" ");
 
   return (
-    <div ref={ref} className="border-b border-violet-500/15 px-5 py-5 sm:px-6">
+    <div ref={ref} className="h-full px-5 py-5 sm:px-6">
       <div>
         <h4 className="text-sm font-black">투자 균형 한눈에 보기</h4>
         <p className="text-muted-foreground mt-1 text-xs">
@@ -733,7 +815,7 @@ function InvestmentStyleRadar({
     .join(" ");
 
   return (
-    <div ref={ref} className="border-b border-violet-500/15 px-5 py-5 sm:px-6">
+    <div ref={ref} className="h-full px-5 py-5 sm:px-6">
       <div className="rounded-2xl border border-fuchsia-500/25 bg-fuchsia-500/[0.06] p-4 text-center">
         <p className="text-xs font-black tracking-[0.14em] text-fuchsia-600 uppercase dark:text-fuchsia-400">
           My Investment Type
@@ -2752,152 +2834,191 @@ export function AnalysisResultView({
       <GoalMomentumCard result={result} />
 
       {result.aiStrategy && (
-        <section className="via-background via-background mt-5 overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-violet-500/10">
-          <div
-            className={cn(
-              "grid border-b border-emerald-500/15",
-              result.aiStrategy.framework === "buffett_principles" &&
-                "md:grid-cols-[minmax(0,1fr)_280px]",
+        <section className="mt-5 grid items-stretch gap-5 xl:grid-cols-2">
+          <div className="overflow-hidden rounded-3xl border border-emerald-500/25 bg-gradient-to-br from-emerald-500/[0.11] via-emerald-500/[0.04] to-cyan-500/[0.08] shadow-[0_18px_50px_-35px_rgba(16,185,129,0.65)]">
+            {result.aiStrategy.scores?.length === 6 && (
+              <AiStrategyRadar scores={result.aiStrategy.scores} />
             )}
-          >
+          </div>
+          <div className="overflow-hidden rounded-3xl border border-fuchsia-500/25 bg-gradient-to-br from-fuchsia-500/[0.1] via-violet-500/[0.04] to-violet-500/[0.1] shadow-[0_18px_50px_-35px_rgba(168,85,247,0.65)]">
+            {result.investmentStyle?.scores?.length === 6 && (
+              <InvestmentStyleRadar style={result.investmentStyle} />
+            )}
+          </div>
+        </section>
+      )}
+
+      {result.aiStrategy && (
+        <section className="via-background via-background mt-5 overflow-hidden rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-violet-500/10">
+          <div className="grid border-b border-emerald-500/15 md:grid-cols-[minmax(0,1fr)_280px]">
             <div className="p-5 sm:p-6 md:py-8">
               <p className="flex items-center gap-2 text-xs font-black tracking-[0.16em] text-emerald-600 uppercase dark:text-emerald-400">
                 <SparklesIcon className="size-4" />
-                {result.aiStrategy.framework === "buffett_principles"
-                  ? "Buffett Principles AI"
-                  : "AI Strategy"}
+                EOKKA Investment Committee
               </p>
-              {result.aiStrategy.framework === "buffett_principles" && (
-                <h3 className="mt-3 text-2xl font-black">
-                  버핏의 원칙으로 본다면
-                </h3>
-              )}
+              <h3 className="mt-3 text-2xl font-black">
+                투자 대가 10인의 회의 결론
+              </h3>
               <p className="mt-3 text-lg font-black">
                 {aiText(result.aiStrategy.headline)}
               </p>
               <p className="text-muted-foreground mt-2 text-sm leading-6">
                 {aiText(result.aiStrategy.diagnosis)}
               </p>
-              {result.aiStrategy.framework === "buffett_principles" && (
-                <p className="text-muted-foreground mt-4 text-[11px] leading-5">
-                  실제 워런 버핏이나 버크셔 해서웨이의 의견이 아닌, 공개적으로
-                  알려진 가치투자 원칙을 적용한 AI 시뮬레이션이에요.
-                </p>
-              )}
+              <p className="text-muted-foreground mt-4 text-[11px] leading-5">
+                실제 투자 대가들의 의견이나 추천이 아닌, 공개적으로 알려진
+                10가지 투자 철학을 적용한 AI 투자위원회 시뮬레이션이에요.
+              </p>
             </div>
-            {result.aiStrategy.framework === "buffett_principles" && (
-              <div className="relative min-h-56 overflow-hidden border-t border-emerald-500/15 bg-[#07100f] md:min-h-full md:border-t-0 md:border-l">
-                <img
-                  src="/images/buffett-principles-advisor.webp"
-                  alt="가치투자 원칙을 설명하는 버핏풍 AI 캐릭터"
-                  className="absolute inset-0 size-full object-cover object-center"
-                  loading="lazy"
-                />
-                <div className="from-background/35 md:from-background/20 absolute inset-0 bg-gradient-to-r via-transparent to-transparent" />
-              </div>
-            )}
+            <div className="relative min-h-56 overflow-hidden border-t border-emerald-500/15 bg-[#07100f] md:min-h-full md:border-t-0 md:border-l">
+              <img
+                src="/images/investment-committee-discussion.webp"
+                alt="원탁에서 포트폴리오를 토론하는 투자 대가 10인 캐릭터"
+                className="absolute inset-0 size-full object-cover object-center"
+                loading="lazy"
+              />
+              <div className="from-background/35 md:from-background/20 absolute inset-0 bg-gradient-to-r via-transparent to-transparent" />
+            </div>
           </div>
 
-          {(result.aiStrategy.principleChecks?.length ?? 0) > 0 && (
-            <div className="border-b border-emerald-500/15 px-5 py-5 sm:px-6">
-              <div>
-                <h4 className="text-sm font-black">
-                  버핏이라면 먼저 물어볼 4가지
-                </h4>
-                <p className="text-muted-foreground mt-1 text-xs leading-5">
-                  어려운 숫자는 잠시 내려놓고, 좋은 투자인지 쉽게 확인해 봐요.
-                </p>
-              </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                {result.aiStrategy.principleChecks?.map((item) => (
-                  <article
-                    key={item.principle}
-                    className="bg-background/70 rounded-xl border p-4"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-black">
-                        {aiText(item.principle)}
+          <div className="border-b border-emerald-500/15 px-5 py-6 sm:px-6">
+            <div>
+              <p className="text-xs font-black tracking-[0.14em] text-emerald-600 uppercase dark:text-emerald-400">
+                Who checks what?
+              </p>
+              <h4 className="mt-2 text-xl font-black">
+                열 명은 이런 부분을 살펴봐요
+              </h4>
+              <p className="text-muted-foreground mt-1 text-xs leading-5">
+                같은 포트폴리오도 보는 기준이 달라요. 어려운 표현 대신 각자 맡은
+                역할을 쉽게 정리했어요.
+              </p>
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              {COMMITTEE_MEMBERS.map((member) => (
+                <article
+                  key={member.key}
+                  className="bg-background/70 rounded-2xl border border-white/5 p-3.5"
+                >
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={member.image}
+                      alt={`${member.name} 캐릭터`}
+                      className="size-11 shrink-0 rounded-xl object-cover object-top ring-1 ring-white/10"
+                      loading="lazy"
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black">
+                        {member.name}
                       </p>
-                      <span
-                        className={cn(
-                          "rounded-full px-2.5 py-1 text-[10px] font-black",
-                          item.status === "좋아요"
-                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300"
-                            : item.status === "조금 더 살펴봐요"
-                              ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
-                              : "bg-slate-500/15 text-slate-600 dark:text-slate-300",
-                        )}
-                      >
-                        {item.status === ("정보가 더 필요해요" as string)
-                          ? "현재 확인 범위예요"
-                          : item.status}
+                      <p className="mt-0.5 text-[10px] font-black text-emerald-600 dark:text-emerald-400">
+                        {member.role}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-muted-foreground mt-3 text-[11px] leading-5">
+                    {member.description}
+                  </p>
+                </article>
+              ))}
+            </div>
+          </div>
+
+          <div className="border-b border-emerald-500/15 bg-[#171b1f] px-5 py-6 sm:px-6">
+            <div>
+              <p className="text-xs font-black tracking-[0.14em] text-[#fee500] uppercase">
+                Committee Talk
+              </p>
+              <h4 className="mt-2 text-xl font-black text-white">
+                10인 투자위원회 분석 과정
+              </h4>
+              <p className="mt-1 text-xs leading-5 text-slate-400">
+                한 가지 주장으로 결론내리지 않고, 서로 다른 관점이 어떻게
+                이어지는지 대화처럼 보여드려요.
+              </p>
+            </div>
+            <div className="mx-auto mt-6 max-w-4xl space-y-4">
+              {COMMITTEE_MEMBERS.map((member, index) => (
+                <div
+                  key={member.key}
+                  className={cn(
+                    "flex items-start gap-2.5",
+                    index % 2 === 1 && "flex-row-reverse",
+                  )}
+                >
+                  <img
+                    src={member.image}
+                    alt=""
+                    className="size-10 shrink-0 rounded-full object-cover object-top ring-1 ring-white/10"
+                    loading="lazy"
+                  />
+                  <div
+                    className={cn(
+                      "max-w-[82%]",
+                      index % 2 === 1 && "text-right",
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "mb-1 flex flex-wrap items-center gap-x-2",
+                        index % 2 === 1 && "justify-end",
+                      )}
+                    >
+                      <span className="text-xs font-black text-white">
+                        {member.name}
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-500">
+                        {member.role}
                       </span>
                     </div>
-                    <p className="text-muted-foreground mt-2 text-xs leading-5">
-                      {aiText(item.observation)}
+                    <p
+                      className={cn(
+                        "inline-block rounded-2xl px-4 py-3 text-left text-sm leading-6 shadow-sm",
+                        index % 2 === 1
+                          ? "rounded-tr-sm bg-[#fee500] text-[#191919]"
+                          : "rounded-tl-sm bg-[#2b3137] text-slate-100",
+                      )}
+                    >
+                      {aiText(
+                        result.aiStrategy!.committeeDiscussion[member.key],
+                      )}
                     </p>
-                    <div className="mt-3 rounded-lg bg-emerald-500/[0.08] p-3">
-                      <p className="text-[10px] font-black tracking-wide text-emerald-600 uppercase dark:text-emerald-400">
-                        다음에 사기 전에 생각해 볼 것
-                      </p>
-                      <p className="mt-1 text-sm leading-6">
-                        {aiText(item.question)}
-                      </p>
-                    </div>
-                  </article>
-                ))}
-              </div>
+                  </div>
+                </div>
+              ))}
             </div>
-          )}
-
-          {result.aiStrategy.scores?.length === 6 && (
-            <AiStrategyRadar scores={result.aiStrategy.scores} />
-          )}
-
-          {result.investmentStyle?.scores?.length === 6 && (
-            <InvestmentStyleRadar style={result.investmentStyle} />
-          )}
+          </div>
 
           {(result.aiStrategy.holdingInsights?.length ?? 0) > 0 && (
             <div className="border-t border-violet-500/15 px-5 pt-5 sm:px-6 sm:pt-6">
-              {result.aiStrategy.framework === "buffett_principles" ? (
-                <div className="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-[#07100f] sm:grid sm:min-h-52 sm:grid-cols-[220px_minmax(0,1fr)]">
-                  <div className="relative min-h-48 sm:min-h-full">
-                    <img
-                      src="/images/buffett-stock-advisor.webp"
-                      alt="종목별 투자 조언을 가리키는 버핏풍 AI 캐릭터"
-                      className="absolute inset-0 size-full object-cover object-left"
-                      loading="lazy"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#07100f] via-transparent to-transparent sm:bg-gradient-to-r sm:from-transparent sm:to-[#07100f]" />
-                  </div>
-                  <div className="flex flex-col justify-center p-5 sm:p-6">
-                    <p className="text-xs font-black tracking-[0.14em] text-emerald-400 uppercase">
-                      What would Buffett consider?
-                    </p>
-                    <h4 className="mt-2 text-xl font-black text-white">
-                      만약 버핏이었다면?
-                    </h4>
-                    <p className="mt-2 text-sm leading-6 text-slate-300">
-                      주식 가격만 보지 않고 회사의 일부를 산다고 생각해 볼
-                      거예요. 지금 숫자에서 알 수 있는 점과, 다음에 더 사기 전
-                      꼭 확인할 점을 종목마다 쉽게 설명해 드릴게요.
-                    </p>
-                    <p className="mt-3 text-[11px] leading-5 text-slate-500">
-                      종목명과 실제 금액은 AI에 보내지 않아요. 회사의 재무
-                      정보가 필요한 내용은 아는 척하지 않고 따로 알려드려요.
-                    </p>
-                  </div>
+              <div className="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-[#07100f] sm:grid sm:min-h-64 sm:grid-cols-[minmax(260px,0.85fr)_minmax(0,1fr)]">
+                <div className="relative min-h-52 sm:min-h-full">
+                  <img
+                    src="/images/investment-committee-discussion.webp"
+                    alt="종목별 투자 컨센서스를 논의하는 투자 대가 10인 캐릭터"
+                    className="absolute inset-0 size-full object-cover object-center"
+                    loading="lazy"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#07100f] via-transparent to-transparent sm:bg-gradient-to-r sm:from-transparent sm:to-[#07100f]" />
                 </div>
-              ) : (
-                <div>
-                  <p className="text-sm font-black">종목별 매수 전략</p>
-                  <p className="text-muted-foreground mt-1 text-xs leading-5">
-                    종목명과 실제 금액은 AI에 보내지 않고, 익명화한
-                    비중·수익률·매수 위치만으로 분석했어요.
+                <div className="flex flex-col justify-center p-5 sm:p-6">
+                  <p className="text-xs font-black tracking-[0.14em] text-emerald-400 uppercase">
+                    10-Investor Consensus
+                  </p>
+                  <h4 className="mt-2 text-xl font-black text-white">
+                    종목별 투자 컨센서스
+                  </h4>
+                  <p className="mt-2 text-sm leading-6 text-slate-300">
+                    가치·성장·가격·분산·시장 사이클을 바라보는 열 가지 관점을
+                    종합했어요. 한 사람의 확신보다 의견이 어디에서 모이고
+                    갈리는지 먼저 확인해 보세요.
+                  </p>
+                  <p className="mt-3 text-[11px] leading-5 text-slate-500">
+                    종목명과 실제 금액은 AI에 보내지 않으며, 결과가 매수·매도
+                    지시를 뜻하지는 않아요.
                   </p>
                 </div>
-              )}
+              </div>
               <div className="mt-4 grid gap-3">
                 {result.aiStrategy.holdingInsights?.map((insight) => (
                   <article
@@ -2922,14 +3043,49 @@ export function AnalysisResultView({
                             : "조금 더 지켜봐요"}
                       </span>
                     </div>
+                    {insight.consensus && insight.votes && (
+                      <div className="mt-3 rounded-xl border border-white/5 bg-black/10 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-black">
+                            위원회 결론 · {insight.consensus}
+                          </p>
+                          <p className="text-muted-foreground text-[10px] font-bold">
+                            총 10표
+                          </p>
+                        </div>
+                        <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-slate-500/15">
+                          <span
+                            className="bg-emerald-500"
+                            style={{ width: `${insight.votes.positive * 10}%` }}
+                          />
+                          <span
+                            className="bg-amber-400"
+                            style={{ width: `${insight.votes.neutral * 10}%` }}
+                          />
+                          <span
+                            className="bg-rose-500"
+                            style={{ width: `${insight.votes.cautious * 10}%` }}
+                          />
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] font-bold">
+                          <span className="text-emerald-500">
+                            긍정 {insight.votes.positive}
+                          </span>
+                          <span className="text-amber-500">
+                            중립 {insight.votes.neutral}
+                          </span>
+                          <span className="text-rose-500">
+                            신중 {insight.votes.cautious}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                     <p className="text-muted-foreground mt-2 text-xs leading-5">
                       {aiText(insight.evidence)}
                     </p>
                     <div className="mt-3 rounded-lg bg-violet-500/[0.08] p-3">
                       <p className="text-[10px] font-black tracking-wide text-violet-600 uppercase dark:text-violet-400">
-                        {result.aiStrategy?.framework === "buffett_principles"
-                          ? "버핏의 원칙으로 생각해 보면"
-                          : "다음 매수 기준"}
+                        10인 위원회의 합의된 조언
                       </p>
                       <p className="mt-1 text-sm leading-6">
                         {aiText(insight.strategy)}

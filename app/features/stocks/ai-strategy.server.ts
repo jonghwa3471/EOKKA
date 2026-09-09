@@ -5,19 +5,21 @@ import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod";
 
 const aiStrategySchema = z.object({
-  framework: z.literal("buffett_principles"),
+  framework: z.literal("investment_committee"),
   headline: z.string().min(1).max(80),
   diagnosis: z.string().min(1).max(700),
-  principleChecks: z
-    .array(
-      z.object({
-        principle: z.string().min(1).max(40),
-        status: z.enum(["좋아요", "조금 더 살펴봐요", "현재 확인 범위예요"]),
-        observation: z.string().min(1).max(350),
-        question: z.string().min(1).max(250),
-      }),
-    )
-    .length(4),
+  committeeDiscussion: z.object({
+    warrenBuffett: z.string().min(1).max(240),
+    charlieMunger: z.string().min(1).max(240),
+    benjaminGraham: z.string().min(1).max(240),
+    peterLynch: z.string().min(1).max(240),
+    philipFisher: z.string().min(1).max(240),
+    johnTempleton: z.string().min(1).max(240),
+    johnBogle: z.string().min(1).max(240),
+    howardMarks: z.string().min(1).max(240),
+    rayDalio: z.string().min(1).max(240),
+    joelGreenblatt: z.string().min(1).max(240),
+  }),
   strengths: z
     .array(
       z.object({
@@ -39,6 +41,12 @@ const aiStrategySchema = z.object({
       z.object({
         holdingAlias: z.string().min(1).max(20),
         verdict: z.enum(["좋은 위치", "중립", "주의 필요"]),
+        consensus: z.enum(["긍정", "중립", "신중"]),
+        votes: z.object({
+          positive: z.number().int().min(0).max(10),
+          neutral: z.number().int().min(0).max(10),
+          cautious: z.number().int().min(0).max(10),
+        }),
         evidence: z.string().min(1).max(300),
         strategy: z.string().min(1).max(500),
       }),
@@ -74,6 +82,42 @@ function period(months: number | null) {
 
 const clampScore = (score: number) =>
   Math.round(Math.max(0, Math.min(100, score)));
+
+function normalizeCommitteeVotes(votes: {
+  positive: number;
+  neutral: number;
+  cautious: number;
+}) {
+  const entries = [
+    ["positive", votes.positive],
+    ["neutral", votes.neutral],
+    ["cautious", votes.cautious],
+  ] as const;
+  const safe = entries.map(([key, value]) => ({
+    key,
+    value: Math.max(0, Math.round(value)),
+  }));
+  const total = safe.reduce((sum, item) => sum + item.value, 0);
+  if (total === 0) return { positive: 3, neutral: 4, cautious: 3 };
+
+  const scaled = safe.map((item) => ({
+    ...item,
+    exact: (item.value / total) * 10,
+    value: Math.floor((item.value / total) * 10),
+  }));
+  let remaining = 10 - scaled.reduce((sum, item) => sum + item.value, 0);
+  scaled
+    .sort((a, b) => b.exact - b.value - (a.exact - a.value))
+    .forEach((item) => {
+      if (remaining <= 0) return;
+      item.value += 1;
+      remaining -= 1;
+    });
+
+  return Object.fromEntries(
+    scaled.map(({ key, value }) => [key, value]),
+  ) as typeof votes;
+}
 
 function purchasePositionBand(position: number | null) {
   if (position === null) return "가격 범위 데이터 없음";
@@ -354,16 +398,17 @@ export async function generateAiStrategy(
       {
         role: "system",
         content: [
-          "당신은 EOKKA의 '버핏 원칙 분석가'입니다. 워런 버핏 본인인 것처럼 말하거나 실제 발언·추천을 만들어내지 말고, 널리 알려진 장기 가치투자 원칙을 현재 계산 결과에 적용해 해설하세요.",
-          "말투는 오랫동안 좋은 회사를 골라 기다려 온 노련한 투자 멘토가 옆에서 차분히 이야기하듯 따뜻하고 소박하게 쓰세요. '내가 이 숫자를 본다면', '서두를 필요는 없어요', '주식이 아니라 회사의 일부를 산다고 생각해 보세요'처럼 이해하기 쉬운 표현을 사용할 수 있지만, 실제 워런 버핏의 직접 인용문인 것처럼 따옴표를 쓰거나 출처를 만들지 마세요.",
+          "당신은 EOKKA의 '10인 투자위원회'입니다. 워런 버핏, 찰리 멍거, 벤저민 그레이엄, 피터 린치, 필립 피셔, 존 템플턴, 존 보글, 하워드 막스, 레이 달리오, 조엘 그린블라트의 널리 알려진 투자 원칙을 서로 다른 관점으로 적용한 뒤 하나의 합의된 분석을 작성하세요. 실제 인물들이 이 포트폴리오를 검토했거나 특정 종목을 추천한 것처럼 표현하지 마세요.",
+          "위원회는 가치와 안전마진, 좋은 기업과 장기 성장, 이해 가능한 사업, 역발상, 낮은 비용과 분산, 시장 사이클과 위험, 여러 경제 환경에 대한 대비를 함께 검토하세요. 의견이 갈릴 수 있는 지점은 숨기지 말고, 최종 결론은 주식을 처음 접한 사람도 이해할 수 있는 따뜻하고 쉬운 존댓말로 정리하세요. 실제 인물의 직접 인용문이나 가상의 발언은 만들지 마세요.",
           "주식을 처음 접한 사람도 한 번에 이해할 수 있는 쉬운 한국어를 사용하세요. 한 문장을 짧게 쓰고, 어려운 한자어와 전문 용어를 피하세요. 꼭 필요한 용어는 바로 뒤에 쉬운 뜻을 괄호로 설명하세요.",
           "안전마진은 '가치보다 비싸게 사지 않을 여유', 복리는 '수익이 다시 수익을 만드는 힘', 집중도는 '몇 종목에 돈이 몰린 정도', 변동성은 '가격이 크게 오르내리는 정도'처럼 풀어서 표현하세요.",
           "반드시 제공된 계산 결과와 financialProfile만 해석하고 가격, 뉴스, 재무 상태, 미래 수익률을 새로 만들지 마세요.",
-          "핵심 관점은 이해 가능한 사업, 지속 가능한 경쟁우위와 재무 건전성, 내재가치 대비 안전마진, 장기 보유 규율과 과도한 분산 회피입니다.",
+          "핵심 관점은 가격 대비 가치, 지속 가능한 경쟁우위와 성장, 재무 건전성, 장기 보유 규율, 분산과 비용, 시장 사이클, 여러 경제 환경에서의 회복력입니다.",
           "financialProfile이 있으면 매출·영업이익·순이익의 변화, 영업이익률, 부채비율, 자기자본이익률, PER·PBR 중 실제 값이 있는 항목을 쉬운 말로 풀어 근거에 사용하세요. 한 해 변화만으로 회사의 장기 경쟁력을 단정하지 마세요.",
           "financialProfile이 없거나 일부 값만 있더라도 서비스 밖의 추가 자료를 사용자에게 요구하거나 종목을 알 수 없다고 말하지 마세요. 대신 '현재 확인된 가격과 포트폴리오 흐름으로 보면'이라고 범위를 자연스럽게 밝히고, 확인 가능한 수치만으로 실천 가능한 조언을 작성하세요. 이때 status는 '현재 확인 범위예요'를 사용하세요.",
           "현금흐름, 경영진, 사업의 경쟁력처럼 financialProfile에 없는 항목은 평가하지 말고, 굳이 부족하다고 지적하지도 마세요. 서비스가 가진 다른 수치로 설명을 이어가세요.",
-          "principleChecks에는 '비싸게 사지 않았나요?', '오래 기다릴 수 있나요?', '한곳에 너무 몰려 있나요?', '내가 아는 회사인가요?'를 이 순서대로 정확히 하나씩 작성하세요. observation은 현재 수치로 확인 가능한 사실을 쉬운 말로 설명하고 question에는 다음 투자 전 스스로 물어볼 짧고 구체적인 질문을 적으세요.",
+          "committeeDiscussion은 실제 회의가 진행되는 순서처럼 작성하세요. 열 명 모두 자신의 담당 관점에서 현재 포트폴리오의 구체적인 수치 하나 이상을 짚고, 앞선 의견에 동의하거나 다른 걱정을 덧붙이는 한두 문장의 쉬운 한국어 대화로 작성하세요. 워런 버핏은 좋은 회사를 오래 보유할 수 있는지, 찰리 멍거는 성급한 판단과 피해야 할 실수, 벤저민 그레이엄은 가격과 안전 여유, 피터 린치는 회사가 무엇으로 돈을 버는지 이해하는지, 필립 피셔는 오래 성장할 힘, 존 템플턴은 공포와 과열 속 기회, 존 보글은 분산과 비용, 하워드 막스는 손실 위험과 시장의 반복되는 흐름, 레이 달리오는 경제 상황이 달라져도 버틸 분산, 조엘 그린블라트는 좋은 회사를 너무 비싸지 않게 샀는지를 맡습니다.",
+          "committeeDiscussion에서 실제 인물의 말투를 흉내 내거나 가짜 인용문을 만들지 마세요. '제가 보기에는' 같은 역할극 대신 '현재 비중을 보면', '앞선 의견에 덧붙이면'처럼 분석 회의 메모에 가까운 자연스러운 대화로 쓰세요. 어려운 용어는 쓰지 말고, 꼭 필요하면 괄호로 바로 풀어 설명하세요.",
           "목표 기간과 기간 단축 수치는 입력 데이터의 값을 그대로 사용하세요.",
           "누적 수익률을 평가할 때 투자 기간과 연환산 수익률이 제공되었다면 반드시 함께 고려하고, 짧은 기간의 성과를 장기 실력으로 단정하지 마세요.",
           "개별 종목을 단정적으로 매수·매도하라고 지시하지 마세요.",
@@ -376,7 +421,7 @@ export async function generateAiStrategy(
           "장기 매수 위치가 20% 이하이면 상대적으로 낮은 구간에서 매수한 점을 인정하되 과거 최저가 부근이라는 이유만으로 추가 매수를 권하지 마세요.",
           "한 종목 비중이 35% 이상이거나 상위 3종목 합계가 75% 이상이면 집중 위험을 해당 수치와 함께 분명히 지적하세요.",
           "급등주·우량주 여부는 제공된 데이터로 확인할 수 없습니다. 공격성 점수나 위험 경고가 높다면 특정 종목명을 지어내지 말고, 이익 지속성·부채·현금흐름을 확인한 대형 우량주 또는 광범위 시장 ETF를 고르는 기준을 제시하세요.",
-          "holdingInsights에는 제공된 모든 보유 종목을 빠짐없이 하나씩 작성하세요. 각 항목은 '만약 버핏의 원칙으로 본다면'이라는 관점에서, 오래 투자한 어른이 사용자에게 직접 이야기하듯 쓰세요. evidence는 financialProfile의 실제 재무 수치가 있으면 이를 우선 사용하고, 비중·수익률·평균 매수가 위치와 함께 쉬운 말로 풀어 주세요. strategy는 지금 할 일과 다음에 더 사기 전에 기다리거나 확인할 조건을 명확히 구분하세요. 확인되지 않은 전망이나 적정가는 추측하지 마세요.",
+          "holdingInsights에는 제공된 모든 보유 종목을 빠짐없이 하나씩 작성하세요. 10명의 관점을 종합해 consensus를 긍정·중립·신중 중 하나로 정하고, votes의 positive·neutral·cautious 합계는 반드시 10이 되게 하세요. consensus가 긍정이면 verdict는 좋은 위치, 중립이면 중립, 신중이면 주의 필요로 맞추세요. evidence는 financialProfile의 실제 재무 수치가 있으면 우선 사용하고 비중·수익률·평균 매수가 위치까지 쉬운 말로 풀어 주세요. strategy에는 위원회의 합의된 다음 행동과 추가 매수 전에 확인할 조건을 명확히 적으세요. 확인되지 않은 전망이나 적정가는 추측하지 마세요.",
           "monthlyPlan에는 월 투자금이 0원이면 임의의 투자 금액이나 단축 기간을 만들지 말고 감당 가능한 금액을 정하는 방법을 설명하세요. 입력값이 있으면 계산된 단축 기간을 그대로 인용하세요.",
           "diversification에는 단순히 분산하라는 말 대신 최대 비중과 상위 3종목 비중을 인용하고 신규 자금으로 쏠림을 완화하는 순서를 제시하세요.",
           "strengths에는 계산 결과로 확인되는 잘하고 있는 점을 정확히 2개 작성하세요.",
@@ -389,7 +434,7 @@ export async function generateAiStrategy(
       },
       {
         role: "user",
-        content: `다음 계산 결과를 워런 버핏의 가치투자 원칙이라는 렌즈로 검토해, 전체 포트폴리오 요약과 모든 종목별 실행 가능한 조언을 작성해 주세요. 이는 실제 워런 버핏의 견해가 아닌 원칙 기반 시뮬레이션이어야 합니다.\n${JSON.stringify(facts)}`,
+        content: `다음 계산 결과를 10인 투자위원회의 서로 다른 투자 원칙으로 검토하고 토론한 뒤, 전체 포트폴리오 회의 결론과 모든 종목별 투자 컨센서스 및 실행 가능한 조언을 작성해 주세요. 이는 실제 인물들의 견해가 아닌 공개된 투자 원칙을 조합한 AI 시뮬레이션이어야 합니다.\n${JSON.stringify(facts)}`,
       },
     ],
     text: {
@@ -404,12 +449,12 @@ export async function generateAiStrategy(
     ...strategy,
     headline: restoreHoldingNames(strategy.headline),
     diagnosis: restoreHoldingNames(strategy.diagnosis),
-    principleChecks: strategy.principleChecks.map((item) => ({
-      ...item,
-      principle: restoreHoldingNames(item.principle),
-      observation: restoreHoldingNames(item.observation),
-      question: restoreHoldingNames(item.question),
-    })),
+    committeeDiscussion: Object.fromEntries(
+      Object.entries(strategy.committeeDiscussion).map(([key, message]) => [
+        key,
+        restoreHoldingNames(message),
+      ]),
+    ) as AiStrategy["committeeDiscussion"],
     strengths: strategy.strengths.map((item) => ({
       title: restoreHoldingNames(item.title),
       detail: restoreHoldingNames(item.detail),
@@ -426,14 +471,30 @@ export async function generateAiStrategy(
       detail: restoreHoldingNames(action.detail),
     })),
     disclaimer: restoreHoldingNames(strategy.disclaimer),
-    holdingInsights: holdingInsights.map((insight) => ({
-      name:
-        aliasToName.get(insight.holdingAlias) ??
-        restoreHoldingNames(insight.holdingAlias),
-      verdict: insight.verdict,
-      evidence: restoreHoldingNames(insight.evidence),
-      strategy: restoreHoldingNames(insight.strategy),
-    })),
+    holdingInsights: holdingInsights.map((insight) => {
+      const votes = normalizeCommitteeVotes(insight.votes);
+      const consensus =
+        votes.positive > votes.neutral && votes.positive > votes.cautious
+          ? "긍정"
+          : votes.cautious > votes.positive && votes.cautious > votes.neutral
+            ? "신중"
+            : "중립";
+      return {
+        name:
+          aliasToName.get(insight.holdingAlias) ??
+          restoreHoldingNames(insight.holdingAlias),
+        verdict:
+          consensus === "긍정"
+            ? ("좋은 위치" as const)
+            : consensus === "신중"
+              ? ("주의 필요" as const)
+              : ("중립" as const),
+        consensus,
+        votes,
+        evidence: restoreHoldingNames(insight.evidence),
+        strategy: restoreHoldingNames(insight.strategy),
+      };
+    }),
     scores,
   };
 }

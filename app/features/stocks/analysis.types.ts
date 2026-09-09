@@ -121,15 +121,21 @@ export interface AnalysisResult {
 }
 
 export interface AiStrategy {
-  framework?: "buffett_principles";
+  framework: "investment_committee";
   headline: string;
   diagnosis: string;
-  principleChecks?: Array<{
-    principle: string;
-    status: "좋아요" | "조금 더 살펴봐요" | "현재 확인 범위예요";
-    observation: string;
-    question: string;
-  }>;
+  committeeDiscussion: {
+    warrenBuffett: string;
+    charlieMunger: string;
+    benjaminGraham: string;
+    peterLynch: string;
+    philipFisher: string;
+    johnTempleton: string;
+    johnBogle: string;
+    howardMarks: string;
+    rayDalio: string;
+    joelGreenblatt: string;
+  };
   scores: Array<{
     key:
       | "currentAssets"
@@ -153,6 +159,12 @@ export interface AiStrategy {
   holdingInsights?: Array<{
     name: string;
     verdict: "좋은 위치" | "중립" | "주의 필요";
+    consensus?: "긍정" | "중립" | "신중";
+    votes?: {
+      positive: number;
+      neutral: number;
+      cautious: number;
+    };
     evidence: string;
     strategy: string;
   }>;

@@ -143,7 +143,7 @@ function SavedAnalysisResult({
           </span>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryItem
             label="현재 평가금액"
             value={wonLabel(record.currentValue)}
@@ -158,6 +158,14 @@ function SavedAnalysisResult({
             value={`${record.returnRate >= 0 ? "+" : ""}${record.returnRate.toFixed(1)}%`}
             valueClass={
               record.returnRate >= 0 ? "text-rose-500" : "text-blue-500"
+            }
+          />
+          <SummaryItem
+            label="월 투자금"
+            value={
+              record.monthlyContribution > 0
+                ? wonLabel(record.monthlyContribution)
+                : "없음"
             }
           />
           <SummaryItem

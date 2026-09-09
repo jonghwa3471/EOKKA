@@ -15,7 +15,6 @@ import "./app.css";
 import type { Route } from "./+types/root";
 
 import * as Sentry from "@sentry/react-router";
-import { LoaderCircleIcon } from "lucide-react";
 import NProgress from "nprogress";
 import nProgressStyles from "nprogress/nprogress.css?url";
 import { useEffect, useState } from "react";
@@ -42,6 +41,8 @@ import {
 } from "remix-themes";
 import { Toaster } from "sonner";
 
+import { InvestmentActionLoader } from "./core/components/investment-action-loader";
+import { RouteTransitionSkeleton } from "./core/components/route-transition-skeleton";
 import { Dialog } from "./core/components/ui/dialog";
 import { Sheet } from "./core/components/ui/sheet";
 import i18next from "./core/lib/i18next.server";
@@ -241,12 +242,30 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
 export default function App() {
   const navigation = useNavigation();
   const fetchers = useFetchers();
-  const isBusy =
-    navigation.state !== "idle" ||
-    fetchers.some((fetcher) => fetcher.state !== "idle");
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const activeFetcher = fetchers.find(
+    (fetcher) => fetcher.state !== "idle" && fetcher.formData,
+  );
+  const requestFormData = navigation.formData ?? activeFetcher?.formData;
+  const targetPath = navigation.location?.pathname ?? "";
+  const isAuthAction =
+    targetPath === "/logout" ||
+    targetPath.startsWith("/auth/social/start/") ||
+    (navigation.state !== "idle" && location.pathname === "/login");
+  const isActionBusy =
+    Boolean(requestFormData) ||
+    navigation.state === "submitting" ||
+    Boolean(activeFetcher) ||
+    isAuthAction;
+  const isRouteBusy = navigation.state === "loading" && !isActionBusy;
+  const isInsideDashboardShell =
+    location.pathname.startsWith("/dashboard") ||
+    location.pathname.startsWith("/account/");
   const [showBlockingLoader, setShowBlockingLoader] = useState(false);
+  const [showRouteSkeleton, setShowRouteSkeleton] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const activeFetcher = fetchers.find((fetcher) => fetcher.state !== "idle");
 
   // Initialize NProgress with spinner for better UX during navigation
   useEffect(() => {
@@ -256,7 +275,7 @@ export default function App() {
   // Fast route changes stay visually instant. Only requests that take longer
   // than the threshold show a blocking loader.
   useEffect(() => {
-    if (!isBusy) {
+    if (!isActionBusy) {
       setShowBlockingLoader(false);
       setLoadingProgress(0);
       NProgress.done();
@@ -269,10 +288,23 @@ export default function App() {
       NProgress.start();
     }, 450);
     return () => window.clearTimeout(timer);
-  }, [isBusy]);
+  }, [isActionBusy]);
 
   useEffect(() => {
-    if (!showBlockingLoader || !isBusy) return;
+    if (!isRouteBusy) {
+      setShowRouteSkeleton(false);
+      NProgress.done();
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setShowRouteSkeleton(true);
+      NProgress.start();
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [isRouteBusy]);
+
+  useEffect(() => {
+    if (!showBlockingLoader || !isActionBusy) return;
     const timer = window.setInterval(() => {
       setLoadingProgress((progress) =>
         progress >= 92
@@ -281,7 +313,7 @@ export default function App() {
       );
     }, 350);
     return () => window.clearInterval(timer);
-  }, [isBusy, showBlockingLoader]);
+  }, [isActionBusy, showBlockingLoader]);
 
   useEffect(() => {
     if (!showBlockingLoader) return;
@@ -295,12 +327,7 @@ export default function App() {
   // Handle Supabase authentication redirects
   // This is a workaround for a Supabase auth issue: https://github.com/supabase/auth/issues/1927
   // TODO: Remove this once the issue is fixed
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const requestFormData = navigation.formData ?? activeFetcher?.formData;
   const requestIntent = String(requestFormData?.get("intent") ?? "");
-  const targetPath = navigation.location?.pathname ?? location.pathname;
   const loadingCopy = (() => {
     switch (requestIntent) {
       case "analyze-managed":
@@ -360,34 +387,28 @@ export default function App() {
         };
     }
 
+    if (targetPath === "/logout")
+      return {
+        title: "안전하게 로그아웃하고 있어요",
+        description: "현재 세션을 정리하고 홈으로 이동해요.",
+      };
+    if (
+      location.pathname === "/login" ||
+      targetPath.startsWith("/auth/social/start/")
+    )
+      return {
+        title: "로그인을 확인하고 있어요",
+        description: "계정을 안전하게 확인하고 다음 단계로 이동해요.",
+      };
+
     if (requestFormData)
       return {
         title: "변경사항을 저장하고 있어요",
         description: "요청한 내용을 안전하게 반영하고 있어요.",
       };
-    if (targetPath.startsWith("/dashboard/history"))
-      return {
-        title: "분석 기록을 불러오고 있어요",
-        description: "저장된 날짜와 목표별 분석을 정리하고 있어요.",
-      };
-    if (targetPath.startsWith("/dashboard/portfolio"))
-      return {
-        title: "포트폴리오를 불러오고 있어요",
-        description: "보유 현황과 매매일지를 준비하고 있어요.",
-      };
-    if (targetPath.startsWith("/dashboard/insights"))
-      return {
-        title: "투자 인사이트를 불러오고 있어요",
-        description: "저장된 기록을 비교해 주요 변화를 정리하고 있어요.",
-      };
-    if (targetPath.startsWith("/dashboard"))
-      return {
-        title: "대시보드를 불러오고 있어요",
-        description: "최신 투자 현황과 목표 진행 상황을 준비하고 있어요.",
-      };
     return {
-      title: "페이지를 불러오고 있어요",
-      description: "필요한 정보를 준비하고 있어요.",
+      title: "요청을 처리하고 있어요",
+      description: "입력한 내용을 안전하게 확인하고 있어요.",
     };
   })();
   useEffect(() => {
@@ -408,38 +429,15 @@ export default function App() {
     <Sheet>
       <Dialog>
         <Outlet />
+        {showRouteSkeleton && !isInsideDashboardShell && (
+          <RouteTransitionSkeleton />
+        )}
         {showBlockingLoader && (
-          <div
-            className="bg-background/55 fixed inset-0 z-[9999] flex cursor-wait items-center justify-center backdrop-blur-sm"
-            role="status"
-            aria-live="polite"
-            aria-label="요청 처리 중"
-          >
-            <div className="border-border/70 bg-card/95 w-[min(90vw,360px)] rounded-2xl border px-5 py-4 shadow-2xl">
-              <div className="flex items-center gap-3">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/12 text-emerald-500">
-                  <LoaderCircleIcon className="size-5 animate-spin" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-black">{loadingCopy.title}</p>
-                    <span className="text-xs font-black text-emerald-500 tabular-nums">
-                      {Math.round(loadingProgress)}%
-                    </span>
-                  </div>
-                  <p className="text-muted-foreground mt-0.5 text-xs">
-                    {loadingCopy.description}
-                  </p>
-                </div>
-              </div>
-              <div className="bg-muted mt-3 h-1.5 overflow-hidden rounded-full">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-violet-500 transition-[width] duration-300 ease-out"
-                  style={{ width: `${loadingProgress}%` }}
-                />
-              </div>
-            </div>
-          </div>
+          <InvestmentActionLoader
+            title={loadingCopy.title}
+            description={loadingCopy.description}
+            progress={loadingProgress}
+          />
         )}
       </Dialog>
     </Sheet>

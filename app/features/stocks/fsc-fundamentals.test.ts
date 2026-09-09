@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { normalizeFscFundamentals } from "./fsc-fundamentals.server";
 
-test("금융위 요약재무제표를 버핏 원칙 분석용 지표로 변환한다", () => {
+test("금융위 요약재무제표를 투자위원회 분석용 지표로 변환한다", () => {
   const result = normalizeFscFundamentals([
     {
       bizYear: "2024",

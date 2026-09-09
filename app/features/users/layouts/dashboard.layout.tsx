@@ -1,7 +1,10 @@
 import type { Route } from "./+types/dashboard.layout";
 
-import { Outlet, useLocation } from "react-router";
+import { useEffect, useState } from "react";
+import { Outlet, useLocation, useNavigation } from "react-router";
 
+import type { RouteSkeletonVariant } from "~/core/components/route-transition-skeleton";
+import { RouteTransitionSkeleton } from "~/core/components/route-transition-skeleton";
 import {
   SidebarInset,
   SidebarProvider,
@@ -11,6 +14,45 @@ import makeServerClient from "~/core/lib/supa-client.server";
 
 import { markUserActive } from "../activity.server";
 import DashboardSidebar from "../components/dashboard-sidebar";
+
+function DashboardRouteTransitionSkeleton() {
+  const navigation = useNavigation();
+  const [visible, setVisible] = useState(false);
+  const targetPath = navigation.location?.pathname ?? "";
+  const isRouteLoading = navigation.state === "loading" && !navigation.formData;
+  const variant: RouteSkeletonVariant = targetPath.startsWith(
+    "/dashboard/history",
+  )
+    ? "history"
+    : targetPath.startsWith("/dashboard/portfolio")
+      ? "portfolio"
+      : targetPath.startsWith("/dashboard/precise-analysis")
+        ? "precise-analysis"
+        : targetPath.startsWith("/dashboard/insights")
+          ? "insights"
+          : targetPath.startsWith("/dashboard/automatic-analysis")
+            ? "automatic-analysis"
+            : targetPath.startsWith("/account/")
+              ? "account"
+              : targetPath.startsWith("/dashboard/pro") ||
+                  targetPath.startsWith("/dashboard/payments")
+                ? "coming-soon"
+                : "dashboard";
+
+  useEffect(() => {
+    if (!isRouteLoading) {
+      setVisible(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => setVisible(true), 120);
+    return () => window.clearTimeout(timer);
+  }, [isRouteLoading]);
+
+  return visible ? (
+    <RouteTransitionSkeleton withinDashboard variant={variant} />
+  ) : null;
+}
 
 export async function loader({ request }: Route.LoaderArgs) {
   const [client] = makeServerClient(request);
@@ -67,6 +109,7 @@ export default function DashboardLayout({ loaderData }: Route.ComponentProps) {
             <span className="size-1.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.7)]" />
           </div>
         </header>
+        <DashboardRouteTransitionSkeleton />
         <Outlet />
       </SidebarInset>
     </SidebarProvider>
