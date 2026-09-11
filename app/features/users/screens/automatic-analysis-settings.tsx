@@ -16,7 +16,11 @@ import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
-import { getActiveAnalysisHistory } from "~/features/stocks/history/analysis-history.server";
+import {
+  assertFreeAccountGoal,
+  getActiveAnalysisHistory,
+  getFreeAccountGoalAmount,
+} from "~/features/stocks/history/analysis-history.server";
 
 import {
   getAutomaticAnalysisSettings,
@@ -55,9 +59,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   } = await client.auth.getUser();
   if (!user) throw redirect("/login");
 
-  const [settings, history] = await Promise.all([
+  const [settings, history, accountGoalAmount] = await Promise.all([
     getAutomaticAnalysisSettings(user.id),
     getActiveAnalysisHistory(user.id),
+    getFreeAccountGoalAmount(user.id),
   ]);
   const latest = history.at(-1) ?? null;
 
@@ -72,6 +77,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     isConfigured:
       settings.goalAmount != null && settings.monthlyContribution != null,
     hasAnalysis: history.length > 0,
+    accountGoalAmount,
   };
 }
 
@@ -88,6 +94,11 @@ export async function action({ request }: Route.ActionArgs) {
       goalAmount: formData.get("goalAmount"),
       monthlyContribution: formData.get("monthlyContribution") || 0,
     });
+    await assertFreeAccountGoal({
+      userId: user.id,
+      goalAmount: parsed.goalAmount,
+      replaceExistingGoal: false,
+    });
     await setAutomaticAnalysisSettings({ userId: user.id, ...parsed });
     return data({ saved: true, error: null });
   } catch (error) {
@@ -97,7 +108,9 @@ export async function action({ request }: Route.ActionArgs) {
         error:
           error instanceof z.ZodError
             ? "목표 금액과 매월 투자금을 다시 확인해 주세요."
-            : "자동 분석 설정을 저장하지 못했어요.",
+            : error instanceof Error
+              ? error.message
+              : "자동 분석 설정을 저장하지 못했어요.",
       },
       { status: 400 },
     );
@@ -164,6 +177,7 @@ export default function AutomaticAnalysisSettings({
                 step="100000000"
                 value={goalAmount}
                 onChange={(event) => setGoalAmount(event.target.value)}
+                readOnly={loaderData.accountGoalAmount != null}
                 required
               />
               <div className="grid grid-cols-3 gap-2">
@@ -172,6 +186,7 @@ export default function AutomaticAnalysisSettings({
                     key={amount}
                     type="button"
                     onClick={() => setGoalAmount(String(amount))}
+                    disabled={loaderData.accountGoalAmount != null}
                     className={cn(
                       "h-9 cursor-pointer rounded-xl border text-xs font-black transition-colors",
                       parsedGoal === amount
@@ -188,6 +203,12 @@ export default function AutomaticAnalysisSettings({
                   ? moneyLabel(parsedGoal)
                   : "1억원 이상 입력해 주세요"}
               </p>
+              {loaderData.accountGoalAmount != null && (
+                <p className="text-muted-foreground text-xs leading-5">
+                  무료 플랜의 목표 금액은 하나예요. 목표를 바꾸려면 빠른
+                  분석이나 정밀 분석에서 새 목표를 선택해 주세요.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">

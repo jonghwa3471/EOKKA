@@ -1236,12 +1236,30 @@ export default function Home() {
   const displayedAnalysisDate = analysis?.asOf ?? analysisAsOfPreview;
   const [analysisError, setAnalysisError] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisUsage, setAnalysisUsage] = useState<{
+    limit: number;
+    used: number;
+    remaining: number;
+  } | null>(null);
   const [analysisSecondsLeft, setAnalysisSecondsLeft] = useState(
     ANALYSIS_ESTIMATED_SECONDS,
   );
   const [draftLoaded, setDraftLoaded] = useState(false);
   const matrixCanvasRef = useRef<HTMLCanvasElement>(null);
   const matrixTrailRef = useRef<CurrencyTrailPoint[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/stocks/analysis-limit", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((status: { limit: number; used: number; remaining: number }) => {
+        if (!cancelled) setAnalysisUsage(status);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const selectTab = (nextTab: "quick" | "saved") => {
     setTab(nextTab);
@@ -1549,7 +1567,7 @@ export default function Home() {
         selectedStock && Number(averagePrice) > 0 && Number(quantity) > 0,
     );
 
-  const analyze = async () => {
+  const analyze = async (replaceExistingGoal = false) => {
     if (!canAnalyze) return;
     setIsAnalyzing(true);
     setAnalysisError("");
@@ -1561,6 +1579,7 @@ export default function Home() {
           goalAmount: targetAmount,
           monthlyContribution: monthlyContributionAmount,
           investmentPeriodMonths,
+          replaceExistingGoal,
           holdings: holdings.map((holding) => ({
             stockId: holding.selectedStock!.stockId,
             averagePrice: Number(holding.averagePrice),
@@ -1574,7 +1593,42 @@ export default function Home() {
       });
       const body = (await response.json()) as
         | AnalysisResult
-        | { error: string };
+        | {
+            error: string;
+            code?: string;
+            currentGoalAmount?: number;
+            remaining?: number;
+          };
+      const remainingHeader = response.headers.get("X-RateLimit-Remaining");
+      if (remainingHeader !== null) {
+        const remaining = Number(remainingHeader);
+        if (Number.isFinite(remaining))
+          setAnalysisUsage({ limit: 5, used: 5 - remaining, remaining });
+      } else if ("error" in body && typeof body.remaining === "number") {
+        setAnalysisUsage({
+          limit: 5,
+          used: 5 - body.remaining,
+          remaining: body.remaining,
+        });
+      }
+      if (
+        !response.ok &&
+        "error" in body &&
+        body.code === "FREE_GOAL_CONFLICT" &&
+        typeof body.currentGoalAmount === "number"
+      ) {
+        const currentGoal = formatKoreanMoney(body.currentGoalAmount);
+        const nextGoal = formatKoreanMoney(targetAmount);
+        if (
+          window.confirm(
+            `무료 플랜에서는 목표 금액을 하나만 저장할 수 있어요.\n\n현재 목표 ${currentGoal}을 ${nextGoal}으로 바꾸면 이전 목표의 분석 기록은 삭제돼요. 목표를 변경할까요?`,
+          )
+        ) {
+          setIsAnalyzing(false);
+          await analyze(true);
+        }
+        return;
+      }
       if (!response.ok || "error" in body)
         throw new Error("error" in body ? body.error : "분석에 실패했습니다.");
       setAnalysis(body);
@@ -2152,6 +2206,16 @@ export default function Home() {
                     </div>
 
                     <div>
+                      <div className="mb-2 flex items-center justify-between gap-3 text-xs font-bold">
+                        <span className="text-muted-foreground">
+                          오늘의 무료 분석
+                        </span>
+                        <span className="rounded-full border border-emerald-500/25 bg-emerald-500/[0.08] px-2.5 py-1 text-emerald-600 tabular-nums dark:text-emerald-400">
+                          {analysisUsage
+                            ? `${analysisUsage.used}/${analysisUsage.limit}회 사용 · ${analysisUsage.remaining}회 남음`
+                            : "최대 5회"}
+                        </span>
+                      </div>
                       <Button
                         type="submit"
                         size="lg"

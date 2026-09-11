@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
 
 import db from "~/core/db/drizzle-client.server";
 import type { AnalysisResult } from "~/features/stocks/analysis.types";
@@ -8,6 +8,57 @@ import { profiles } from "~/features/users/schema";
 import { analysisSnapshots } from "./schema";
 
 export const FREE_HISTORY_LIMIT = 30;
+
+export class FreeGoalConflictError extends Error {
+  readonly code = "FREE_GOAL_CONFLICT";
+
+  constructor(readonly currentGoalAmount: number) {
+    super("무료 플랜에서는 목표 금액을 하나만 저장할 수 있어요.");
+  }
+}
+
+export async function getFreeAccountGoalAmount(userId: string) {
+  const [profile] = await db
+    .select({
+      preferredGoalAmount: profiles.preferred_goal_amount,
+      automaticGoalAmount: profiles.automatic_analysis_goal_amount,
+    })
+    .from(profiles)
+    .where(eq(profiles.profile_id, userId))
+    .limit(1);
+  if (profile?.preferredGoalAmount != null) return profile.preferredGoalAmount;
+  if (profile?.automaticGoalAmount != null) return profile.automaticGoalAmount;
+
+  const [latest] = await db
+    .select({ goalAmount: analysisSnapshots.goal_amount })
+    .from(analysisSnapshots)
+    .where(eq(analysisSnapshots.user_id, userId))
+    .orderBy(
+      desc(analysisSnapshots.saved_on),
+      desc(analysisSnapshots.analysis_snapshot_id),
+    )
+    .limit(1);
+  return latest?.goalAmount ?? null;
+}
+
+export async function assertFreeAccountGoal({
+  userId,
+  goalAmount,
+  replaceExistingGoal,
+}: {
+  userId: string;
+  goalAmount: number;
+  replaceExistingGoal: boolean;
+}) {
+  const currentGoalAmount = await getFreeAccountGoalAmount(userId);
+  if (
+    currentGoalAmount != null &&
+    currentGoalAmount !== goalAmount &&
+    !replaceExistingGoal
+  )
+    throw new FreeGoalConflictError(currentGoalAmount);
+  return currentGoalAmount;
+}
 
 export function seoulDate(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -36,6 +87,7 @@ export async function saveDailyAnalysisSnapshot({
   analysisMode = "quick",
   managedPortfolioId = null,
   updateSource = "manual",
+  replaceOtherGoals = false,
 }: {
   userId: string;
   result: AnalysisResult;
@@ -43,6 +95,7 @@ export async function saveDailyAnalysisSnapshot({
   analysisMode?: "quick" | "managed";
   managedPortfolioId?: number | null;
   updateSource?: "manual" | "automatic";
+  replaceOtherGoals?: boolean;
 }) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(result.asOf))
     throw new Error("분석 결과의 종가 기준일이 올바르지 않습니다.");
@@ -64,6 +117,24 @@ export async function saveDailyAnalysisSnapshot({
   };
 
   const snapshotId = await db.transaction(async (transaction) => {
+    if (replaceOtherGoals) {
+      await transaction
+        .delete(analysisSnapshots)
+        .where(
+          and(
+            eq(analysisSnapshots.user_id, userId),
+            ne(analysisSnapshots.goal_amount, values.goal_amount),
+          ),
+        );
+      await transaction
+        .update(profiles)
+        .set({
+          preferred_goal_amount: values.goal_amount,
+          automatic_analysis_goal_amount: values.goal_amount,
+          updated_at: new Date(),
+        })
+        .where(eq(profiles.profile_id, userId));
+    }
     const updated = await transaction
       .update(analysisSnapshots)
       .set({
@@ -125,10 +196,12 @@ export async function startManagedAnalysisHistory({
   userId,
   portfolioId,
   result,
+  replaceOtherGoals = false,
 }: {
   userId: string;
   portfolioId: number;
   result: AnalysisResult;
+  replaceOtherGoals?: boolean;
 }) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(result.asOf))
     throw new Error("분석 결과의 종가 기준일이 올바르지 않습니다.");
@@ -150,13 +223,28 @@ export async function startManagedAnalysisHistory({
   };
 
   const snapshotId = await db.transaction(async (transaction) => {
+    if (replaceOtherGoals) {
+      await transaction
+        .delete(analysisSnapshots)
+        .where(
+          and(
+            eq(analysisSnapshots.user_id, userId),
+            ne(analysisSnapshots.goal_amount, snapshot.goal_amount),
+          ),
+        );
+    }
     const [inserted] = await transaction
       .insert(analysisSnapshots)
       .values(snapshot)
       .returning({ id: analysisSnapshots.analysis_snapshot_id });
     await transaction
       .update(profiles)
-      .set({ preferred_goal_amount: snapshot.goal_amount })
+      .set({
+        preferred_goal_amount: snapshot.goal_amount,
+        ...(replaceOtherGoals
+          ? { automatic_analysis_goal_amount: snapshot.goal_amount }
+          : {}),
+      })
       .where(eq(profiles.profile_id, userId));
     await transaction
       .update(managedPortfolios)

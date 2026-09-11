@@ -6,20 +6,27 @@ import {
   Clock3Icon,
   SparklesIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Form, Link, data, redirect, useActionData } from "react-router";
 import { z } from "zod";
 
 import { Button } from "~/core/components/ui/button";
 import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
+import {
+  consumeManualAnalysisLimit,
+  manualAnalysisLimitResponse,
+} from "~/core/lib/rate-limit.server";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
 import { generateAiStrategy } from "~/features/stocks/ai-strategy.server";
 import { analyzePortfolio } from "~/features/stocks/analysis.server";
 import { getLatestCachedMarketDate } from "~/features/stocks/fsc-client.server";
 import {
+  FreeGoalConflictError,
+  assertFreeAccountGoal,
   getAnalysisHistory,
+  getFreeAccountGoalAmount,
   getPreferredGoalAmount,
   saveDailyAnalysisSnapshot,
   seoulDate,
@@ -36,6 +43,7 @@ const analysisSchema = z.object({
   goalAmount: z.coerce.number().int().min(100_000_000).max(100_000_000_000),
   monthlyContribution: z.coerce.number().int().min(0).max(1_000_000_000),
   confirmReset: z.literal("on").optional(),
+  replaceExistingGoal: z.literal("on").optional(),
 });
 
 const GOAL_PRESETS = [100_000_000, 1_000_000_000, 10_000_000_000];
@@ -66,11 +74,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   } = await client.auth.getUser();
   if (!user) throw redirect("/login");
 
-  const [managed, history, preferredGoal] = await Promise.all([
-    getManagedPortfolio(user.id),
-    getAnalysisHistory(user.id),
-    getPreferredGoalAmount(user.id),
-  ]);
+  const [managed, history, preferredGoal, accountGoalAmount] =
+    await Promise.all([
+      getManagedPortfolio(user.id),
+      getAnalysisHistory(user.id),
+      getPreferredGoalAmount(user.id),
+      getFreeAccountGoalAmount(user.id),
+    ]);
   const managedHistory = managed
     ? history.filter(
         (record) =>
@@ -102,6 +112,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     holdings,
     defaultGoalAmount: latest?.goalAmount ?? 100_000_000,
     defaultMonthlyContribution: latest?.monthlyContribution ?? 0,
+    accountGoalAmount,
     analysisAsOfPreview: latestCachedMarketDate ?? latest?.result.asOf ?? null,
     hasUnappliedChanges: Boolean(
       managed?.portfolio.status === "active" &&
@@ -125,12 +136,20 @@ export async function action({ request }: Route.ActionArgs) {
       goalAmount: formData.get("goalAmount"),
       monthlyContribution: formData.get("monthlyContribution") || 0,
       confirmReset: formData.get("confirmReset") ?? undefined,
+      replaceExistingGoal: formData.get("replaceExistingGoal") ?? undefined,
     });
     const managed = await getManagedPortfolio(user.id);
     if (!managed)
       throw new Error("먼저 내 포트폴리오에서 매매일지를 작성해 주세요.");
     if (managed.portfolio.status !== "active" && parsed.confirmReset !== "on")
       throw new Error("정밀 분석 전환에 동의해 주세요.");
+    await assertFreeAccountGoal({
+      userId: user.id,
+      goalAmount: parsed.goalAmount,
+      replaceExistingGoal: parsed.replaceExistingGoal === "on",
+    });
+    const durableLimit = await consumeManualAnalysisLimit(request, user.id);
+    if (!durableLimit.allowed) return manualAnalysisLimitResponse(durableLimit);
 
     const holdings = calculateManagedHoldings(managed.transactions);
     if (!holdings.length)
@@ -173,11 +192,13 @@ export async function action({ request }: Route.ActionArgs) {
             result: completeResult,
             analysisMode: "managed",
             managedPortfolioId: managed.portfolio.managed_portfolio_id,
+            replaceOtherGoals: parsed.replaceExistingGoal === "on",
           })
         : await startManagedAnalysisHistory({
             userId: user.id,
             portfolioId: managed.portfolio.managed_portfolio_id,
             result: completeResult,
+            replaceOtherGoals: parsed.replaceExistingGoal === "on",
           });
     const month = saved.savedOn.slice(0, 7);
     return redirect(
@@ -193,6 +214,7 @@ export async function action({ request }: Route.ActionArgs) {
             : error instanceof Error
               ? error.message
               : "정밀 분석을 완료하지 못했어요.",
+        code: error instanceof FreeGoalConflictError ? error.code : undefined,
       },
       { status: 400 },
     );
@@ -205,6 +227,11 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
     loaderData;
   const [goalAmount, setGoalAmount] = useState("");
   const [monthlyContribution, setMonthlyContribution] = useState("");
+  const [analysisUsage, setAnalysisUsage] = useState<{
+    limit: number;
+    used: number;
+    remaining: number;
+  } | null>(null);
   const isActive = managed?.portfolio.status === "active";
   const goalPlaceholder = String(defaultGoalAmount);
   const contributionPlaceholder = String(
@@ -213,6 +240,18 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
   const parsedGoalAmount = Number(goalAmount);
   const parsedMonthlyContribution = Number(monthlyContribution);
   const displayedAnalysisDate = loaderData.analysisAsOfPreview;
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/stocks/analysis-limit", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((status: { limit: number; used: number; remaining: number }) => {
+        if (!cancelled) setAnalysisUsage(status);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const addMonthlyContribution = (amount: number) =>
     setMonthlyContribution(
       String(
@@ -368,8 +407,35 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
                   {actionData.error}
                 </p>
               )}
-              <Form method="post" className="mt-5 grid gap-4 sm:grid-cols-2">
+              <Form
+                method="post"
+                className="mt-5 grid gap-4 sm:grid-cols-2"
+                onSubmit={(event) => {
+                  const requestedGoal = Number(
+                    new FormData(event.currentTarget).get("goalAmount"),
+                  );
+                  const currentGoal = loaderData.accountGoalAmount;
+                  if (
+                    currentGoal == null ||
+                    requestedGoal === currentGoal ||
+                    !Number.isFinite(requestedGoal)
+                  )
+                    return;
+                  const confirmed = window.confirm(
+                    `무료 플랜에서는 목표 금액을 하나만 저장할 수 있어요.\n\n현재 목표 ${moneyLabel(currentGoal)}을 ${moneyLabel(requestedGoal)}으로 바꾸면 이전 목표의 분석 기록은 삭제돼요. 목표를 변경할까요?`,
+                  );
+                  if (!confirmed) {
+                    event.preventDefault();
+                    return;
+                  }
+                  const hidden = event.currentTarget.elements.namedItem(
+                    "replaceExistingGoal",
+                  );
+                  if (hidden instanceof HTMLInputElement) hidden.value = "on";
+                }}
+              >
                 <input type="hidden" name="intent" value="analyze-managed" />
+                <input type="hidden" name="replaceExistingGoal" value="" />
                 <div className="space-y-2">
                   <Label htmlFor="goalAmount">목표 금액</Label>
                   <Input
@@ -455,6 +521,16 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
                   AI 분석에는 종목명을 익명 식별자로 바꾼 계산 요약만 사용해요.
                   사용자 정보와 개별 매매일지 원문은 전달하지 않아요.
                 </p>
+                <div className="flex items-center justify-between gap-3 text-xs font-bold sm:col-span-2">
+                  <span className="text-muted-foreground">
+                    오늘의 무료 분석
+                  </span>
+                  <span className="rounded-full border border-emerald-500/25 bg-emerald-500/[0.08] px-2.5 py-1 text-emerald-600 tabular-nums dark:text-emerald-400">
+                    {analysisUsage
+                      ? `${analysisUsage.used}/${analysisUsage.limit}회 사용 · ${analysisUsage.remaining}회 남음`
+                      : "최대 5회"}
+                  </span>
+                </div>
                 <Button type="submit" size="lg" className="sm:col-span-2">
                   {isActive ? "정밀 분석 업데이트" : "정밀 분석 시작"}
                   <ArrowRightIcon />

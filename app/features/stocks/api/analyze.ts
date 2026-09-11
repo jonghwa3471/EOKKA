@@ -5,13 +5,19 @@ import { z } from "zod";
 
 import {
   checkRateLimit,
+  consumeManualAnalysisLimit,
+  manualAnalysisLimitResponse,
   rateLimitResponse,
 } from "~/core/lib/rate-limit.server";
 import makeServerClient from "~/core/lib/supa-client.server";
 
 import { generateAiStrategy } from "../ai-strategy.server";
 import { type AnalysisInput, analyzePortfolio } from "../analysis.server";
-import { saveDailyAnalysisSnapshot } from "../history/analysis-history.server";
+import {
+  FreeGoalConflictError,
+  assertFreeAccountGoal,
+  saveDailyAnalysisSnapshot,
+} from "../history/analysis-history.server";
 import { getManagedPortfolio } from "../portfolio/portfolio.server";
 
 const MAX_REQUEST_SIZE = 10_000;
@@ -20,6 +26,7 @@ const inputSchema = z
     goalAmount: z.number().int().min(100_000_000).max(100_000_000_000),
     monthlyContribution: z.number().int().min(0).max(1_000_000_000).default(0),
     investmentPeriodMonths: z.number().int().min(1).max(1_200).nullable(),
+    replaceExistingGoal: z.boolean().optional().default(false),
     holdings: z
       .array(
         z
@@ -72,7 +79,41 @@ export async function action({ request }: Route.ActionArgs) {
         { status: 400 },
       );
 
-    const input: AnalysisInput = validation.data;
+    const { replaceExistingGoal, ...input } = validation.data satisfies z.infer<
+      typeof inputSchema
+    >;
+    const [client] = makeServerClient(request);
+    const {
+      data: { user },
+    } = await client.auth.getUser();
+    const managed = user ? await getManagedPortfolio(user.id) : null;
+    if (user && managed?.portfolio.status !== "active") {
+      try {
+        await assertFreeAccountGoal({
+          userId: user.id,
+          goalAmount: input.goalAmount,
+          replaceExistingGoal,
+        });
+      } catch (error) {
+        if (error instanceof FreeGoalConflictError)
+          return data(
+            {
+              error: error.message,
+              code: error.code,
+              currentGoalAmount: error.currentGoalAmount,
+            },
+            { status: 409 },
+          );
+        throw error;
+      }
+    }
+
+    const durableLimit = await consumeManualAnalysisLimit(
+      request,
+      user?.id ?? null,
+    );
+    if (!durableLimit.allowed) return manualAnalysisLimitResponse(durableLimit);
+
     const result = await analyzePortfolio(input);
     let aiStrategy = null;
     try {
@@ -86,16 +127,12 @@ export async function action({ request }: Route.ActionArgs) {
     // for each goal and Seoul calendar day combination. Re-analysis after a
     // portfolio change replaces that goal's snapshot for the same day.
     try {
-      const [client] = makeServerClient(request);
-      const {
-        data: { user },
-      } = await client.auth.getUser();
       if (user) {
-        const managed = await getManagedPortfolio(user.id);
         if (managed?.portfolio.status !== "active") {
           await saveDailyAnalysisSnapshot({
             userId: user.id,
             result: completeResult,
+            replaceOtherGoals: replaceExistingGoal,
           });
         }
       }
@@ -104,7 +141,15 @@ export async function action({ request }: Route.ActionArgs) {
       console.error("Analysis snapshot save failed", snapshotError);
     }
 
-    return data(completeResult);
+    return data(completeResult, {
+      headers: {
+        "X-RateLimit-Limit": String(durableLimit.limit),
+        "X-RateLimit-Remaining": String(durableLimit.remaining),
+        ...(durableLimit.setCookie
+          ? { "Set-Cookie": durableLimit.setCookie }
+          : {}),
+      },
+    });
   } catch (error) {
     console.error("Stock analysis failed", error);
     return data(

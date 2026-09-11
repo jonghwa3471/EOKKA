@@ -7,6 +7,7 @@ import {
   jsonb,
   pgPolicy,
   pgTable,
+  primaryKey,
   text,
   uniqueIndex,
   uuid,
@@ -70,5 +71,19 @@ export const analysisSnapshots = pgTable(
       to: authenticatedRole,
       using: sql`${authUid} = ${table.user_id}`,
     }),
+  ],
+).enableRLS();
+
+export const analysisRateLimits = pgTable(
+  "analysis_rate_limits",
+  {
+    identifier_hash: text().notNull(),
+    window_on: date().notNull(),
+    count: integer().notNull().default(1),
+    created_at: timestamps.created_at,
+    updated_at: timestamps.updated_at,
+  },
+  (table) => [
+    primaryKey({ columns: [table.identifier_hash, table.window_on] }),
   ],
 ).enableRLS();

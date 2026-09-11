@@ -48,6 +48,7 @@ export default [
     ...prefix("/stocks", [
       route("/search", "features/stocks/api/search.ts"),
       route("/analyze", "features/stocks/api/analyze.ts"),
+      route("/analysis-limit", "features/stocks/api/analysis-limit.ts"),
     ]),
   ]),
 
