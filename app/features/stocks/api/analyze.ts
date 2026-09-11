@@ -10,11 +10,13 @@ import {
   rateLimitResponse,
 } from "~/core/lib/rate-limit.server";
 import makeServerClient from "~/core/lib/supa-client.server";
+import { getAutomaticAnalysisSettings } from "~/features/users/automatic-analysis-settings.server";
 
 import { generateAiStrategy } from "../ai-strategy.server";
 import { type AnalysisInput, analyzePortfolio } from "../analysis.server";
 import {
   FreeGoalConflictError,
+  ProGoalLimitError,
   assertFreeAccountGoal,
   saveDailyAnalysisSnapshot,
 } from "../history/analysis-history.server";
@@ -45,7 +47,7 @@ const inputSchema = z
           .strict(),
       )
       .min(1)
-      .max(10),
+      .max(20),
   })
   .strict();
 
@@ -87,7 +89,18 @@ export async function action({ request }: Route.ActionArgs) {
       data: { user },
     } = await client.auth.getUser();
     const managed = user ? await getManagedPortfolio(user.id) : null;
-    if (user && managed?.portfolio.status !== "active") {
+    const isPro = user
+      ? (await getAutomaticAnalysisSettings(user.id)).isPro
+      : false;
+    const holdingLimit = isPro ? 20 : 10;
+    if (input.holdings.length > holdingLimit)
+      return data(
+        {
+          error: `${isPro ? "EOKKA Pro" : "무료 분석"}에서는 최대 ${holdingLimit}개 종목까지 분석할 수 있어요.`,
+        },
+        { status: 400 },
+      );
+    if (user && isPro && managed?.portfolio.status !== "active") {
       try {
         await assertFreeAccountGoal({
           userId: user.id,
@@ -95,12 +108,18 @@ export async function action({ request }: Route.ActionArgs) {
           replaceExistingGoal,
         });
       } catch (error) {
-        if (error instanceof FreeGoalConflictError)
+        if (
+          error instanceof FreeGoalConflictError ||
+          error instanceof ProGoalLimitError
+        )
           return data(
             {
               error: error.message,
               code: error.code,
-              currentGoalAmount: error.currentGoalAmount,
+              currentGoalAmount:
+                error instanceof FreeGoalConflictError
+                  ? error.currentGoalAmount
+                  : undefined,
             },
             { status: 409 },
           );
@@ -123,11 +142,10 @@ export async function action({ request }: Route.ActionArgs) {
     }
     const completeResult = { ...result, aiStrategy };
 
-    // Anonymous analysis remains ephemeral. Signed-in users get one snapshot
-    // for each goal and Seoul calendar day combination. Re-analysis after a
-    // portfolio change replaces that goal's snapshot for the same day.
+    // Anonymous and free analyses remain ephemeral. Pro users get one snapshot
+    // for each goal and closing-price date combination.
     try {
-      if (user) {
+      if (user && isPro) {
         if (managed?.portfolio.status !== "active") {
           await saveDailyAnalysisSnapshot({
             userId: user.id,
@@ -141,15 +159,18 @@ export async function action({ request }: Route.ActionArgs) {
       console.error("Analysis snapshot save failed", snapshotError);
     }
 
-    return data(completeResult, {
-      headers: {
-        "X-RateLimit-Limit": String(durableLimit.limit),
-        "X-RateLimit-Remaining": String(durableLimit.remaining),
-        ...(durableLimit.setCookie
-          ? { "Set-Cookie": durableLimit.setCookie }
-          : {}),
+    return data(
+      { ...completeResult, historySaved: isPro },
+      {
+        headers: {
+          "X-RateLimit-Limit": String(durableLimit.limit),
+          "X-RateLimit-Remaining": String(durableLimit.remaining),
+          ...(durableLimit.setCookie
+            ? { "Set-Cookie": durableLimit.setCookie }
+            : {}),
+        },
       },
-    });
+    );
   } catch (error) {
     console.error("Stock analysis failed", error);
     return data(

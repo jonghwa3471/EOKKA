@@ -58,7 +58,7 @@ const aiStrategySchema = z.object({
       }),
     )
     .min(1)
-    .max(10),
+    .max(20),
   monthlyPlan: z.string().min(1).max(600),
   diversification: z.string().min(1).max(600),
   actions: z

@@ -3,6 +3,7 @@ import { createHmac, randomUUID } from "node:crypto";
 
 import db from "~/core/db/drizzle-client.server";
 import { analysisRateLimits } from "~/features/stocks/history/schema";
+import { profiles } from "~/features/users/schema";
 
 type RateLimitOptions = {
   key: string;
@@ -134,10 +135,14 @@ function secondsUntilNextSeoulDay() {
   return Math.max(1, 24 * 3600 - elapsed);
 }
 
-function durableIdentifiers(request: Request, userId: string | null) {
+function durableIdentifiers(
+  request: Request,
+  userId: string | null,
+  userLimit = 5,
+) {
   if (userId)
     return {
-      identifiers: [{ raw: `user:${userId}`, limit: 5 }],
+      identifiers: [{ raw: `user:${userId}`, limit: userLimit }],
       setCookie: null,
     };
 
@@ -156,6 +161,18 @@ function durableIdentifiers(request: Request, userId: string | null) {
     ],
     setCookie: existingBrowserId ? null : browserCookie(browserId),
   };
+}
+
+async function manualAnalysisLimit(userId: string | null) {
+  if (!userId) return 5;
+  const [profile] = await db
+    .select({ proExpiresAt: profiles.pro_expires_at })
+    .from(profiles)
+    .where(sql`${profiles.profile_id} = ${userId}`)
+    .limit(1);
+  return profile?.proExpiresAt && profile.proExpiresAt.getTime() > Date.now()
+    ? 15
+    : 5;
 }
 
 function rateLimitSecret() {
@@ -178,8 +195,8 @@ export async function getManualAnalysisLimitStatus(
   request: Request,
   userId: string | null,
 ) {
-  const limit = 5;
-  const identity = durableIdentifiers(request, userId);
+  const limit = await manualAnalysisLimit(userId);
+  const identity = durableIdentifiers(request, userId, limit);
   const hash = identifierHash(identity.identifiers[0].raw, rateLimitSecret());
   const [entry] = await db
     .select({ count: analysisRateLimits.count })
@@ -201,8 +218,8 @@ export async function consumeManualAnalysisLimit(
   request: Request,
   userId: string | null,
 ) {
-  const limit = 5;
-  const identity = durableIdentifiers(request, userId);
+  const limit = await manualAnalysisLimit(userId);
+  const identity = durableIdentifiers(request, userId, limit);
   const secret = rateLimitSecret();
   const windowOn = seoulDay();
   const entries = await db.transaction(async (transaction) => {

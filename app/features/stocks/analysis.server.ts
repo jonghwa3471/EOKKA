@@ -254,8 +254,8 @@ export async function analyzePortfolio(
       input.investmentPeriodMonths > 1_200)
   )
     throw new Error("투자 기간은 1개월 이상 100년 이하로 입력해 주세요.");
-  if (!input.holdings.length || input.holdings.length > 10)
-    throw new Error("분석할 종목은 1개 이상 10개 이하로 입력해 주세요.");
+  if (!input.holdings.length || input.holdings.length > 20)
+    throw new Error("분석할 종목은 1개 이상 20개 이하로 입력해 주세요.");
   if (
     input.holdings.some(
       ({ stockId, averagePrice, quantity, currency }) =>

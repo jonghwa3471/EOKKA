@@ -1,6 +1,5 @@
 import {
   BriefcaseBusinessIcon,
-  CalendarClockIcon,
   CalendarDaysIcon,
   ChartNoAxesCombinedIcon,
   MicroscopeIcon,
@@ -18,7 +17,6 @@ export type RouteSkeletonVariant =
   | "portfolio"
   | "precise-analysis"
   | "insights"
-  | "automatic-analysis"
   | "account"
   | "coming-soon"
   | "generic";
@@ -33,7 +31,6 @@ const dashboardMenu = [
   [ChartNoAxesCombinedIcon, "대시보드"],
   [BriefcaseBusinessIcon, "내 포트폴리오"],
   [MicroscopeIcon, "정밀 분석"],
-  [CalendarClockIcon, "자동 분석 설정"],
   [SparklesIcon, "투자 인사이트"],
   [CalendarDaysIcon, "분석 기록"],
 ] as const;
@@ -355,8 +352,6 @@ function SkeletonContent({ variant }: { variant: RouteSkeletonVariant }) {
       return <PreciseAnalysisSkeleton />;
     case "insights":
       return <InsightsSkeleton />;
-    case "automatic-analysis":
-      return <SettingsSkeleton />;
     case "account":
       return <SettingsSkeleton account />;
     case "coming-soon":
@@ -413,9 +408,7 @@ export function RouteTransitionSkeleton({
       <div
         className={cn(
           "mx-auto w-full px-5 py-8 md:px-8 md:py-12",
-          variant === "precise-analysis" || variant === "automatic-analysis"
-            ? "max-w-5xl"
-            : "max-w-7xl",
+          variant === "precise-analysis" ? "max-w-5xl" : "max-w-7xl",
         )}
       >
         <SkeletonContent variant={variant} />

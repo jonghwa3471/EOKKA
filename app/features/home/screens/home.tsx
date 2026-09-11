@@ -54,6 +54,7 @@ import { getStockMarketMode } from "~/features/stocks/market-mode.server";
 import { isManagedPortfolioActive } from "~/features/stocks/portfolio/portfolio.server";
 import type { StockSearchResult } from "~/features/stocks/types";
 import { markUserActive } from "~/features/users/activity.server";
+import { getAutomaticAnalysisSettings } from "~/features/users/automatic-analysis-settings.server";
 
 export const meta: Route.MetaFunction = ({ data }) => [
   { title: data?.title ?? "억까 — 내 주식, 목표까지" },
@@ -69,13 +70,19 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const marketMode = getStockMarketMode();
   if (user) await markUserActive(user.id);
-  const [allHistory, savedPreferredGoal, managedAnalysisActive] = user
+  const [
+    allHistory,
+    savedPreferredGoal,
+    managedAnalysisActive,
+    accountSettings,
+  ] = user
     ? await Promise.all([
         getActiveAnalysisHistory(user.id),
         getPreferredGoalAmount(user.id),
         isManagedPortfolioActive(user.id),
+        getAutomaticAnalysisSettings(user.id),
       ])
-    : [[], null, false];
+    : [[], null, false, null];
   const goalOptions = [
     ...new Set(allHistory.map((item) => item.goalAmount)),
   ].sort((a, b) => a - b);
@@ -201,6 +208,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     marketMode,
     analysisAsOfPreview: latestCachedMarketDate ?? latest?.result.asOf ?? null,
     isAuthenticated: user !== null,
+    isPro: accountSettings?.isPro ?? false,
+    savedGoalCount: goalOptions.length,
     managedAnalysisActive,
     moneyInsights:
       latest && preferredGoal
@@ -1222,6 +1231,8 @@ export default function Home() {
     marketMode,
     analysisAsOfPreview,
     isAuthenticated,
+    isPro,
+    savedGoalCount,
     managedAnalysisActive,
     moneyInsights,
   } = useLoaderData<typeof loader>();
@@ -1229,6 +1240,7 @@ export default function Home() {
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const isGlobalTest = marketMode === "global-test";
+  const quickHoldingLimit = isPro ? 20 : 10;
   const hasPortfolioDraft = Boolean(
     (location.state as { portfolioDraft?: unknown } | null)?.portfolioDraft,
   );
@@ -1373,7 +1385,7 @@ export default function Home() {
         if (
           Array.isArray(draft.holdings) &&
           draft.holdings.length > 0 &&
-          draft.holdings.length <= 10 &&
+          draft.holdings.length <= quickHoldingLimit &&
           draft.holdings.every(
             (holding) =>
               Number.isInteger(holding.id) &&
@@ -1532,7 +1544,7 @@ export default function Home() {
   };
 
   const addHolding = () => {
-    if (holdings.length >= 10) return;
+    if (holdings.length >= quickHoldingLimit) return;
     const nextId = Math.max(...holdings.map(({ id }) => id), 0) + 1;
     setHoldings((items) => [...items, emptyHolding(nextId)]);
   };
@@ -1771,7 +1783,7 @@ export default function Home() {
                           <p className="text-muted-foreground mt-1 text-sm">
                             {isGlobalTest
                               ? "국내 주식과 미국 주식을 KIS 시세로 테스트할 수 있어요."
-                              : "국내 주식과 ETF·ETN을 입력할 수 있어요. 로그인하면 분석 결과를 저장하고, 추가 매수 후에도 이어서 분석할 수 있어요."}
+                              : "국내 주식과 ETF·ETN을 입력할 수 있어요. Pro에서는 분석 기록을 저장하고 변화도 이어서 확인할 수 있어요."}
                           </p>
                         </div>
                       </div>
@@ -2026,13 +2038,13 @@ export default function Home() {
                         type="button"
                         variant="outline"
                         onClick={addHolding}
-                        disabled={holdings.length >= 10}
+                        disabled={holdings.length >= quickHoldingLimit}
                         className="h-11 w-full border-dashed"
                       >
                         <PlusIcon />
-                        {holdings.length >= 10
-                          ? "최대 10개까지 추가할 수 있어요"
-                          : `종목 추가하기 (${holdings.length}/10)`}
+                        {holdings.length >= quickHoldingLimit
+                          ? `최대 ${quickHoldingLimit}개까지 추가할 수 있어요`
+                          : `종목 추가하기 (${holdings.length}/${quickHoldingLimit})`}
                       </Button>
                     </div>
 
@@ -2141,6 +2153,13 @@ export default function Home() {
                         <p className="text-muted-foreground mt-1 text-xs">
                           1억부터 1,000억까지 원하는 목표를 입력할 수 있어요.
                         </p>
+                        {isPro && !managedAnalysisActive && (
+                          <p className="mt-2 text-xs font-bold text-amber-600 dark:text-amber-400">
+                            Pro에서는 목표 금액을 최대 3개까지 저장하며, 저장된
+                            모든 목표를 자동 분석해요. 현재 {savedGoalCount}/3개
+                            사용 중이에요.
+                          </p>
+                        )}
                         <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                           <div className="relative sm:w-44">
                             <Input
@@ -2327,20 +2346,24 @@ export default function Home() {
                   <BarChart3Icon className="size-7" />
                 </div>
                 <h2 className="mt-5 text-2xl font-black">
-                  첫 분석을 기다리고 있어요
+                  분석 기록은 Pro에서 시작할 수 있어요
                 </h2>
                 <p className="text-muted-foreground mx-auto mt-3 max-w-md text-sm leading-6">
-                  분석 기록이 쌓이면 오늘과 이번 달의 손익을 커피·치킨·여행 같은
-                  익숙한 물건으로 바꿔 보여드려요.
+                  무료로 분석 결과를 바로 확인할 수 있고, Pro에서는 결과를
+                  저장해 오늘과 이번 달의 변화를 계속 비교할 수 있어요.
                 </p>
-                <Button
-                  type="button"
-                  size="lg"
-                  className="mt-6"
-                  onClick={() => selectTab("quick")}
-                >
-                  첫 분석 시작하기
-                </Button>
+                <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+                  <Button
+                    type="button"
+                    size="lg"
+                    onClick={() => selectTab("quick")}
+                  >
+                    무료로 분석하기
+                  </Button>
+                  <Button asChild size="lg" variant="outline">
+                    <Link to="/dashboard/pro">Pro로 기록 시작하기</Link>
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="bg-card/90 rounded-3xl border p-8 text-center shadow-2xl shadow-black/5 backdrop-blur sm:p-12">
@@ -2351,8 +2374,8 @@ export default function Home() {
                   내 분석을 계속 이어보세요
                 </h2>
                 <p className="text-muted-foreground mx-auto mt-3 max-w-md text-sm leading-6">
-                  로그인하면 보유 종목과 분석 결과를 저장하고, 다시 방문할
-                  때마다 달라진 목표 도착일을 확인할 수 있어요.
+                  로그인하면 정밀 포트폴리오와 매매일지를 관리할 수 있어요. 분석
+                  기록과 변화 추적은 EOKKA Pro에서 제공해요.
                 </p>
                 <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
                   <Button asChild size="lg">
@@ -2371,6 +2394,7 @@ export default function Home() {
               <AnalysisResultView
                 result={analysis}
                 showAuthCta={!isAuthenticated}
+                showProHistoryCta={isAuthenticated && !isPro}
                 showContributionDetails
                 onStartManagedAnalysis={
                   managedAnalysisActive

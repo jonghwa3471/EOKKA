@@ -9,6 +9,17 @@ import { analysisSnapshots } from "./schema";
 
 export const FREE_HISTORY_LIMIT = 30;
 
+async function hasActivePro(userId: string) {
+  const [profile] = await db
+    .select({ proExpiresAt: profiles.pro_expires_at })
+    .from(profiles)
+    .where(eq(profiles.profile_id, userId))
+    .limit(1);
+  return (
+    profile?.proExpiresAt != null && profile.proExpiresAt.getTime() > Date.now()
+  );
+}
+
 export class FreeGoalConflictError extends Error {
   readonly code = "FREE_GOAL_CONFLICT";
 
@@ -17,11 +28,18 @@ export class FreeGoalConflictError extends Error {
   }
 }
 
+export class ProGoalLimitError extends Error {
+  readonly code = "PRO_GOAL_LIMIT";
+
+  constructor() {
+    super("EOKKA Pro에서는 목표 금액을 최대 3개까지 저장할 수 있어요.");
+  }
+}
+
 export async function getFreeAccountGoalAmount(userId: string) {
   const [profile] = await db
     .select({
       preferredGoalAmount: profiles.preferred_goal_amount,
-      automaticGoalAmount: profiles.automatic_analysis_goal_amount,
       proExpiresAt: profiles.pro_expires_at,
     })
     .from(profiles)
@@ -34,8 +52,6 @@ export async function getFreeAccountGoalAmount(userId: string) {
   )
     return null;
   if (profile?.preferredGoalAmount != null) return profile.preferredGoalAmount;
-  if (profile?.automaticGoalAmount != null) return profile.automaticGoalAmount;
-
   const [latest] = await db
     .select({ goalAmount: analysisSnapshots.goal_amount })
     .from(analysisSnapshots)
@@ -57,6 +73,22 @@ export async function assertFreeAccountGoal({
   goalAmount: number;
   replaceExistingGoal: boolean;
 }) {
+  const [profile] = await db
+    .select({ proExpiresAt: profiles.pro_expires_at })
+    .from(profiles)
+    .where(eq(profiles.profile_id, userId))
+    .limit(1);
+  const isPro =
+    profile?.proExpiresAt != null &&
+    profile.proExpiresAt.getTime() > Date.now();
+  if (isPro) {
+    const activeGoals = new Set(
+      (await getActiveAnalysisHistory(userId)).map((item) => item.goalAmount),
+    );
+    if (!activeGoals.has(goalAmount) && activeGoals.size >= 3)
+      throw new ProGoalLimitError();
+    return null;
+  }
   const currentGoalAmount = await getFreeAccountGoalAmount(userId);
   if (
     currentGoalAmount != null &&
@@ -90,7 +122,7 @@ function jsonSafeResult(result: AnalysisResult) {
 export async function saveDailyAnalysisSnapshot({
   userId,
   result,
-  hasUnlimitedHistory = false,
+  hasUnlimitedHistory = true,
   analysisMode = "quick",
   managedPortfolioId = null,
   updateSource = "manual",
@@ -104,6 +136,8 @@ export async function saveDailyAnalysisSnapshot({
   updateSource?: "manual" | "automatic";
   replaceOtherGoals?: boolean;
 }) {
+  if (!(await hasActivePro(userId)))
+    throw new Error("분석 기록 저장은 EOKKA Pro에서 이용할 수 있어요.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(result.asOf))
     throw new Error("분석 결과의 종가 기준일이 올바르지 않습니다.");
   const savedOn = result.asOf;
@@ -137,7 +171,6 @@ export async function saveDailyAnalysisSnapshot({
         .update(profiles)
         .set({
           preferred_goal_amount: values.goal_amount,
-          automatic_analysis_goal_amount: values.goal_amount,
           updated_at: new Date(),
         })
         .where(eq(profiles.profile_id, userId));
@@ -210,6 +243,8 @@ export async function startManagedAnalysisHistory({
   result: AnalysisResult;
   replaceOtherGoals?: boolean;
 }) {
+  if (!(await hasActivePro(userId)))
+    throw new Error("분석 기록 저장은 EOKKA Pro에서 이용할 수 있어요.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(result.asOf))
     throw new Error("분석 결과의 종가 기준일이 올바르지 않습니다.");
   const savedOn = result.asOf;
@@ -248,9 +283,6 @@ export async function startManagedAnalysisHistory({
       .update(profiles)
       .set({
         preferred_goal_amount: snapshot.goal_amount,
-        ...(replaceOtherGoals
-          ? { automatic_analysis_goal_amount: snapshot.goal_amount }
-          : {}),
       })
       .where(eq(profiles.profile_id, userId));
     await transaction

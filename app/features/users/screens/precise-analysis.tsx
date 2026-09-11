@@ -4,6 +4,7 @@ import {
   ArrowRightIcon,
   BriefcaseBusinessIcon,
   Clock3Icon,
+  CrownIcon,
   SparklesIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -21,9 +22,12 @@ import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
 import { generateAiStrategy } from "~/features/stocks/ai-strategy.server";
 import { analyzePortfolio } from "~/features/stocks/analysis.server";
+import type { AnalysisResult } from "~/features/stocks/analysis.types";
+import { AnalysisResultView } from "~/features/stocks/components/analysis-result";
 import { getLatestCachedMarketDate } from "~/features/stocks/fsc-client.server";
 import {
   FreeGoalConflictError,
+  ProGoalLimitError,
   assertFreeAccountGoal,
   getAnalysisHistory,
   getFreeAccountGoalAmount,
@@ -38,6 +42,7 @@ import {
   getManagedPortfolio,
   investmentMonthsSince,
 } from "~/features/stocks/portfolio/portfolio.server";
+import { getAutomaticAnalysisSettings } from "~/features/users/automatic-analysis-settings.server";
 
 const analysisSchema = z.object({
   goalAmount: z.coerce.number().int().min(100_000_000).max(100_000_000_000),
@@ -74,12 +79,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   } = await client.auth.getUser();
   if (!user) throw redirect("/login");
 
-  const [managed, history, preferredGoal, accountGoalAmount] =
+  const [managed, history, preferredGoal, accountGoalAmount, accountSettings] =
     await Promise.all([
       getManagedPortfolio(user.id),
       getAnalysisHistory(user.id),
       getPreferredGoalAmount(user.id),
       getFreeAccountGoalAmount(user.id),
+      getAutomaticAnalysisSettings(user.id),
     ]);
   const managedHistory = managed
     ? history.filter(
@@ -88,6 +94,10 @@ export async function loader({ request }: Route.LoaderArgs) {
           record.managedPortfolioId === managed.portfolio.managed_portfolio_id,
       )
     : [];
+  const activeHistory =
+    managed?.portfolio.status === "active"
+      ? managedHistory
+      : history.filter((record) => record.analysisMode === "quick");
   const preferredHistory = preferredGoal
     ? managedHistory.filter((record) => record.goalAmount === preferredGoal)
     : [];
@@ -113,6 +123,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     defaultGoalAmount: latest?.goalAmount ?? 100_000_000,
     defaultMonthlyContribution: latest?.monthlyContribution ?? 0,
     accountGoalAmount,
+    isPro: accountSettings.isPro,
+    savedGoalCount: new Set(activeHistory.map((record) => record.goalAmount))
+      .size,
     analysisAsOfPreview: latestCachedMarketDate ?? latest?.result.asOf ?? null,
     hasUnappliedChanges: Boolean(
       managed?.portfolio.status === "active" &&
@@ -132,30 +145,35 @@ export async function action({ request }: Route.ActionArgs) {
 
   try {
     const formData = await request.formData();
+    const managed = await getManagedPortfolio(user.id);
+    if (!managed)
+      throw new Error("먼저 내 포트폴리오에서 매매일지를 작성해 주세요.");
     const parsed = analysisSchema.parse({
       goalAmount: formData.get("goalAmount"),
       monthlyContribution: formData.get("monthlyContribution") || 0,
       confirmReset: formData.get("confirmReset") ?? undefined,
-      replaceExistingGoal: formData.get("replaceExistingGoal") ?? undefined,
+      replaceExistingGoal: formData.get("replaceExistingGoal") || undefined,
     });
-    const managed = await getManagedPortfolio(user.id);
-    if (!managed)
-      throw new Error("먼저 내 포트폴리오에서 매매일지를 작성해 주세요.");
     if (managed.portfolio.status !== "active" && parsed.confirmReset !== "on")
       throw new Error("정밀 분석 전환에 동의해 주세요.");
-    await assertFreeAccountGoal({
-      userId: user.id,
-      goalAmount: parsed.goalAmount,
-      replaceExistingGoal: parsed.replaceExistingGoal === "on",
-    });
+    const accountSettings = await getAutomaticAnalysisSettings(user.id);
+    if (accountSettings.isPro)
+      await assertFreeAccountGoal({
+        userId: user.id,
+        goalAmount: parsed.goalAmount,
+        replaceExistingGoal: parsed.replaceExistingGoal === "on",
+      });
     const durableLimit = await consumeManualAnalysisLimit(request, user.id);
     if (!durableLimit.allowed) return manualAnalysisLimitResponse(durableLimit);
 
     const holdings = calculateManagedHoldings(managed.transactions);
     if (!holdings.length)
       throw new Error("현재 보유 중인 종목이 없어 분석할 수 없어요.");
-    if (holdings.length > 10)
-      throw new Error("정밀 분석은 현재 최대 10개 보유 종목을 지원해요.");
+    const holdingLimit = accountSettings.isPro ? 20 : 10;
+    if (holdings.length > holdingLimit)
+      throw new Error(
+        `${accountSettings.isPro ? "EOKKA Pro" : "무료 플랜"} 정밀 분석은 최대 ${holdingLimit}개 보유 종목을 지원해요.`,
+      );
     const firstBoughtOn = managed.transactions.find(
       (item) => item.type === "BUY",
     )?.tradedOn;
@@ -184,6 +202,14 @@ export async function action({ request }: Route.ActionArgs) {
       console.error("Managed AI strategy generation failed", error);
     }
     const completeResult = { ...result, aiStrategy };
+
+    if (!accountSettings.isPro)
+      return data({
+        result: completeResult,
+        error: null,
+        code: undefined,
+        historySaved: false,
+      });
 
     const saved =
       managed.portfolio.status === "active"
@@ -214,7 +240,11 @@ export async function action({ request }: Route.ActionArgs) {
             : error instanceof Error
               ? error.message
               : "정밀 분석을 완료하지 못했어요.",
-        code: error instanceof FreeGoalConflictError ? error.code : undefined,
+        code:
+          error instanceof FreeGoalConflictError ||
+          error instanceof ProGoalLimitError
+            ? error.code
+            : undefined,
       },
       { status: 400 },
     );
@@ -240,6 +270,7 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
   const parsedGoalAmount = Number(goalAmount);
   const parsedMonthlyContribution = Number(monthlyContribution);
   const displayedAnalysisDate = loaderData.analysisAsOfPreview;
+  const ephemeralResult = (actionData?.result ?? null) as AnalysisResult | null;
   useEffect(() => {
     let cancelled = false;
     void fetch("/api/stocks/analysis-limit", { cache: "no-store" })
@@ -414,7 +445,9 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
                   const requestedGoal = Number(
                     new FormData(event.currentTarget).get("goalAmount"),
                   );
-                  const currentGoal = loaderData.accountGoalAmount;
+                  const currentGoal = loaderData.isPro
+                    ? loaderData.accountGoalAmount
+                    : null;
                   if (
                     currentGoal == null ||
                     requestedGoal === currentGoal ||
@@ -438,6 +471,13 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
                 <input type="hidden" name="replaceExistingGoal" value="" />
                 <div className="space-y-2">
                   <Label htmlFor="goalAmount">목표 금액</Label>
+                  {loaderData.isPro && (
+                    <p className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                      Pro에서는 목표 금액을 최대 3개까지 저장하며, 저장된 모든
+                      목표를 자동 분석해요. 현재 {loaderData.savedGoalCount}/3개
+                      사용 중이에요.
+                    </p>
+                  )}
                   <Input
                     id="goalAmount"
                     name="goalAmount"
@@ -513,8 +553,23 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
                       className="mt-1 size-4"
                       required
                     />
-                    기존 빠른 분석 기록은 보관하고 정밀 분석 기준으로 전환하는
-                    데 동의해요.
+                    <span>
+                      {loaderData.isPro ? (
+                        <>
+                          기존 빠른 분석 기록은 그대로 보관하고, 앞으로 정밀
+                          분석 기준으로 기록하는 데 동의해요.
+                        </>
+                      ) : (
+                        <>
+                          매매일지 정보를 사용해 정밀 분석을 진행하는 데
+                          동의해요.
+                          <strong className="mt-1 block text-amber-600 dark:text-amber-400">
+                            무료 플랜에서는 빠른 분석과 정밀 분석 결과가 모두
+                            저장되지 않아요.
+                          </strong>
+                        </>
+                      )}
+                    </span>
                   </label>
                 )}
                 <p className="rounded-2xl border border-violet-500/20 bg-violet-500/[0.06] px-4 py-3 text-xs leading-5 text-violet-700 sm:col-span-2 dark:text-violet-300">
@@ -537,6 +592,35 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
                 </Button>
               </Form>
             </section>
+            {!loaderData.isPro && (
+              <section className="mt-6 flex flex-col gap-4 rounded-3xl border border-amber-500/25 bg-gradient-to-r from-amber-500/[0.10] to-violet-500/[0.07] p-5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="flex items-center gap-2 font-black">
+                    <CrownIcon className="size-4 text-amber-500" /> 무료 분석
+                    결과는 저장되지 않아요
+                  </p>
+                  <p className="text-muted-foreground mt-1 text-sm leading-6">
+                    Pro에서는 정밀 분석 기록을 계속 보관하고 대시보드와
+                    인사이트에서 변화를 비교할 수 있어요.
+                  </p>
+                </div>
+                <Button
+                  asChild
+                  className="shrink-0 rounded-full bg-amber-500 text-black hover:bg-amber-400"
+                >
+                  <Link to="/dashboard/pro">Pro로 기록 저장하기</Link>
+                </Button>
+              </section>
+            )}
+            {ephemeralResult && (
+              <section className="mt-7">
+                <AnalysisResultView
+                  result={ephemeralResult}
+                  showAuthCta={false}
+                  showContributionDetails
+                />
+              </section>
+            )}
           </>
         )}
       </div>

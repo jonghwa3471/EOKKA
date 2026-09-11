@@ -79,26 +79,10 @@ export async function runAutomaticPortfolioAnalysis(): Promise<AutomaticAnalysis
   const profileRows = await db
     .select({
       userId: profiles.profile_id,
-      preferredGoalAmount: profiles.preferred_goal_amount,
-      automaticGoalAmount: profiles.automatic_analysis_goal_amount,
-      automaticMonthlyContribution:
-        profiles.automatic_analysis_monthly_contribution,
       lastActiveOn: profiles.last_active_on,
       proExpiresAt: profiles.pro_expires_at,
     })
     .from(profiles);
-  const preferredGoalByUser = new Map(
-    profileRows.map((profile) => [profile.userId, profile.preferredGoalAmount]),
-  );
-  const automaticSettingsByUser = new Map(
-    profileRows.map((profile) => [
-      profile.userId,
-      {
-        goalAmount: profile.automaticGoalAmount,
-        monthlyContribution: profile.automaticMonthlyContribution,
-      },
-    ]),
-  );
   const lastActiveByUser = new Map(
     profileRows.map((profile) => [profile.userId, profile.lastActiveOn]),
   );
@@ -124,38 +108,11 @@ export async function runAutomaticPortfolioAnalysis(): Promise<AutomaticAnalysis
       const sortedConfigurations = [...configurations].sort(
         (a, b) => a.goalAmount - b.goalAmount,
       );
-      const automaticSettings = automaticSettingsByUser.get(userId);
-      const savedPreferredGoal = preferredGoalByUser.get(userId);
-      const fallbackGoal =
-        savedPreferredGoal != null &&
-        sortedConfigurations.some(
-          (configuration) => configuration.goalAmount === savedPreferredGoal,
-        )
-          ? savedPreferredGoal
-          : (sortedConfigurations.find(
-              (configuration) => configuration.goalAmount === 100_000_000,
-            )?.goalAmount ?? sortedConfigurations[0]?.goalAmount);
-      const selectedGoal = automaticSettings?.goalAmount ?? fallbackGoal;
-      const exactConfiguration = sortedConfigurations.find(
-        (configuration) => configuration.goalAmount === selectedGoal,
-      );
-      const latestConfiguration = [...configurations].sort((a, b) => {
-        const dateDifference = b.savedOn.localeCompare(a.savedOn);
-        return dateDifference !== 0 ? dateDifference : b.id - a.id;
-      })[0];
-      const selectedConfiguration = exactConfiguration ?? latestConfiguration;
-
-      return selectedConfiguration
-        ? [
-            {
-              snapshot: selectedConfiguration,
-              goalAmount: selectedGoal,
-              monthlyContribution:
-                automaticSettings?.monthlyContribution ??
-                selectedConfiguration.monthlyContribution,
-            },
-          ]
-        : [];
+      return sortedConfigurations.slice(0, 3).map((configuration) => ({
+        snapshot: configuration,
+        goalAmount: configuration.goalAmount,
+        monthlyContribution: configuration.monthlyContribution,
+      }));
     },
   );
   const tickers = [
@@ -276,6 +233,7 @@ export async function runAutomaticPortfolioAnalysis(): Promise<AutomaticAnalysis
         analysisMode: snapshot.analysisMode as "quick" | "managed",
         managedPortfolioId: snapshot.managedPortfolioId,
         updateSource: "automatic",
+        hasUnlimitedHistory: true,
       });
       stats.analyzed += 1;
     } catch (error) {

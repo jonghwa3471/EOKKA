@@ -2321,11 +2321,13 @@ function CompoundGrowthChart({ result }: { result: AnalysisResult }) {
 export function AnalysisResultView({
   result,
   showAuthCta = true,
+  showProHistoryCta = false,
   showContributionDetails = false,
   onStartManagedAnalysis,
 }: {
   result: AnalysisResult;
   showAuthCta?: boolean;
+  showProHistoryCta?: boolean;
   showContributionDetails?: boolean;
   onStartManagedAnalysis?: () => void;
 }) {
@@ -3558,19 +3560,37 @@ export function AnalysisResultView({
         </div>
       )}
 
+      {showProHistoryCta && (
+        <div className="mt-5 flex flex-col gap-4 rounded-2xl border border-amber-500/25 bg-gradient-to-r from-amber-500/[0.10] to-violet-500/[0.07] p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-black">이번 분석은 저장되지 않아요</p>
+            <p className="text-muted-foreground mt-1 text-sm leading-6">
+              EOKKA Pro를 이용하면 분석 기록을 보관하고 대시보드와 주간·월간
+              인사이트에서 변화를 확인할 수 있어요.
+            </p>
+          </div>
+          <Button
+            asChild
+            className="shrink-0 rounded-full bg-amber-500 text-black hover:bg-amber-400"
+          >
+            <Link to="/dashboard/pro">Pro로 기록 저장하기</Link>
+          </Button>
+        </div>
+      )}
+
       {showAuthCta && (
         <div className="mt-5 rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 to-teal-500/5 p-5 sm:flex sm:items-center sm:justify-between sm:gap-6 sm:p-6">
           <div>
             <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
-              분석 결과를 계속 관리하고 싶다면
+              분석 결과는 지금 바로 확인할 수 있어요
             </p>
             <h3 className="mt-1 text-lg font-black">
-              로그인하고 이 분석 정보를 저장하세요
+              기록하고 비교하려면 EOKKA Pro를 이용하세요
             </h3>
             <p className="text-muted-foreground mt-2 max-w-xl text-sm leading-6">
               빠른 분석의 입력 정보는 현재 탭에서만 유지되며, 탭을 닫으면 자동
-              삭제됩니다. 가입하면 보유 종목과 분석 결과를 저장하고 다음
-              방문에도 이어서 확인할 수 있어요.
+              삭제됩니다. Pro에서는 분석 기록을 저장하고 대시보드와 인사이트에서
+              변화를 이어서 확인할 수 있어요.
             </p>
           </div>
           <div className="mt-5 flex shrink-0 gap-2 sm:mt-0">
@@ -3581,7 +3601,7 @@ export function AnalysisResultView({
               asChild
               className="bg-emerald-500 text-white hover:bg-emerald-600"
             >
-              <Link to="/join">무료 회원가입</Link>
+              <Link to="/dashboard/pro">Pro 알아보기</Link>
             </Button>
           </div>
         </div>

@@ -273,16 +273,14 @@ export default function App() {
         ? "precise-analysis"
         : targetPath.startsWith("/dashboard/insights")
           ? "insights"
-          : targetPath.startsWith("/dashboard/automatic-analysis")
-            ? "automatic-analysis"
-            : targetPath.startsWith("/account/")
-              ? "account"
-              : targetPath.startsWith("/dashboard/pro") ||
-                  targetPath.startsWith("/dashboard/payments")
-                ? "coming-soon"
-                : targetPath.startsWith("/dashboard")
-                  ? "dashboard"
-                  : "generic";
+          : targetPath.startsWith("/account/")
+            ? "account"
+            : targetPath.startsWith("/dashboard/pro") ||
+                targetPath.startsWith("/dashboard/payments")
+              ? "coming-soon"
+              : targetPath.startsWith("/dashboard")
+                ? "dashboard"
+                : "generic";
   const [showBlockingLoader, setShowBlockingLoader] = useState(false);
   const [showRouteSkeleton, setShowRouteSkeleton] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);

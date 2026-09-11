@@ -58,6 +58,7 @@ import {
 } from "~/features/stocks/portfolio/portfolio.server";
 import { stocks } from "~/features/stocks/schema";
 import type { StockSearchResult } from "~/features/stocks/types";
+import { getAutomaticAnalysisSettings } from "~/features/users/automatic-analysis-settings.server";
 
 export const meta: Route.MetaFunction = () => [
   { title: `내 포트폴리오 | ${import.meta.env.VITE_APP_NAME}` },
@@ -72,19 +73,15 @@ const transactionSchema = z.object({
   memo: z.string().trim().max(300),
 });
 
-const MAX_MANAGED_HOLDINGS = 10;
-const managedHoldingLimitMessage =
-  "현재 포트폴리오는 최대 10개 종목까지 보유할 수 있어요. 기존 종목을 전량 매도하거나 관련 거래를 삭제한 후 새 종목을 추가해 주세요.";
-
 function assertManagedHoldingLimit(
   holdingCount: number,
-  previousHoldingCount = MAX_MANAGED_HOLDINGS,
+  holdingLimit: number,
+  previousHoldingCount = holdingLimit,
 ) {
-  if (
-    holdingCount > MAX_MANAGED_HOLDINGS &&
-    holdingCount > previousHoldingCount
-  )
-    throw new Error(managedHoldingLimitMessage);
+  if (holdingCount > holdingLimit && holdingCount > previousHoldingCount)
+    throw new Error(
+      `현재 포트폴리오는 최대 ${holdingLimit}개 종목까지 보유할 수 있어요. 기존 종목을 전량 매도하거나 관련 거래를 삭제한 후 새 종목을 추가해 주세요.`,
+    );
 }
 
 const pendingTransactionUpdateSchema = transactionSchema
@@ -191,9 +188,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   } = await client.auth.getUser();
   if (!user) throw redirect("/login");
 
-  const [managed, quickHistory] = await Promise.all([
+  const [managed, quickHistory, accountSettings] = await Promise.all([
     getManagedPortfolio(user.id),
     getAnalysisHistory(user.id),
+    getAutomaticAnalysisSettings(user.id),
   ]);
   const holdings = managed
     ? calculateManagedHoldings(managed.transactions)
@@ -225,6 +223,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     holdings,
     lastManagedAnalysisAt,
     hasUnappliedChanges,
+    holdingLimit: accountSettings.isPro ? 20 : 10,
   };
 }
 
@@ -237,6 +236,9 @@ export async function action({ request }: Route.ActionArgs) {
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
+  const holdingLimit = (await getAutomaticAnalysisSettings(user.id)).isPro
+    ? 20
+    : 10;
 
   try {
     if (intent === "add-transaction") {
@@ -270,7 +272,7 @@ export async function action({ request }: Route.ActionArgs) {
       );
 
       if (parsed.type === "BUY" && !currentHolding)
-        assertManagedHoldingLimit(currentHoldings.length + 1);
+        assertManagedHoldingLimit(currentHoldings.length + 1, holdingLimit);
 
       if (parsed.type === "SELL") {
         if (!currentHolding || parsed.quantity > currentHolding.quantity + 1e-8)
@@ -316,6 +318,7 @@ export async function action({ request }: Route.ActionArgs) {
       );
       assertManagedHoldingLimit(
         remainingHoldings.length,
+        holdingLimit,
         currentHoldingCount,
       );
       await deletePortfolioTransaction(user.id, transactionId);
@@ -360,7 +363,11 @@ export async function action({ request }: Route.ActionArgs) {
         currentHoldings.map((holding) => holding.stockId),
       );
       stockIds.forEach((stockId) => currentStockIds.add(stockId));
-      assertManagedHoldingLimit(currentStockIds.size, currentHoldings.length);
+      assertManagedHoldingLimit(
+        currentStockIds.size,
+        holdingLimit,
+        currentHoldings.length,
+      );
 
       const transactions = await Promise.all(
         parsed.map(async (holding) => {
@@ -440,7 +447,11 @@ export async function action({ request }: Route.ActionArgs) {
       const currentHoldingCount = calculateManagedHoldings(
         managed.transactions,
       ).length;
-      assertManagedHoldingLimit(updatedHoldings.length, currentHoldingCount);
+      assertManagedHoldingLimit(
+        updatedHoldings.length,
+        holdingLimit,
+        currentHoldingCount,
+      );
       await updatePortfolioTransactions(user.id, preparedUpdates);
 
       return data({
@@ -972,7 +983,8 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
               <div>
                 <h2 className="text-xl font-black">현재 보유 현황</h2>
                 <p className="text-muted-foreground mt-1 text-xs">
-                  매매일지 기준 {holdings.length}/{MAX_MANAGED_HOLDINGS}개 종목
+                  매매일지 기준 {holdings.length}/{loaderData.holdingLimit}개
+                  종목
                 </p>
               </div>
               <BookOpenIcon className="size-5 text-violet-500" />
@@ -987,10 +999,7 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
                   return (
                     <div
                       key={holding.stockId}
-                      className={cn(
-                        "rounded-2xl border p-4",
-                        tone.card,
-                      )}
+                      className={cn("rounded-2xl border p-4", tone.card)}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -1031,7 +1040,7 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
                         </Button>
                       </div>
                       <div className="mt-4 grid grid-cols-2 gap-2">
-                        <div className="rounded-xl border border-black/5 bg-background/55 px-3 py-2.5 dark:border-white/5 dark:bg-black/15">
+                        <div className="bg-background/55 rounded-xl border border-black/5 px-3 py-2.5 dark:border-white/5 dark:bg-black/15">
                           <p className="text-muted-foreground text-[11px] font-bold">
                             평균 매수가
                           </p>
@@ -1042,7 +1051,7 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
                             )}
                           </p>
                         </div>
-                        <div className="rounded-xl border border-black/5 bg-background/55 px-3 py-2.5 dark:border-white/5 dark:bg-black/15">
+                        <div className="bg-background/55 rounded-xl border border-black/5 px-3 py-2.5 dark:border-white/5 dark:bg-black/15">
                           <p className="text-muted-foreground text-[11px] font-bold">
                             보유 수량
                           </p>
@@ -1053,7 +1062,7 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
                             주
                           </p>
                         </div>
-                        <div className="rounded-xl border border-black/5 bg-background/55 px-3 py-2.5 dark:border-white/5 dark:bg-black/15">
+                        <div className="bg-background/55 rounded-xl border border-black/5 px-3 py-2.5 dark:border-white/5 dark:bg-black/15">
                           <p className="text-muted-foreground text-[11px] font-bold">
                             원화 매입원금
                           </p>
@@ -1061,7 +1070,7 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
                             {formatWon(holding.costKrw)}
                           </p>
                         </div>
-                        <div className="rounded-xl border border-black/5 bg-background/55 px-3 py-2.5 dark:border-white/5 dark:bg-black/15">
+                        <div className="bg-background/55 rounded-xl border border-black/5 px-3 py-2.5 dark:border-white/5 dark:bg-black/15">
                           <p className="text-muted-foreground text-[11px] font-bold">
                             매입원금 비중
                           </p>
@@ -1132,9 +1141,8 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
                     setEditingTransactionId(null);
                   }}
                 >
-                  {holdings.find(
-                    (holding) => holding.stockId === holdingFilter,
-                  )?.name ?? "선택 종목"}{" "}
+                  {holdings.find((holding) => holding.stockId === holdingFilter)
+                    ?.name ?? "선택 종목"}{" "}
                   <XIcon className="size-3.5" />
                 </Button>
               )}
