@@ -136,6 +136,18 @@ export interface AiStrategy {
     rayDalio: string;
     joelGreenblatt: string;
   };
+  committeeAdvice?: {
+    warrenBuffett: string;
+    charlieMunger: string;
+    benjaminGraham: string;
+    peterLynch: string;
+    philipFisher: string;
+    johnTempleton: string;
+    johnBogle: string;
+    howardMarks: string;
+    rayDalio: string;
+    joelGreenblatt: string;
+  };
   committeeConclusion?: string;
   overallCommitteeScore?: number;
   committeeScores?: {

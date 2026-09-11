@@ -22,10 +22,17 @@ export async function getFreeAccountGoalAmount(userId: string) {
     .select({
       preferredGoalAmount: profiles.preferred_goal_amount,
       automaticGoalAmount: profiles.automatic_analysis_goal_amount,
+      proExpiresAt: profiles.pro_expires_at,
     })
     .from(profiles)
     .where(eq(profiles.profile_id, userId))
     .limit(1);
+  if (
+    profile?.proExpiresAt !== null &&
+    profile?.proExpiresAt !== undefined &&
+    profile.proExpiresAt.getTime() > Date.now()
+  )
+    return null;
   if (profile?.preferredGoalAmount != null) return profile.preferredGoalAmount;
   if (profile?.automaticGoalAmount != null) return profile.automaticGoalAmount;
 

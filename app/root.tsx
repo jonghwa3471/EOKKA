@@ -263,6 +263,26 @@ export default function App() {
   const isInsideDashboardShell =
     location.pathname.startsWith("/dashboard") ||
     location.pathname.startsWith("/account/");
+  const isTargetInsideDashboardShell =
+    targetPath.startsWith("/dashboard") || targetPath.startsWith("/account/");
+  const targetSkeletonVariant = targetPath.startsWith("/dashboard/history")
+    ? "history"
+    : targetPath.startsWith("/dashboard/portfolio")
+      ? "portfolio"
+      : targetPath.startsWith("/dashboard/precise-analysis")
+        ? "precise-analysis"
+        : targetPath.startsWith("/dashboard/insights")
+          ? "insights"
+          : targetPath.startsWith("/dashboard/automatic-analysis")
+            ? "automatic-analysis"
+            : targetPath.startsWith("/account/")
+              ? "account"
+              : targetPath.startsWith("/dashboard/pro") ||
+                  targetPath.startsWith("/dashboard/payments")
+                ? "coming-soon"
+                : targetPath.startsWith("/dashboard")
+                  ? "dashboard"
+                  : "generic";
   const [showBlockingLoader, setShowBlockingLoader] = useState(false);
   const [showRouteSkeleton, setShowRouteSkeleton] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
@@ -429,9 +449,15 @@ export default function App() {
     <Sheet>
       <Dialog>
         <Outlet />
-        {showRouteSkeleton && !isInsideDashboardShell && (
-          <RouteTransitionSkeleton />
-        )}
+        {showRouteSkeleton &&
+          (!isInsideDashboardShell || !isTargetInsideDashboardShell) && (
+            <RouteTransitionSkeleton
+              variant={targetSkeletonVariant}
+              withDashboardShell={
+                !isInsideDashboardShell && isTargetInsideDashboardShell
+              }
+            />
+          )}
         {showBlockingLoader && (
           <InvestmentActionLoader
             title={loadingCopy.title}

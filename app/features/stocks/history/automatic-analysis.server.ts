@@ -84,6 +84,7 @@ export async function runAutomaticPortfolioAnalysis(): Promise<AutomaticAnalysis
       automaticMonthlyContribution:
         profiles.automatic_analysis_monthly_contribution,
       lastActiveOn: profiles.last_active_on,
+      proExpiresAt: profiles.pro_expires_at,
     })
     .from(profiles);
   const preferredGoalByUser = new Map(
@@ -102,7 +103,17 @@ export async function runAutomaticPortfolioAnalysis(): Promise<AutomaticAnalysis
     profileRows.map((profile) => [profile.userId, profile.lastActiveOn]),
   );
   const configurationsByUser = new Map<string, (typeof snapshots)[number][]>();
+  const proUserIds = new Set(
+    profileRows
+      .filter(
+        (profile) =>
+          profile.proExpiresAt !== null &&
+          profile.proExpiresAt.getTime() > Date.now(),
+      )
+      .map((profile) => profile.userId),
+  );
   for (const configuration of latestConfigurations.values()) {
+    if (!proUserIds.has(configuration.userId)) continue;
     const configurations = configurationsByUser.get(configuration.userId);
     if (configurations) configurations.push(configuration);
     else configurationsByUser.set(configuration.userId, [configuration]);

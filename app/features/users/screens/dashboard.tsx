@@ -49,30 +49,67 @@ export const meta: Route.MetaFunction = () => [
   { title: `내 투자 대시보드 | ${import.meta.env.VITE_APP_NAME}` },
 ];
 
+function nextAutomaticAnalysisLabel(now = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Seoul",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(now)
+      .map((part) => [part.type, part.value]),
+  );
+  let candidate = new Date(
+    Date.UTC(
+      Number(parts.year),
+      Number(parts.month) - 1,
+      Number(parts.day),
+      5,
+      30,
+    ),
+  );
+  if (candidate.getTime() <= now.getTime())
+    candidate = new Date(candidate.getTime() + 86_400_000);
+  while (candidate.getUTCDay() === 0 || candidate.getUTCDay() === 6)
+    candidate = new Date(candidate.getTime() + 86_400_000);
+
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(candidate);
+}
+
 export async function loader({ request }: Route.LoaderArgs) {
   const [
     { default: makeServerClient },
-    {
-      FREE_HISTORY_LIMIT,
-      getActiveAnalysisHistory,
-      getPreferredGoalAmount,
-      seoulDate,
-    },
+    { FREE_HISTORY_LIMIT, getActiveAnalysisHistory, getPreferredGoalAmount },
+    { getAutomaticAnalysisSettings },
+    { getLatestCachedMarketDate },
+    { getStockMarketMode },
   ] = await Promise.all([
     import("~/core/lib/supa-client.server"),
     import("~/features/stocks/history/analysis-history.server"),
+    import("~/features/users/automatic-analysis-settings.server"),
+    import("~/features/stocks/fsc-client.server"),
+    import("~/features/stocks/market-mode.server"),
   ]);
   const [client] = makeServerClient(request);
   const {
     data: { user },
   } = await client.auth.getUser();
 
-  const [allHistory, savedPreferredGoal] = user
+  const [allHistory, savedPreferredGoal, automaticSettings] = user
     ? await Promise.all([
         getActiveAnalysisHistory(user.id),
         getPreferredGoalAmount(user.id),
+        getAutomaticAnalysisSettings(user.id),
       ])
-    : [[], null];
+    : [[], null, null];
   const goalOptions = [
     ...new Set(allHistory.map((item) => item.goalAmount)),
   ].sort((a, b) => a - b);
@@ -89,7 +126,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   const history = Array.from(
     new Map(goalHistory.map((item) => [item.savedOn, item])).values(),
   );
-  const today = seoulDate();
+  const historyLatestMarketDate = allHistory
+    .map((item) => item.result.asOf)
+    .sort((a, b) => b.localeCompare(a))[0];
+  const latestMarketDate =
+    getStockMarketMode() === "domestic"
+      ? ((await getLatestCachedMarketDate()) ?? historyLatestMarketDate ?? null)
+      : (historyLatestMarketDate ?? null);
 
   return {
     history,
@@ -101,7 +144,12 @@ export async function loader({ request }: Route.LoaderArgs) {
       user?.email?.split("@")[0] ??
       "사용자",
     historyLimit: FREE_HISTORY_LIMIT,
-    today,
+    latestMarketDate,
+    isPro: automaticSettings?.isPro ?? false,
+    automaticGoalAmount: automaticSettings?.isPro
+      ? (automaticSettings.goalAmount ?? preferredGoal ?? null)
+      : null,
+    nextAutomaticAnalysis: nextAutomaticAnalysisLabel(),
   };
 }
 
@@ -1821,8 +1869,17 @@ function WeeklyAwardCard({
 }
 
 export default function Dashboard({ loaderData }: Route.ComponentProps) {
-  const { history, name, historyLimit, goalOptions, preferredGoal, today } =
-    loaderData;
+  const {
+    history,
+    name,
+    historyLimit,
+    goalOptions,
+    preferredGoal,
+    latestMarketDate,
+    automaticGoalAmount,
+    nextAutomaticAnalysis,
+    isPro,
+  } = loaderData;
   const [dimmedTrendSeries, setDimmedTrendSeries] = useState<TrendSeries[]>([]);
   const toggleTrendSeries = (series: TrendSeries) =>
     setDimmedTrendSeries((current) =>
@@ -1864,21 +1921,14 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
     );
   }
 
-  const checkedTodayAnalysis = [...history].reverse().find(
-    (item) =>
-      new Intl.DateTimeFormat("en-CA", {
-        timeZone: "Asia/Seoul",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }).format(new Date(item.updatedAt)) === today,
-  );
-  const checkedAnalysisHref = checkedTodayAnalysis
-    ? `/dashboard/history?month=${checkedTodayAnalysis.savedOn.slice(0, 7)}&date=${checkedTodayAnalysis.savedOn}&analysis=${checkedTodayAnalysis.id}`
+  const hasLatestCloseAnalysis =
+    latestMarketDate === null || latest.savedOn === latestMarketDate;
+  const isAutomaticGoal = isPro && latest.goalAmount === automaticGoalAmount;
+  const checkedAnalysisHref = hasLatestCloseAnalysis
+    ? `/dashboard/history?month=${latest.savedOn.slice(0, 7)}&date=${latest.savedOn}&analysis=${latest.id}`
     : null;
-  const todayCloseAvailable = latest.savedOn === today;
-  const wasAutomaticallyUpdated =
-    checkedTodayAnalysis?.updateSource === "automatic";
+  const manualAnalysisHref =
+    latest.analysisMode === "managed" ? "/dashboard/precise-analysis" : "/";
 
   const assetChange = difference(
     latest.currentValue,
@@ -1956,7 +2006,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
         <section
           className={cn(
             "mt-6 flex flex-col gap-4 rounded-2xl border px-5 py-4 sm:flex-row sm:items-center sm:justify-between",
-            checkedTodayAnalysis
+            hasLatestCloseAnalysis
               ? "border-emerald-500/25 bg-emerald-500/[0.07]"
               : "border-amber-500/25 bg-amber-500/[0.07]",
           )}
@@ -1965,12 +2015,12 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             <span
               className={cn(
                 "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl",
-                checkedTodayAnalysis
+                hasLatestCloseAnalysis
                   ? "bg-emerald-500/15 text-emerald-500"
                   : "bg-amber-500/15 text-amber-500",
               )}
             >
-              {checkedTodayAnalysis ? (
+              {hasLatestCloseAnalysis ? (
                 <CheckCircle2Icon className="size-5" />
               ) : (
                 <RefreshCwIcon className="size-5" />
@@ -1978,36 +2028,56 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             </span>
             <div>
               <p className="font-black">
-                {checkedTodayAnalysis
-                  ? wasAutomaticallyUpdated
-                    ? "새 종가 분석이 자동 업데이트됐어요"
-                    : todayCloseAvailable
-                      ? "오늘 종가까지 분석에 반영했어요"
-                      : "오늘 최신 종가를 확인했어요"
-                  : "최신 종가 자동 분석을 기다리고 있어요"}
+                {hasLatestCloseAnalysis
+                  ? "최신 종가가 분석에 반영됐어요"
+                  : !isPro
+                    ? "새 종가로 포트폴리오를 업데이트할 수 있어요"
+                    : "최신 종가 분석이 아직 필요해요"}
               </p>
               <p className="text-muted-foreground mt-1 text-sm leading-6">
-                {checkedTodayAnalysis
-                  ? wasAutomaticallyUpdated
-                    ? `${latest.savedOn} 새 종가가 반영되어 분석 기록과 대시보드가 자동 업데이트됐어요.`
-                    : todayCloseAvailable
-                      ? `${latest.savedOn} 종가 기준으로 수동 업데이트했어요.`
-                      : `${latest.savedOn} 종가 기준이에요. 오늘 종가는 아직 제공되지 않아 같은 종가 기록을 갱신했어요.`
-                  : `${latest.savedOn} 종가까지 반영돼 있어요. 새 종가가 제공되면 예약된 자동 분석이 해당 날짜의 기록을 추가해요.`}
+                {hasLatestCloseAnalysis
+                  ? `${latest.savedOn} 종가 기준 분석이에요.`
+                  : `현재 ${latest.savedOn} 종가까지 반영됐어요. 최신 확정 종가는 ${latestMarketDate}이에요.`}
               </p>
-              <p className="text-muted-foreground mt-2 text-xs font-semibold">
-                거래일마다 오후 2:30 자동 업데이트
+              <p
+                className={cn(
+                  "mt-2 text-xs font-semibold",
+                  isAutomaticGoal
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-muted-foreground",
+                )}
+              >
+                {isAutomaticGoal
+                  ? `다음 자동 분석 예정 · ${nextAutomaticAnalysis}`
+                  : !isPro
+                    ? hasLatestCloseAnalysis
+                      ? "무료 플랜은 필요할 때 직접 분석해 업데이트할 수 있어요."
+                      : "무료 플랜은 자동 분석되지 않아요. 아래 링크에서 최신 종가를 직접 반영해 주세요."
+                    : "이 목표는 자동 분석 중이 아니에요."}
               </p>
             </div>
           </div>
-          {checkedAnalysisHref && (
+          {checkedAnalysisHref ? (
             <Link
               to={checkedAnalysisHref}
               className="inline-flex shrink-0 items-center gap-1.5 self-start text-sm font-black text-emerald-500 transition-colors hover:text-emerald-400 sm:self-center"
             >
               분석 보기 <ArrowRightIcon className="size-4" />
             </Link>
-          )}
+          ) : !isAutomaticGoal ? (
+            <Link
+              to={manualAnalysisHref}
+              state={
+                latest.analysisMode === "quick"
+                  ? { openQuickAnalysis: true }
+                  : undefined
+              }
+              className="inline-flex shrink-0 items-center gap-1.5 self-start text-sm font-black text-amber-600 transition-colors hover:text-amber-500 sm:self-center dark:text-amber-400"
+            >
+              {!isPro ? "최신 종가로 업데이트" : "직접 분석하기"}{" "}
+              <ArrowRightIcon className="size-4" />
+            </Link>
+          ) : null}
         </section>
 
         {goalOptions.length > 1 && (

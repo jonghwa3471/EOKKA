@@ -1,3 +1,14 @@
+import {
+  BriefcaseBusinessIcon,
+  CalendarClockIcon,
+  CalendarDaysIcon,
+  ChartNoAxesCombinedIcon,
+  MicroscopeIcon,
+  PanelLeftIcon,
+  SparklesIcon,
+} from "lucide-react";
+
+import { EokkaLogo } from "~/core/components/eokka-logo";
 import { Skeleton } from "~/core/components/ui/skeleton";
 import { cn } from "~/core/lib/utils";
 
@@ -14,7 +25,69 @@ export type RouteSkeletonVariant =
 
 interface RouteTransitionSkeletonProps {
   withinDashboard?: boolean;
+  withDashboardShell?: boolean;
   variant?: RouteSkeletonVariant;
+}
+
+const dashboardMenu = [
+  [ChartNoAxesCombinedIcon, "대시보드"],
+  [BriefcaseBusinessIcon, "내 포트폴리오"],
+  [MicroscopeIcon, "정밀 분석"],
+  [CalendarClockIcon, "자동 분석 설정"],
+  [SparklesIcon, "투자 인사이트"],
+  [CalendarDaysIcon, "분석 기록"],
+] as const;
+
+function ImmediateDashboardSidebar() {
+  return (
+    <aside className="hidden h-svh w-64 shrink-0 p-2 md:block">
+      <div className="bg-sidebar/92 border-sidebar-border/70 flex h-full w-full flex-col overflow-hidden rounded-2xl border shadow-[0_20px_55px_-28px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:shadow-[0_24px_65px_-30px_rgba(0,0,0,0.9)]">
+        <div className="border-sidebar-border/60 border-b p-3">
+          <div className="flex h-12 items-center gap-3 px-2">
+            <EokkaLogo className="size-10" priority />
+            <div className="leading-tight">
+              <p className="bg-gradient-to-r from-emerald-500 to-violet-500 bg-clip-text font-black tracking-[-0.03em] text-transparent">
+                EOKKA
+              </p>
+              <p className="text-sidebar-foreground/50 text-[10px] font-bold tracking-[0.08em]">
+                INVESTMENT LAB
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 px-3 py-3">
+          <p className="text-sidebar-foreground/50 mb-2 flex h-8 items-center gap-2 px-2 text-xs font-bold">
+            <span className="size-1.5 rounded-full bg-emerald-500" />내 투자
+          </p>
+          <div className="space-y-1">
+            {dashboardMenu.map(([Icon, label], index) => (
+              <div
+                key={label}
+                className={cn(
+                  "flex h-8 items-center gap-2 rounded-md px-2 text-sm font-medium",
+                  index === 0
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/70",
+                )}
+              >
+                <Icon className="size-4" />
+                <span>{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="border-sidebar-border/60 border-t bg-gradient-to-t from-emerald-500/4 to-transparent p-3">
+          <div className="flex h-[68px] items-center gap-3 rounded-2xl border px-3">
+            <Skeleton className="size-10 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-3 w-20 rounded-full" />
+              <Skeleton className="h-3 w-32 rounded-full" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
 }
 
 function PageHeading({ action = false }: { action?: boolean }) {
@@ -295,8 +368,35 @@ function SkeletonContent({ variant }: { variant: RouteSkeletonVariant }) {
 
 export function RouteTransitionSkeleton({
   withinDashboard = false,
+  withDashboardShell = false,
   variant = "generic",
 }: RouteTransitionSkeletonProps) {
+  if (withDashboardShell)
+    return (
+      <div
+        className="fixed inset-0 z-[9998] flex min-h-svh w-full overflow-hidden bg-[radial-gradient(circle_at_0%_0%,rgba(16,185,129,0.08),transparent_28%),radial-gradient(circle_at_22%_85%,rgba(139,92,246,0.08),transparent_30%)]"
+        role="status"
+        aria-live="polite"
+        aria-label="대시보드 이동 중"
+      >
+        <ImmediateDashboardSidebar />
+        <div className="bg-background border-border/60 m-0 flex min-w-0 flex-1 flex-col overflow-hidden md:m-2 md:ml-0 md:rounded-2xl md:border md:shadow-[0_18px_50px_-30px_rgba(15,23,42,0.4)]">
+          <div className="bg-background/80 border-border/60 relative flex h-16 shrink-0 items-center border-b px-5 shadow-[0_10px_30px_-26px_rgba(15,23,42,0.55)] backdrop-blur-xl">
+            <span className="border-border/60 bg-background/70 -ml-1 flex size-8 items-center justify-center rounded-xl border shadow-sm">
+              <PanelLeftIcon className="size-4" />
+            </span>
+            <span className="ml-3 text-sm font-black tracking-[-0.02em]">
+              내 투자 대시보드
+            </span>
+            <span className="ml-3 size-1.5 rounded-full bg-emerald-500" />
+          </div>
+          <div className="mx-auto w-full max-w-7xl px-5 py-8 md:px-8 md:py-12">
+            <SkeletonContent variant={variant} />
+          </div>
+        </div>
+      </div>
+    );
+
   return (
     <div
       className={cn(

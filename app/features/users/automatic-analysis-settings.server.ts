@@ -10,18 +10,24 @@ export async function getAutomaticAnalysisSettings(userId: string) {
       goalAmount: profiles.automatic_analysis_goal_amount,
       monthlyContribution: profiles.automatic_analysis_monthly_contribution,
       preferredGoalAmount: profiles.preferred_goal_amount,
+      proExpiresAt: profiles.pro_expires_at,
     })
     .from(profiles)
     .where(eq(profiles.profile_id, userId))
     .limit(1);
 
-  return (
-    profile ?? {
-      goalAmount: null,
-      monthlyContribution: null,
-      preferredGoalAmount: null,
-    }
-  );
+  const settings = profile ?? {
+    goalAmount: null,
+    monthlyContribution: null,
+    preferredGoalAmount: null,
+    proExpiresAt: null,
+  };
+  return {
+    ...settings,
+    isPro:
+      settings.proExpiresAt !== null &&
+      settings.proExpiresAt.getTime() > Date.now(),
+  };
 }
 
 export async function setAutomaticAnalysisSettings({

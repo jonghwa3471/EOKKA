@@ -466,6 +466,15 @@ function formatKoreanMoney(amount: number) {
   return `${parts.join(" ")}원`;
 }
 
+function formatAveragePrice(amount: string, currency: Holding["currency"]) {
+  const value = Number(amount);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  if (currency === "KRW") return formatKoreanMoney(value);
+  return `${value.toLocaleString("ko-KR", {
+    maximumFractionDigits: 2,
+  })}달러`;
+}
+
 type MoneyInsight = {
   goalAmount: number;
   latestUpdatedAt: string;
@@ -1223,8 +1232,14 @@ export default function Home() {
   const hasPortfolioDraft = Boolean(
     (location.state as { portfolioDraft?: unknown } | null)?.portfolioDraft,
   );
+  const shouldOpenQuickAnalysis = Boolean(
+    (location.state as { openQuickAnalysis?: boolean } | null)
+      ?.openQuickAnalysis,
+  );
   const [tab, setTab] = useState<"quick" | "saved">(() =>
-    isAuthenticated && !hasPortfolioDraft ? "saved" : "quick",
+    isAuthenticated && !hasPortfolioDraft && !shouldOpenQuickAnalysis
+      ? "saved"
+      : "quick",
   );
   const [holdings, setHoldings] = useState<Holding[]>([emptyHolding(1)]);
   const [targetEok, setTargetEok] = useState("1");
@@ -1300,11 +1315,23 @@ export default function Home() {
       window.sessionStorage.removeItem(HOME_TAB_STORAGE_KEY);
       return;
     }
-    if (hasPortfolioDraft) return;
+    if (hasPortfolioDraft || shouldOpenQuickAnalysis) {
+      setTab("quick");
+      window.sessionStorage.setItem(HOME_TAB_STORAGE_KEY, "quick");
+      if (shouldOpenQuickAnalysis)
+        navigate(location.pathname, { replace: true, state: null });
+      return;
+    }
 
     const storedTab = window.sessionStorage.getItem(HOME_TAB_STORAGE_KEY);
     if (storedTab === "quick" || storedTab === "saved") setTab(storedTab);
-  }, [hasPortfolioDraft, isAuthenticated]);
+  }, [
+    hasPortfolioDraft,
+    isAuthenticated,
+    location.pathname,
+    navigate,
+    shouldOpenQuickAnalysis,
+  ]);
 
   useEffect(() => {
     // 이전 버전에서 장기 저장한 입력값은 남기지 않습니다.
@@ -1950,6 +1977,18 @@ export default function Home() {
                                   />
                                 </div>
                               </div>
+                              {formatAveragePrice(
+                                holding.averagePrice,
+                                holding.currency,
+                              ) && (
+                                <p className="mt-1.5 text-right text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                                  입력 금액 ·{" "}
+                                  {formatAveragePrice(
+                                    holding.averagePrice,
+                                    holding.currency,
+                                  )}
+                                </p>
+                              )}
                             </Field>
 
                             <Field

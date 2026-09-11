@@ -1,0 +1,1 @@
+ALTER TABLE "profiles" ADD COLUMN "pro_expires_at" timestamp with time zone;

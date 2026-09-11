@@ -12,6 +12,7 @@ import {
   pgPolicy,
   pgTable,
   text,
+  timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
 import { authUid, authUsers, authenticatedRole } from "drizzle-orm/supabase";
@@ -43,6 +44,7 @@ export const profiles = pgTable(
     preferred_goal_amount: bigint({ mode: "number" }),
     automatic_analysis_goal_amount: bigint({ mode: "number" }),
     automatic_analysis_monthly_contribution: bigint({ mode: "number" }),
+    pro_expires_at: timestamp({ withTimezone: true }),
     last_active_on: date()
       .notNull()
       .default(sql`current_date`),

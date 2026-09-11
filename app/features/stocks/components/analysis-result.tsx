@@ -674,7 +674,15 @@ const COMMITTEE_MEMBERS: CommitteeMember[] = [
   },
 ];
 
-function CommitteeMemberDialog({ member }: { member: CommitteeMember }) {
+function CommitteeMemberDialog({
+  member,
+  advice,
+  score,
+}: {
+  member: CommitteeMember;
+  advice?: string;
+  score?: number;
+}) {
   const [quoteIndex, setQuoteIndex] = useState(0);
   const quotes =
     INVESTMENT_MASTERS.find((investor) => investor.author === member.name)
@@ -692,27 +700,29 @@ function CommitteeMemberDialog({ member }: { member: CommitteeMember }) {
       <DialogTrigger asChild>
         <button
           type="button"
-          className="bg-background/70 group cursor-pointer rounded-2xl border border-white/5 p-3.5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-500/30 hover:bg-emerald-500/[0.07] hover:shadow-lg focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none"
-          aria-label={`${member.name}의 투자 철학과 명언 보기`}
+          className="bg-background/70 group flex h-full min-h-36 cursor-pointer flex-col rounded-2xl border border-white/5 p-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-500/30 hover:bg-emerald-500/[0.07] hover:shadow-lg focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none"
+          aria-label={`${member.name}의 투자 조언과 철학 보기`}
         >
           <div className="flex items-center gap-3">
             <img
               src={member.image}
               alt={`${member.name} 캐릭터`}
-              className="size-11 shrink-0 rounded-xl object-cover object-top ring-1 ring-white/10 transition-transform duration-200 group-hover:scale-105"
+              className="size-10 shrink-0 rounded-xl object-cover object-top ring-1 ring-white/10 transition-transform duration-200 group-hover:scale-105"
               loading="lazy"
             />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-black">{member.name}</p>
-              <p className="mt-0.5 text-[10px] font-black text-emerald-600 dark:text-emerald-400">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm leading-5 font-black break-keep">
+                {member.name}
+              </p>
+              <p className="mt-0.5 text-[11px] leading-4 font-black break-keep text-emerald-600 dark:text-emerald-400">
                 {member.role}
               </p>
             </div>
           </div>
-          <p className="text-muted-foreground mt-3 text-[11px] leading-5">
+          <p className="text-muted-foreground mt-2 flex-1 text-[11px] leading-[1.15rem] break-keep">
             {member.description}
           </p>
-          <p className="mt-2 flex items-center gap-1 text-[10px] font-bold text-emerald-600 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 dark:text-emerald-400">
+          <p className="mt-2 flex items-center gap-1 text-[10px] font-bold text-emerald-600 opacity-70 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 dark:text-emerald-400">
             자세히 보기
             <ChevronRightIcon className="size-3" />
           </p>
@@ -753,6 +763,23 @@ function CommitteeMemberDialog({ member }: { member: CommitteeMember }) {
         </div>
 
         <div className="px-5 pb-6 sm:px-7">
+          {advice && (
+            <section className="mb-4 rounded-2xl border border-emerald-400/25 bg-gradient-to-br from-emerald-500/[0.12] to-cyan-500/[0.05] p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-black tracking-wide text-emerald-600 uppercase dark:text-emerald-400">
+                  내 포트폴리오를 위한 조언
+                </p>
+                {typeof score === "number" && (
+                  <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-black text-emerald-600 dark:text-emerald-300">
+                    {score.toFixed(1)} / 10
+                  </span>
+                )}
+              </div>
+              <p className="mt-3 text-sm leading-7 font-medium break-keep">
+                {advice}
+              </p>
+            </section>
+          )}
           <section className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-5">
             <p className="text-xs font-black tracking-wide text-emerald-600 uppercase dark:text-emerald-400">
               이 관점으로 포트폴리오를 봐요
@@ -2315,6 +2342,34 @@ export function AnalysisResultView({
       "정보가 더 필요해요",
       "현재 확인된 범위로 살펴봤어요",
     );
+  const committeeConclusionLine = result.aiStrategy?.committeeConclusion
+    ? (aiText(result.aiStrategy.committeeConclusion)
+        .split(/\n+|(?<=[.!?])\s+(?=[가-힣A-Za-z0-9])/)
+        .map((sentence) => sentence.trim())
+        .find(Boolean) ?? "")
+    : "";
+  const committeeDiagnosisPoints = result.aiStrategy?.diagnosis
+    ? aiText(result.aiStrategy.diagnosis)
+        .split(/\n+|(?<=[.!?])\s+(?=[가-힣A-Za-z0-9])/)
+        .map((sentence) => sentence.trim())
+        .filter(Boolean)
+    : [];
+  const monthlyPlanPoints = aiText(result.aiStrategy?.monthlyPlan ?? "")
+    .split(/\n+|(?<=[.!?])\s+(?=[가-힣A-Za-z0-9])/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+  const diversificationPoints = aiText(result.aiStrategy?.diversification ?? "")
+    .split(/\n+|(?<=[.!?])\s+(?=[가-힣A-Za-z0-9])/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+  const committeeVerdict =
+    typeof result.aiStrategy?.overallCommitteeScore === "number"
+      ? result.aiStrategy.overallCommitteeScore >= 7
+        ? "좋음"
+        : result.aiStrategy.overallCommitteeScore >= 4.5
+          ? "양호"
+          : "위험"
+      : null;
   const toggleScenarioSeries = (series: ScenarioSeries) => {
     setDimmedScenarioSeries((current) =>
       current.includes(series)
@@ -2617,14 +2672,15 @@ export function AnalysisResultView({
             "number" ? (
             <div className="bg-muted/50 grid gap-2 rounded-2xl p-4 text-xs leading-5">
               <p>
-                <strong>장기 기준</strong> · 최근 최대 10년 가격 범위의{" "}
+                <strong>최근 최대 10년 기준 내 매수가 위치</strong> · 가격
+                범위의{" "}
                 {selectedPurchaseHolding.purchasePosition.tenYearPosition.toFixed(
                   1,
                 )}
                 % 높이
               </p>
               <p>
-                <strong>최근 기준</strong> · 최근 1년 가격 범위의{" "}
+                <strong>최근 1년 기준 내 매수가 위치</strong> · 가격 범위의{" "}
                 {selectedPurchaseHolding.purchasePosition.oneYearPosition.toFixed(
                   1,
                 )}
@@ -3019,7 +3075,7 @@ export function AnalysisResultView({
       <GoalMomentumCard result={result} />
 
       {result.aiStrategy && (
-        <section className="mt-5 grid items-stretch gap-5 xl:grid-cols-2">
+        <section className="mt-5 space-y-5">
           <div className="overflow-hidden rounded-3xl border border-emerald-500/25 bg-gradient-to-br from-emerald-500/[0.11] via-emerald-500/[0.04] to-cyan-500/[0.08] shadow-[0_18px_50px_-35px_rgba(16,185,129,0.65)]">
             {result.aiStrategy.scores?.length === 6 && (
               <AiStrategyRadar scores={result.aiStrategy.scores} />
@@ -3042,17 +3098,47 @@ export function AnalysisResultView({
                 EOKKA Investment Committee
               </p>
               <h3 className="mt-3 text-2xl font-black">
-                투자 대가 10인의 회의 결론
+                재미로 보는 투자 대가 10인의 포트폴리오 심사
               </h3>
-              <p className="mt-3 text-lg font-black">
-                {aiText(result.aiStrategy.headline)}
-              </p>
-              <p className="text-muted-foreground mt-2 text-sm leading-6">
-                {aiText(result.aiStrategy.diagnosis)}
-              </p>
+              {typeof result.aiStrategy.overallCommitteeScore === "number" && (
+                <div
+                  className={cn(
+                    "mt-3 inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-black",
+                    committeeVerdict === "좋음"
+                      ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-600 dark:text-emerald-300"
+                      : committeeVerdict === "양호"
+                        ? "border-amber-500/30 bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                        : "border-rose-500/30 bg-rose-500/15 text-rose-600 dark:text-rose-300",
+                  )}
+                >
+                  포트폴리오 상태 · {committeeVerdict}
+                </div>
+              )}
+              <div className="mt-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.07] p-4">
+                <p className="text-base leading-7 font-black break-keep sm:text-lg">
+                  {aiText(result.aiStrategy.headline)}
+                </p>
+              </div>
+              <div className="mt-3 space-y-2">
+                {(committeeDiagnosisPoints.length > 0
+                  ? committeeDiagnosisPoints
+                  : [aiText(result.aiStrategy.diagnosis)]
+                ).map((point, index) => (
+                  <div
+                    key={`${index}-${point}`}
+                    className="flex items-start gap-2.5"
+                  >
+                    <span className="mt-2 size-1.5 shrink-0 rounded-full bg-emerald-500" />
+                    <p className="text-muted-foreground text-sm leading-6 break-keep">
+                      {point}
+                    </p>
+                  </div>
+                ))}
+              </div>
               <p className="text-muted-foreground mt-4 text-[11px] leading-5">
                 실제 투자 대가들의 의견이나 추천이 아닌, 공개적으로 알려진
-                10가지 투자 철학을 적용한 AI 투자위원회 시뮬레이션이에요.
+                10가지 투자 철학으로 현재 포트폴리오를 심사하고 조언하는 AI
+                투자위원회 시뮬레이션이에요.
               </p>
             </div>
             <div className="relative min-h-56 overflow-hidden border-t border-emerald-500/15 bg-[#07100f] md:min-h-full md:border-t-0 md:border-l">
@@ -3079,9 +3165,17 @@ export function AnalysisResultView({
                 역할을 쉽게 정리했어요.
               </p>
             </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="mt-5 grid auto-rows-fr grid-cols-2 gap-2.5 md:grid-cols-5">
               {COMMITTEE_MEMBERS.map((member) => (
-                <CommitteeMemberDialog key={member.key} member={member} />
+                <CommitteeMemberDialog
+                  key={member.key}
+                  member={member}
+                  advice={aiText(
+                    result.aiStrategy!.committeeAdvice?.[member.key] ??
+                      result.aiStrategy!.committeeDiscussion[member.key],
+                  )}
+                  score={result.aiStrategy!.committeeScores?.[member.key]}
+                />
               ))}
             </div>
           </div>
@@ -3178,8 +3272,9 @@ export function AnalysisResultView({
                     </div>
                   )}
                 </div>
-                <p className="mt-2 text-sm leading-7 text-slate-100">
-                  {aiText(result.aiStrategy.committeeConclusion)}
+                <p className="mt-3 text-sm leading-7 break-keep text-slate-100">
+                  {committeeConclusionLine ||
+                    aiText(result.aiStrategy.committeeConclusion)}
                 </p>
               </div>
             )}
@@ -3333,44 +3428,93 @@ export function AnalysisResultView({
               <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
                 월 투자 전략
               </p>
-              <p className="mt-2 text-sm leading-6">
-                {aiText(result.aiStrategy.monthlyPlan)}
-              </p>
+              <div className="mt-3 space-y-2.5">
+                {monthlyPlanPoints.map((point, index) => (
+                  <div
+                    key={`${index}-${point}`}
+                    className="flex items-start gap-2.5 rounded-lg bg-emerald-500/[0.055] px-3 py-2.5"
+                  >
+                    <span className="mt-2 size-1.5 shrink-0 rounded-full bg-emerald-500" />
+                    <p className="text-sm leading-6 break-keep">{point}</p>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="bg-background/70 rounded-xl border p-4">
               <p className="text-xs font-bold text-sky-600 dark:text-sky-400">
                 포트폴리오 점검
               </p>
-              <p className="mt-2 text-sm leading-6">
-                {aiText(result.aiStrategy.diversification)}
-              </p>
+              <div className="mt-3 space-y-2.5">
+                {diversificationPoints.map((point, index) => (
+                  <div
+                    key={`${index}-${point}`}
+                    className="flex items-start gap-2.5 rounded-lg bg-sky-500/[0.055] px-3 py-2.5"
+                  >
+                    <span className="mt-2 size-1.5 shrink-0 rounded-full bg-sky-500" />
+                    <p className="text-sm leading-6 break-keep">{point}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
           <div className="px-5 pb-5 sm:px-6 sm:pb-6">
-            <p className="text-sm font-black">지금 확인할 3가지</p>
-            <ol className="mt-3 grid gap-3 sm:grid-cols-3">
-              {result.aiStrategy.actions.map((action, index) => (
-                <li
-                  key={`${action.title}-${index}`}
-                  className="bg-background/70 rounded-xl border p-4"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-black text-violet-600 dark:text-violet-400">
-                      {index + 1}
-                    </span>
-                    <span className="text-muted-foreground rounded-full border px-2 py-0.5 text-[10px] font-bold">
-                      우선순위 {action.priority}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm font-bold">
-                    {aiText(action.title)}
-                  </p>
-                  <p className="text-muted-foreground mt-1 text-xs leading-5">
-                    {aiText(action.detail)}
-                  </p>
-                </li>
-              ))}
+            <div>
+              <p className="text-sm font-black">지금 확인할 3가지</p>
+              <p className="text-muted-foreground mt-1 text-xs leading-5">
+                우선순위가 높은 항목부터 하나씩 확인해 보세요.
+              </p>
+            </div>
+            <ol className="mt-4 grid gap-3 lg:grid-cols-3">
+              {result.aiStrategy.actions.map((action, index) => {
+                const detailPoints = aiText(action.detail)
+                  .split(/\n+|(?<=[.!?])\s+(?=[가-힣A-Za-z0-9])/)
+                  .map((sentence) => sentence.trim())
+                  .filter(Boolean);
+
+                return (
+                  <li
+                    key={`${action.title}-${index}`}
+                    className="bg-background/70 overflow-hidden rounded-2xl border"
+                  >
+                    <div className="flex items-center justify-between gap-3 border-b bg-violet-500/[0.055] px-4 py-3">
+                      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-violet-500/15 text-xs font-black text-violet-600 dark:text-violet-300">
+                        {index + 1}
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded-full border px-2.5 py-1 text-[10px] font-black",
+                          action.priority === "높음"
+                            ? "border-rose-500/25 bg-rose-500/10 text-rose-600 dark:text-rose-300"
+                            : action.priority === "보통"
+                              ? "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                              : "border-sky-500/25 bg-sky-500/10 text-sky-600 dark:text-sky-300",
+                        )}
+                      >
+                        우선순위 {action.priority}
+                      </span>
+                    </div>
+                    <div className="p-4">
+                      <p className="text-base leading-6 font-black break-keep">
+                        {aiText(action.title)}
+                      </p>
+                      <div className="mt-3 space-y-2.5">
+                        {detailPoints.map((point, pointIndex) => (
+                          <div
+                            key={`${pointIndex}-${point}`}
+                            className="flex items-start gap-2.5"
+                          >
+                            <CircleCheckIcon className="mt-1 size-3.5 shrink-0 text-violet-500" />
+                            <p className="text-muted-foreground text-xs leading-5 break-keep">
+                              {point}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
             </ol>
             <p className="text-muted-foreground mt-4 text-[11px] leading-5">
               {aiText(result.aiStrategy.disclaimer)}

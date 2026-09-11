@@ -19,7 +19,12 @@ function DashboardRouteTransitionSkeleton() {
   const navigation = useNavigation();
   const [visible, setVisible] = useState(false);
   const targetPath = navigation.location?.pathname ?? "";
-  const isRouteLoading = navigation.state === "loading" && !navigation.formData;
+  const targetStaysInDashboard =
+    targetPath.startsWith("/dashboard") || targetPath.startsWith("/account/");
+  const isRouteLoading =
+    navigation.state === "loading" &&
+    !navigation.formData &&
+    targetStaysInDashboard;
   const variant: RouteSkeletonVariant = targetPath.startsWith(
     "/dashboard/history",
   )

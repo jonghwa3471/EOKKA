@@ -159,10 +159,12 @@ function durableIdentifiers(request: Request, userId: string | null) {
 }
 
 function rateLimitSecret() {
-  const secret =
-    process.env.RATE_LIMIT_HASH_SECRET ??
-    process.env.CRON_SECRET ??
-    process.env.SUPABASE_SECRET_KEY;
+  const secret = [
+    process.env.RATE_LIMIT_HASH_SECRET,
+    process.env.COOKIE_SECRET,
+    process.env.CRON_SECRET,
+    process.env.SUPABASE_SECRET_KEY,
+  ].find((value) => value?.trim());
   if (!secret)
     throw new Error("분석 요청 제한을 위한 서버 비밀키가 설정되지 않았습니다.");
   return secret;
