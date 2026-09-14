@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
 
 import db from "~/core/db/drizzle-client.server";
+import { createNotification } from "~/features/notifications/notifications.server";
 import type { AnalysisResult } from "~/features/stocks/analysis.types";
 import { managedPortfolios } from "~/features/stocks/portfolio/schema";
 import { profiles } from "~/features/users/schema";
@@ -119,6 +120,12 @@ function jsonSafeResult(result: AnalysisResult) {
   return JSON.parse(JSON.stringify(result)) as AnalysisResult;
 }
 
+function notificationGoalLabel(value: number) {
+  return value % 100_000_000 === 0
+    ? `${(value / 100_000_000).toLocaleString("ko-KR")}억`
+    : `${value.toLocaleString("ko-KR")}원`;
+}
+
 export async function saveDailyAnalysisSnapshot({
   userId,
   result,
@@ -198,13 +205,13 @@ export async function saveDailyAnalysisSnapshot({
       )
       .returning({ id: analysisSnapshots.analysis_snapshot_id });
 
-    if (updated.length > 0) return updated[0].id;
+    if (updated.length > 0) return { id: updated[0].id, wasUpdated: true };
 
     const [inserted] = await transaction
       .insert(analysisSnapshots)
       .values(values)
       .returning({ id: analysisSnapshots.analysis_snapshot_id });
-    return inserted.id;
+    return { id: inserted.id, wasUpdated: false };
   });
 
   if (!hasUnlimitedHistory) {
@@ -229,7 +236,21 @@ export async function saveDailyAnalysisSnapshot({
     `);
   }
 
-  return { id: snapshotId, savedOn };
+  const href = `/dashboard/history?month=${savedOn.slice(0, 7)}&date=${savedOn}&analysis=${snapshotId.id}`;
+  await createNotification({
+    userId,
+    type: snapshotId.wasUpdated ? "analysis_updated" : "analysis_created",
+    title:
+      updateSource === "automatic"
+        ? "자동 분석이 갱신됐어요"
+        : snapshotId.wasUpdated
+          ? "분석이 업데이트됐어요"
+          : "새 분석이 저장됐어요",
+    message: `${savedOn.replaceAll("-", ".")} 종가로 ${notificationGoalLabel(values.goal_amount)} 목표 분석을 ${snapshotId.wasUpdated ? "갱신했어요" : "저장했어요"}.`,
+    href,
+  });
+
+  return { id: snapshotId.id, savedOn };
 }
 
 export async function startManagedAnalysisHistory({
@@ -297,6 +318,14 @@ export async function startManagedAnalysisHistory({
     return inserted.id;
   });
 
+  await createNotification({
+    userId,
+    type: "analysis_created",
+    title: "정밀 분석 기록을 시작했어요",
+    message: `${savedOn.replaceAll("-", ".")} 종가로 ${notificationGoalLabel(snapshot.goal_amount)} 목표의 첫 정밀 분석을 저장했어요.`,
+    href: `/dashboard/history?month=${savedOn.slice(0, 7)}&date=${savedOn}&analysis=${snapshotId}`,
+  });
+
   return { id: snapshotId, savedOn };
 }
 
@@ -356,20 +385,41 @@ export async function deleteAnalysisSnapshot({
   userId: string;
   snapshotId: number;
 }) {
-  await db
+  const deleted = await db
     .delete(analysisSnapshots)
     .where(
       and(
         eq(analysisSnapshots.user_id, userId),
         eq(analysisSnapshots.analysis_snapshot_id, snapshotId),
       ),
-    );
+    )
+    .returning({
+      savedOn: analysisSnapshots.saved_on,
+      goalAmount: analysisSnapshots.goal_amount,
+    });
+  if (deleted[0])
+    await createNotification({
+      userId,
+      type: "analysis_deleted",
+      title: "분석 기록을 삭제했어요",
+      message: `${deleted[0].savedOn.replaceAll("-", ".")} ${notificationGoalLabel(deleted[0].goalAmount)} 목표 분석을 삭제했어요.`,
+      href: "/dashboard/history",
+    });
 }
 
 export async function deleteAllAnalysisSnapshots(userId: string) {
-  await db
+  const deleted = await db
     .delete(analysisSnapshots)
-    .where(eq(analysisSnapshots.user_id, userId));
+    .where(eq(analysisSnapshots.user_id, userId))
+    .returning({ id: analysisSnapshots.analysis_snapshot_id });
+  if (deleted.length > 0)
+    await createNotification({
+      userId,
+      type: "analysis_all_deleted",
+      title: "분석 기록을 모두 삭제했어요",
+      message: `저장되어 있던 분석 기록 ${deleted.length.toLocaleString("ko-KR")}개를 모두 삭제했어요.`,
+      href: "/dashboard/history",
+    });
 }
 
 export async function getPreferredGoalAmount(userId: string) {

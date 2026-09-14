@@ -4,7 +4,7 @@ import { and, asc, desc, eq, gte, max, sql } from "drizzle-orm";
 
 import db from "~/core/db/drizzle-client.server";
 
-import { stockPrices } from "./schema";
+import { stockPrices, stocks } from "./schema";
 
 const PRICE_ENDPOINTS = {
   STOCK:
@@ -55,6 +55,32 @@ export async function getLatestCachedMarketDate() {
     .select({ date: max(stockPrices.trading_date) })
     .from(stockPrices);
   return latest?.date ?? null;
+}
+
+export async function refreshLatestDomesticMarketDate(ticker: string) {
+  const [stock] = await db
+    .select({
+      id: stocks.stock_id,
+      ticker: stocks.ticker,
+      securityType: stocks.security_type,
+    })
+    .from(stocks)
+    .where(and(eq(stocks.ticker, ticker), eq(stocks.is_active, true)))
+    .limit(1);
+  if (!stock || !["STOCK", "ETF", "ETN"].includes(stock.securityType))
+    return getLatestCachedMarketDate();
+
+  try {
+    const marketData = await getDomesticMarketData(
+      stock.id,
+      stock.ticker,
+      stock.securityType as SupportedSecurityType,
+    );
+    return marketData.asOf;
+  } catch (error) {
+    console.error("Latest domestic market date refresh failed", error);
+    return getLatestCachedMarketDate();
+  }
 }
 
 function apiKey() {

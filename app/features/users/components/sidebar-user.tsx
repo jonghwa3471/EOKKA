@@ -33,12 +33,14 @@ import {
 
 export default function SidebarUser({
   user,
+  unreadNotificationCount,
 }: {
   user: {
     name: string;
     email: string;
     avatarUrl: string;
   };
+  unreadNotificationCount: number;
 }) {
   const { isMobile } = useSidebar();
 
@@ -59,6 +61,13 @@ export default function SidebarUser({
                   </AvatarFallback>
                 </Avatar>
                 <span className="ring-sidebar absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full bg-emerald-500 shadow-[0_0_9px_rgba(16,185,129,0.8)] ring-2" />
+                {unreadNotificationCount > 0 && (
+                  <span className="ring-sidebar absolute -top-2 -right-2 flex min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] leading-5 font-black text-white ring-2">
+                    {unreadNotificationCount > 99
+                      ? "99+"
+                      : unreadNotificationCount}
+                  </span>
+                )}
               </div>
               <div className="grid min-w-0 flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
                 <span className="truncate text-sm font-black tracking-[-0.02em]">
@@ -127,9 +136,21 @@ export default function SidebarUser({
                   결제 내역
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem className="hover:[&>svg]:animate-sidebar-menu-icon hover:[&>svg]:text-emerald-500 motion-reduce:hover:[&>svg]:animate-none">
-                <Bell />
-                알림 설정
+              <DropdownMenuItem
+                asChild
+                className="hover:[&>svg]:animate-sidebar-menu-icon hover:[&>svg]:text-emerald-500 motion-reduce:hover:[&>svg]:animate-none"
+              >
+                <Link to="/dashboard/notifications">
+                  <Bell />
+                  알림
+                  {unreadNotificationCount > 0 && (
+                    <span className="ml-auto rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-black text-white">
+                      {unreadNotificationCount > 99
+                        ? "99+"
+                        : unreadNotificationCount}
+                    </span>
+                  )}
+                </Link>
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />

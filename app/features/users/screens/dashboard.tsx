@@ -89,13 +89,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     { default: makeServerClient },
     { FREE_HISTORY_LIMIT, getActiveAnalysisHistory, getPreferredGoalAmount },
     { getAutomaticAnalysisSettings },
-    { getLatestCachedMarketDate },
+    { getLatestCachedMarketDate, refreshLatestDomesticMarketDate },
+    { getLatestKisMarketDate },
     { getStockMarketMode },
   ] = await Promise.all([
     import("~/core/lib/supa-client.server"),
     import("~/features/stocks/history/analysis-history.server"),
     import("~/features/users/automatic-analysis-settings.server"),
     import("~/features/stocks/fsc-client.server"),
+    import("~/features/stocks/kis-client.server"),
     import("~/features/stocks/market-mode.server"),
   ]);
   const [client] = makeServerClient(request);
@@ -129,10 +131,51 @@ export async function loader({ request }: Route.LoaderArgs) {
   const historyLatestMarketDate = allHistory
     .map((item) => item.result.asOf)
     .sort((a, b) => b.localeCompare(a))[0];
+  const latestRecordedHoldings = allHistory.at(-1)?.result.holdings ?? [];
+  const representativeDomesticTicker = latestRecordedHoldings.find(
+    (holding) => holding.currency === "KRW",
+  )?.ticker;
+  const marketMode = getStockMarketMode();
+  const refreshedMarketDate =
+    marketMode === "domestic"
+      ? representativeDomesticTicker
+        ? await refreshLatestDomesticMarketDate(representativeDomesticTicker)
+        : await getLatestCachedMarketDate()
+      : await (async () => {
+          const representatives = new Map<
+            string,
+            (typeof latestRecordedHoldings)[number]
+          >();
+          for (const holding of latestRecordedHoldings) {
+            const country =
+              holding.country ?? (holding.currency === "KRW" ? "KR" : "US");
+            const exchange = holding.exchange ?? "";
+            const key = `${country}:${exchange}`;
+            if (!representatives.has(key)) representatives.set(key, holding);
+          }
+          try {
+            const dates = (
+              await Promise.all(
+                [...representatives.values()].map((holding) =>
+                  getLatestKisMarketDate(
+                    holding.ticker,
+                    holding.country ??
+                      (holding.currency === "KRW" ? "KR" : "US"),
+                    holding.exchange ?? "",
+                  ),
+                ),
+              )
+            ).filter((date): date is string => Boolean(date));
+            return dates.sort((a, b) => a.localeCompare(b))[0] ?? null;
+          } catch (error) {
+            console.error("Latest KIS market date refresh failed", error);
+            return null;
+          }
+        })();
   const latestMarketDate =
-    getStockMarketMode() === "domestic"
-      ? ((await getLatestCachedMarketDate()) ?? historyLatestMarketDate ?? null)
-      : (historyLatestMarketDate ?? null);
+    [refreshedMarketDate, historyLatestMarketDate]
+      .filter((date): date is string => Boolean(date))
+      .sort((a, b) => b.localeCompare(a))[0] ?? null;
 
   return {
     history,
@@ -1919,7 +1962,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
   }
 
   const hasLatestCloseAnalysis =
-    latestMarketDate === null || latest.savedOn === latestMarketDate;
+    latestMarketDate === null || latest.savedOn >= latestMarketDate;
   const isAutomaticGoal = isPro;
   const checkedAnalysisHref = hasLatestCloseAnalysis
     ? `/dashboard/history?month=${latest.savedOn.slice(0, 7)}&date=${latest.savedOn}&analysis=${latest.id}`
@@ -2045,7 +2088,9 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                 )}
               >
                 {isAutomaticGoal
-                  ? `다음 자동 분석 예정 · ${nextAutomaticAnalysis}`
+                  ? hasLatestCloseAnalysis
+                    ? `다음 자동 분석 예정 · ${nextAutomaticAnalysis}`
+                    : `다음 자동 분석 예정 · ${nextAutomaticAnalysis} · 그 전에 직접 분석할 수도 있어요.`
                   : !isPro
                     ? hasLatestCloseAnalysis
                       ? "무료 플랜은 필요할 때 직접 분석해 업데이트할 수 있어요."
@@ -2061,7 +2106,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             >
               분석 보기 <ArrowRightIcon className="size-4" />
             </Link>
-          ) : !isAutomaticGoal ? (
+          ) : (
             <Link
               to={manualAnalysisHref}
               state={
@@ -2071,10 +2116,9 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
               }
               className="inline-flex shrink-0 items-center gap-1.5 self-start text-sm font-black text-amber-600 transition-colors hover:text-amber-500 sm:self-center dark:text-amber-400"
             >
-              {!isPro ? "최신 종가로 업데이트" : "직접 분석하기"}{" "}
-              <ArrowRightIcon className="size-4" />
+              최신 종가로 직접 분석하기 <ArrowRightIcon className="size-4" />
             </Link>
-          ) : null}
+          )}
         </section>
 
         {goalOptions.length > 1 && (

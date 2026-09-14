@@ -11,6 +11,7 @@ import {
   SidebarTrigger,
 } from "~/core/components/ui/sidebar";
 import makeServerClient from "~/core/lib/supa-client.server";
+import { getUnreadNotificationCount } from "~/features/notifications/notifications.server";
 
 import { markUserActive } from "../activity.server";
 import DashboardSidebar from "../components/dashboard-sidebar";
@@ -63,7 +64,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     data: { user },
   } = await client.auth.getUser();
   if (user) await markUserActive(user.id);
+  const unreadNotificationCount = user
+    ? await getUnreadNotificationCount(user.id)
+    : 0;
   return {
+    unreadNotificationCount,
     user: user
       ? {
           name:
@@ -96,10 +101,15 @@ export default function DashboardLayout({ loaderData }: Route.ComponentProps) {
               ? "EOKKA Pro"
               : pathname.startsWith("/dashboard/payments")
                 ? "결제내역"
-                : "내 투자 대시보드";
+                : pathname.startsWith("/dashboard/notifications")
+                  ? "알림"
+                  : "내 투자 대시보드";
   return (
     <SidebarProvider>
-      <DashboardSidebar user={user} />
+      <DashboardSidebar
+        user={user}
+        unreadNotificationCount={loaderData.unreadNotificationCount}
+      />
       <SidebarInset>
         <header className="bg-background/80 border-border/60 relative z-20 flex h-16 shrink-0 items-center gap-2 border-b shadow-[0_10px_30px_-26px_rgba(15,23,42,0.55)] backdrop-blur-xl transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12 after:absolute after:inset-x-0 after:bottom-[-1px] after:h-px after:bg-gradient-to-r after:from-emerald-500/35 after:via-violet-500/25 after:to-transparent">
           <div className="flex items-center gap-3 px-5">

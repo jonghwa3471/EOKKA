@@ -113,6 +113,10 @@ export default [
         route("/history", "features/users/screens/analysis-history.tsx"),
         route("/pro", "features/users/screens/eokka-pro.tsx"),
         route("/payments", "features/payments/screens/payments.tsx"),
+        route(
+          "/notifications",
+          "features/notifications/screens/notifications.tsx",
+        ),
       ]),
       route("/account/edit", "features/users/screens/account.tsx"),
     ]),

@@ -15,7 +15,7 @@
  * - Authenticated state with user profile information
  * - Unauthenticated state with sign in/sign up buttons
  */
-import { CogIcon, HomeIcon, LogOutIcon, MenuIcon } from "lucide-react";
+import { BellIcon, HomeIcon, LogOutIcon, MenuIcon } from "lucide-react";
 import { Link } from "react-router";
 
 import { EokkaLogo } from "./eokka-logo";
@@ -61,19 +61,28 @@ function UserMenu({
   name,
   email,
   avatarUrl,
+  unreadNotificationCount = 0,
 }: {
   name: string;
   email?: string;
   avatarUrl?: string | null;
+  unreadNotificationCount?: number;
 }) {
   return (
     <DropdownMenu>
       {/* Avatar as the dropdown trigger */}
       <DropdownMenuTrigger asChild>
-        <Avatar className="ring-border/70 size-8 cursor-pointer rounded-lg ring-1 transition-all hover:ring-2 hover:ring-emerald-500/40 data-[state=open]:ring-2 data-[state=open]:ring-emerald-500/50">
-          <AvatarImage src={avatarUrl ?? undefined} />
-          <AvatarFallback>{name.slice(0, 2)}</AvatarFallback>
-        </Avatar>
+        <span className="relative">
+          <Avatar className="ring-border/70 size-8 cursor-pointer rounded-lg ring-1 transition-all hover:ring-2 hover:ring-emerald-500/40 data-[state=open]:ring-2 data-[state=open]:ring-emerald-500/50">
+            <AvatarImage src={avatarUrl ?? undefined} />
+            <AvatarFallback>{name.slice(0, 2)}</AvatarFallback>
+          </Avatar>
+          {unreadNotificationCount > 0 && (
+            <span className="ring-background absolute -top-2 -right-2 flex min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] leading-5 font-black text-white ring-2">
+              {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
+            </span>
+          )}
+        </span>
       </DropdownMenuTrigger>
 
       {/* Dropdown content with user info and actions */}
@@ -101,6 +110,22 @@ function UserMenu({
             <Link to="/dashboard" viewTransition>
               <HomeIcon className="size-4" />
               대시보드
+            </Link>
+          </SheetClose>
+        </DropdownMenuItem>
+
+        <DropdownMenuItem asChild>
+          <SheetClose asChild>
+            <Link to="/dashboard/notifications" viewTransition>
+              <BellIcon className="size-4" />
+              알림
+              {unreadNotificationCount > 0 && (
+                <span className="ml-auto rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-black text-white">
+                  {unreadNotificationCount > 99
+                    ? "99+"
+                    : unreadNotificationCount}
+                </span>
+              )}
             </Link>
           </SheetClose>
         </DropdownMenuItem>
@@ -165,54 +190,15 @@ function AuthButtons() {
 /**
  * Actions Component
  *
- * Displays utility actions and settings in the navigation bar, including:
- * - Debug/settings dropdown menu with links to monitoring tools
- * - Theme switcher for toggling between light and dark mode
+ * Displays the theme switcher in the navigation bar.
  *
  * This component is shown in the navigation bar for all users regardless of
  * authentication state and provides access to application-wide settings and tools.
  *
- * @returns Fragment containing settings dropdown and theme switcher
+ * @returns Theme switcher
  */
 function Actions() {
-  return (
-    <>
-      {/* Settings/debug dropdown menu */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild className="cursor-pointer">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="설정 메뉴 열기"
-            className="border-border/60 bg-background/60 rounded-xl border shadow-sm hover:border-emerald-500/25 hover:bg-emerald-500/10 hover:text-emerald-500"
-          >
-            <CogIcon className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {/* Sentry monitoring link */}
-          <DropdownMenuItem asChild>
-            <SheetClose asChild>
-              <Link to="/debug/sentry" viewTransition>
-                Sentry
-              </Link>
-            </SheetClose>
-          </DropdownMenuItem>
-          {/* Google Analytics link */}
-          <DropdownMenuItem asChild>
-            <SheetClose asChild>
-              <Link to="/debug/analytics" viewTransition>
-                Google Tag
-              </Link>
-            </SheetClose>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      {/* Theme switcher component (light/dark mode) */}
-      <ThemeSwitcher />
-    </>
-  );
+  return <ThemeSwitcher />;
 }
 
 /**
@@ -241,11 +227,13 @@ export function NavigationBar({
   name,
   email,
   avatarUrl,
+  unreadNotificationCount,
   loading,
 }: {
   name?: string;
   email?: string;
   avatarUrl?: string | null;
+  unreadNotificationCount?: number;
   loading: boolean;
 }) {
   return (
@@ -304,7 +292,12 @@ export function NavigationBar({
             <>
               {name ? (
                 // Authenticated state with user menu
-                <UserMenu name={name} email={email} avatarUrl={avatarUrl} />
+                <UserMenu
+                  name={name}
+                  email={email}
+                  avatarUrl={avatarUrl}
+                  unreadNotificationCount={unreadNotificationCount}
+                />
               ) : (
                 // Unauthenticated state with auth buttons
                 <AuthButtons />
@@ -348,7 +341,12 @@ export function NavigationBar({
                     <Actions />
                   </div>
                   <div className="flex justify-end">
-                    <UserMenu name={name} email={email} avatarUrl={avatarUrl} />
+                    <UserMenu
+                      name={name}
+                      email={email}
+                      avatarUrl={avatarUrl}
+                      unreadNotificationCount={unreadNotificationCount}
+                    />
                   </div>
                 </div>
               ) : (

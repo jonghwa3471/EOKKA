@@ -3,13 +3,20 @@ import type { Route } from "./+types/navigation.layout";
 import { Suspense } from "react";
 import { Await, Outlet } from "react-router";
 
+import { getUnreadNotificationCount } from "~/features/notifications/notifications.server";
+
 import Footer from "../components/footer";
 import { NavigationBar } from "../components/navigation-bar";
 import makeServerClient from "../lib/supa-client.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const [client] = makeServerClient(request);
-  const userPromise = client.auth.getUser();
+  const userPromise = client.auth.getUser().then(async (result) => ({
+    ...result,
+    unreadNotificationCount: result.data.user
+      ? await getUnreadNotificationCount(result.data.user.id)
+      : 0,
+  }));
   return { userPromise };
 }
 
@@ -19,7 +26,7 @@ export default function NavigationLayout({ loaderData }: Route.ComponentProps) {
     <div className="flex min-h-screen flex-col justify-between">
       <Suspense fallback={<NavigationBar loading={true} />}>
         <Await resolve={userPromise}>
-          {({ data: { user } }) =>
+          {({ data: { user }, unreadNotificationCount }) =>
             user === null ? (
               <NavigationBar loading={false} />
             ) : (
@@ -27,6 +34,7 @@ export default function NavigationLayout({ loaderData }: Route.ComponentProps) {
                 name={user.user_metadata.name || "사용자"}
                 email={user.email}
                 avatarUrl={user.user_metadata.avatar_url}
+                unreadNotificationCount={unreadNotificationCount}
                 loading={false}
               />
             )

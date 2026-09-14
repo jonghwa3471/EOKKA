@@ -270,6 +270,59 @@ export async function getKisDomesticMarketData(
 
 const exchangeCodes = { NASDAQ: "NAS", NYSE: "NYS", AMEX: "AMS" } as const;
 
+export async function getLatestKisMarketDate(
+  ticker: string,
+  country: string,
+  exchange: string,
+) {
+  if (country === "KR") {
+    const end = previousCalendarDate("Asia/Seoul");
+    const start = new Date(end);
+    start.setDate(start.getDate() - 14);
+    const response = await kisGet<{
+      output2: Array<{ stck_bsop_date: string; stck_clpr: string }>;
+    }>(
+      "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
+      "FHKST03010100",
+      new URLSearchParams({
+        FID_COND_MRKT_DIV_CODE: "J",
+        FID_INPUT_ISCD: ticker,
+        FID_INPUT_DATE_1: yyyymmdd(start),
+        FID_INPUT_DATE_2: yyyymmdd(end),
+        FID_PERIOD_DIV_CODE: "D",
+        FID_ORG_ADJ_PRC: "0",
+      }),
+    );
+    const latest = response.output2
+      .filter((point) => Number(point.stck_clpr) > 0)
+      .sort((a, b) => a.stck_bsop_date.localeCompare(b.stck_bsop_date))
+      .at(-1);
+    return latest ? isoDate(latest.stck_bsop_date) : null;
+  }
+
+  const exchangeCode = exchangeCodes[exchange as keyof typeof exchangeCodes];
+  if (!exchangeCode) return null;
+  const response = await kisGet<{
+    output2: Array<{ xymd: string; clos: string }>;
+  }>(
+    "/uapi/overseas-price/v1/quotations/dailyprice",
+    "HHDFS76240000",
+    new URLSearchParams({
+      AUTH: "",
+      EXCD: exchangeCode,
+      SYMB: ticker,
+      GUBN: "0",
+      BYMD: yyyymmdd(previousCalendarDate("America/New_York")),
+      MODP: "1",
+    }),
+  );
+  const latest = response.output2
+    .filter((point) => Number(point.clos) > 0)
+    .sort((a, b) => a.xymd.localeCompare(b.xymd))
+    .at(-1);
+  return latest ? isoDate(latest.xymd) : null;
+}
+
 export async function getKisUsMarketData(
   ticker: string,
   exchange: keyof typeof exchangeCodes,

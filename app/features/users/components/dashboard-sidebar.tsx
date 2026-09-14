@@ -49,9 +49,11 @@ const navigation = [
 
 export default function DashboardSidebar({
   user,
+  unreadNotificationCount,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   user: { name: string; email: string; avatarUrl: string };
+  unreadNotificationCount: number;
 }) {
   const { pathname } = useLocation();
 
@@ -118,7 +120,10 @@ export default function DashboardSidebar({
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="border-sidebar-border/60 border-t bg-gradient-to-t from-emerald-500/4 to-transparent p-3 group-data-[collapsible=icon]:p-1">
-        <SidebarUser user={user} />
+        <SidebarUser
+          user={user}
+          unreadNotificationCount={unreadNotificationCount}
+        />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
