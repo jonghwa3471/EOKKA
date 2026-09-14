@@ -1237,20 +1237,32 @@ export function HistoricalInsights({
 }: {
   history: History;
   previousHistory?: History;
-  period?: "weekly" | "monthly";
+  period?: "weekly" | "monthly" | "annual";
   rangeLabel?: string;
 }) {
   const insight = calculateHistoryInsights(history);
   const isWeekly = period === "weekly";
-  const periodLabel = isWeekly ? "주간" : "월간";
+  const periodLabel = isWeekly
+    ? "주간"
+    : period === "monthly"
+      ? "월간"
+      : "연간";
   const transitions = insight.changes.length;
   const risingRatio = transitions
     ? (insight.upCount / transitions) * 100
     : null;
   const profitImproved = insight.totalProfitChange >= 0;
   const previousLatest = previousHistory.at(-1) ?? null;
-  const previousPeriodLabel = isWeekly ? "지난주" : "지난달";
-  const currentPeriodLabel = isWeekly ? "이번 주" : "이번 달";
+  const previousPeriodLabel = isWeekly
+    ? "지난주"
+    : period === "monthly"
+      ? "지난달"
+      : "지난해";
+  const currentPeriodLabel = isWeekly
+    ? "이번 주"
+    : period === "monthly"
+      ? "이번 달"
+      : "올해";
   const previousAssetChange = previousLatest
     ? insight.latest.currentValue - previousLatest.currentValue
     : null;
@@ -1669,7 +1681,7 @@ function WeeklyReturnPodium({
   periodLabel,
 }: {
   rankings: Array<{ name: string; returnRate: number }>;
-  periodLabel: "주간" | "월간";
+  periodLabel: "주간" | "월간" | "연간";
 }) {
   const { ref, isRevealed } = useRevealOncePerVisit<HTMLElement>();
   const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -2493,33 +2505,49 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
 
           <ProfitContributionGrid history={history} />
 
-          <div className="via-card relative overflow-hidden rounded-3xl border border-amber-400/30 bg-gradient-to-br from-amber-400/15 to-violet-500/10 p-6 shadow-sm md:p-8">
-            <CrownIcon className="absolute -top-5 -right-5 size-32 rotate-12 text-amber-400/10" />
-            <div className="relative">
-              <span className="inline-flex rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs font-black text-amber-500">
-                COMING SOON
-              </span>
-              <h2 className="mt-5 text-2xl font-black">
-                더 긴 투자 흐름이 필요하다면
-              </h2>
-              <p className="text-muted-foreground mt-3 max-w-xl leading-7">
-                무료 베타에서는 목표별 최신 {historyLimit}개 분석 기록을
-                저장해요. 향후 EOKKA Pro에서는 기록을 개수 제한 없이 보관하고
-                월간·연간 투자 리포트까지 확인할 수 있게 준비할 예정이에요.
-              </p>
-              <div className="mt-6 grid gap-2 text-sm sm:grid-cols-2">
-                <div className="bg-background/50 rounded-2xl border p-4 font-semibold">
-                  전체 분석 기록 보관
+          {!isPro && (
+            <div className="via-card relative overflow-hidden rounded-3xl border border-amber-400/30 bg-gradient-to-br from-amber-400/15 to-violet-500/10 p-6 shadow-sm md:p-8">
+              <CrownIcon className="absolute -top-5 -right-5 size-32 rotate-12 text-amber-400/10" />
+              <div className="relative">
+                <span className="inline-flex rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs font-black text-amber-500">
+                  EOKKA PRO
+                </span>
+                <h2 className="mt-5 text-2xl font-black">
+                  투자 기록을 자동으로 이어가세요
+                </h2>
+                <p className="text-muted-foreground mt-3 max-w-2xl leading-7 break-keep">
+                  최대 3개의 목표를 거래일마다 최신 종가로 자동 분석하고, 쌓인
+                  기록을 기간 제한 없이 보관해 주간·월간 변화를 이어서 확인할 수
+                  있어요.
+                </p>
+                <div className="mt-6 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                  {[
+                    "분석 기록 무제한 보관",
+                    "목표 금액 3개 자동 분석",
+                    "최대 20종목 분석",
+                    "수동 분석 하루 15회",
+                  ].map((benefit) => (
+                    <div
+                      key={benefit}
+                      className="bg-background/50 flex items-center gap-2 rounded-2xl border p-4 font-semibold"
+                    >
+                      <CheckCircle2Icon className="size-4 shrink-0 text-emerald-500" />
+                      {benefit}
+                    </div>
+                  ))}
                 </div>
-                <div className="bg-background/50 rounded-2xl border p-4 font-semibold">
-                  월간·연간 변화 리포트
-                </div>
+                <Button
+                  asChild
+                  variant="outline"
+                  className="bg-background/60 mt-6 rounded-full border-amber-400/40"
+                >
+                  <Link to="/dashboard/pro">
+                    Pro 혜택 자세히 보기 <ArrowRightIcon />
+                  </Link>
+                </Button>
               </div>
-              <p className="text-muted-foreground mt-4 text-xs">
-                아직 결제되거나 자동으로 구독되지 않습니다.
-              </p>
             </div>
-          </div>
+          )}
         </section>
       </div>
     </main>

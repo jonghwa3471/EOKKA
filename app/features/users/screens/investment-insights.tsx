@@ -19,10 +19,11 @@ import {
   getPreferredGoalAmount,
   setPreferredGoalAmount,
 } from "~/features/stocks/history/analysis-history.server";
+import { getAutomaticAnalysisSettings } from "~/features/users/automatic-analysis-settings.server";
 
 import { HistoricalInsights } from "./dashboard";
 
-type InsightPeriod = "weekly" | "monthly";
+type InsightPeriod = "weekly" | "monthly" | "annual";
 const INSIGHT_PERIOD_STORAGE_KEY = "eokka:investment-insight-period";
 
 function koreanToday() {
@@ -66,6 +67,15 @@ function calendarRange(today: string, period: InsightPeriod) {
   }
 
   const year = date.getUTCFullYear();
+  if (period === "annual") {
+    return {
+      start: `${year}-01-01`,
+      end: `${year}-12-31`,
+      previousStart: `${year - 1}-01-01`,
+      previousEnd: `${year - 1}-12-31`,
+    };
+  }
+
   const month = date.getUTCMonth();
   const start = isoDate(new Date(Date.UTC(year, month, 1)));
   const end = isoDate(new Date(Date.UTC(year, month + 1, 0)));
@@ -144,7 +154,12 @@ function PeriodRecordStrip({
           </span>
           <div>
             <p className="text-sm font-black">
-              {period === "weekly" ? "이번 주" : "이번 달"} 기록 현황
+              {period === "weekly"
+                ? "이번 주"
+                : period === "monthly"
+                  ? "이번 달"
+                  : "올해"}{" "}
+              기록 현황
             </p>
             <p className="text-muted-foreground mt-0.5 text-[11px]">
               기록 {history.length}개 · 수익 {profitCount}일 · 손해 {lossCount}
@@ -231,10 +246,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   } = await client.auth.getUser();
   if (!user) throw redirect("/login");
 
-  const [allHistory, savedPreferredGoal] = await Promise.all([
-    getActiveAnalysisHistory(user.id),
-    getPreferredGoalAmount(user.id),
-  ]);
+  const [allHistory, savedPreferredGoal, automaticSettings] = await Promise.all(
+    [
+      getActiveAnalysisHistory(user.id),
+      getPreferredGoalAmount(user.id),
+      getAutomaticAnalysisSettings(user.id),
+    ],
+  );
   const goalOptions = [
     ...new Set(allHistory.map((item) => item.goalAmount)),
   ].sort((a, b) => a - b);
@@ -258,6 +276,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     preferredGoal,
     historyLimit: FREE_HISTORY_LIMIT,
     today: koreanToday(),
+    isPro: automaticSettings.isPro,
   };
 }
 
@@ -283,16 +302,20 @@ export async function action({ request }: Route.ActionArgs) {
 export default function InvestmentInsights({
   loaderData,
 }: Route.ComponentProps) {
-  const { history, goalOptions, preferredGoal, historyLimit, today } =
+  const { history, goalOptions, preferredGoal, historyLimit, today, isPro } =
     loaderData;
   const [period, setPeriod] = useState<InsightPeriod>("weekly");
 
   useEffect(() => {
     const savedPeriod = window.localStorage.getItem(INSIGHT_PERIOD_STORAGE_KEY);
-    if (savedPeriod === "weekly" || savedPeriod === "monthly") {
+    if (
+      savedPeriod === "weekly" ||
+      savedPeriod === "monthly" ||
+      (isPro && savedPeriod === "annual")
+    ) {
       setPeriod(savedPeriod);
     }
-  }, []);
+  }, [isPro]);
 
   const selectPeriod = (nextPeriod: InsightPeriod) => {
     setPeriod(nextPeriod);
@@ -306,6 +329,14 @@ export default function InvestmentInsights({
     (item) =>
       item.savedOn >= range.previousStart && item.savedOn <= range.previousEnd,
   );
+  const periodOptions: ReadonlyArray<readonly [InsightPeriod, string, string]> =
+    [
+      ["weekly", "주간 인사이트", "월요일부터 일요일"],
+      ["monthly", "월간 인사이트", "매월 1일부터 마지막 날"],
+      ...(isPro
+        ? ([["annual", "연간 인사이트", "매년 1월부터 12월"]] as const)
+        : []),
+    ];
 
   if (history.length === 0) {
     return (
@@ -350,7 +381,9 @@ export default function InvestmentInsights({
               기록 속에서 찾은 투자 인사이트
             </h1>
             <p className="text-muted-foreground mt-2">
-              선택한 목표의 최근 {historyLimit}개 기록을 함께 분석했어요.
+              {isPro
+                ? "선택한 목표로 저장된 모든 기록을 함께 분석했어요."
+                : `선택한 목표의 최근 ${historyLimit}개 기록을 함께 분석했어요.`}
             </p>
           </div>
           <Button asChild variant="outline" className="rounded-full">
@@ -388,16 +421,13 @@ export default function InvestmentInsights({
 
         <section className="bg-card mt-7 rounded-3xl border p-2 shadow-sm">
           <div
-            className="grid grid-cols-2 gap-2"
+            className={
+              isPro ? "grid grid-cols-3 gap-2" : "grid grid-cols-2 gap-2"
+            }
             role="tablist"
             aria-label="투자 인사이트 기간"
           >
-            {(
-              [
-                ["weekly", "주간 인사이트", "월요일부터 일요일"],
-                ["monthly", "월간 인사이트", "매월 1일부터 마지막 날"],
-              ] as const
-            ).map(([value, label, description]) => {
+            {periodOptions.map(([value, label, description]) => {
               const selected = period === value;
               return (
                 <button
@@ -443,7 +473,12 @@ export default function InvestmentInsights({
               <SparklesIcon className="size-6" />
             </div>
             <h2 className="mt-5 text-xl font-black">
-              이 {period === "weekly" ? "주" : "달"}의 분석 기록이 아직 없어요
+              {period === "weekly"
+                ? "이번 주"
+                : period === "monthly"
+                  ? "이번 달"
+                  : "올해"}
+              의 분석 기록이 아직 없어요
             </h2>
             <p className="text-muted-foreground mt-2 text-sm">
               {rangeLabel(range.start, range.end)} · 한국 시간 기준

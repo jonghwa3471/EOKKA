@@ -503,15 +503,15 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
               >
                 <input type="hidden" name="intent" value="analyze-managed" />
                 <input type="hidden" name="replaceExistingGoal" value="" />
+                {loaderData.isPro && (
+                  <p className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2 text-xs leading-5 font-bold text-amber-600 sm:col-span-2 dark:text-amber-400">
+                    Pro에서는 목표 금액을 최대 3개까지 저장하며, 저장된 모든
+                    목표를 자동 분석해요. 현재 {loaderData.savedGoalCount}/3개
+                    사용 중이에요.
+                  </p>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="goalAmount">목표 금액</Label>
-                  {loaderData.isPro && (
-                    <p className="text-xs font-bold text-amber-600 dark:text-amber-400">
-                      Pro에서는 목표 금액을 최대 3개까지 저장하며, 저장된 모든
-                      목표를 자동 분석해요. 현재 {loaderData.savedGoalCount}/3개
-                      사용 중이에요.
-                    </p>
-                  )}
                   <Input
                     id="goalAmount"
                     name="goalAmount"

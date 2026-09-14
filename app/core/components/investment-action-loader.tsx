@@ -4,15 +4,34 @@ import { useMemo } from "react";
 import { INVESTMENT_WISDOM } from "~/core/data/investment-wisdom";
 import { cn } from "~/core/lib/utils";
 
+export const ANALYSIS_PROGRESS_MESSAGES = [
+  { at: 0, text: "최신 종가와 환율을 확인하고 있어요" },
+  { at: 16, text: "종목별 평가금액과 수익률을 계산하고 있어요" },
+  { at: 32, text: "5,000개의 미래 투자 경로를 펼쳐보고 있어요" },
+  { at: 50, text: "목표까지 갈 수 있는 여러 시나리오를 비교하고 있어요" },
+  { at: 66, text: "포트폴리오의 쏠림과 투자 성향을 살펴보고 있어요" },
+  { at: 76, text: "투자 대가 10인의 관점으로 의견을 모으고 있어요" },
+  { at: 84, text: "꼭 필요한 조언만 골라 결과를 정리하고 있어요" },
+  { at: 90, text: "거의 다 완료됐어요. 조금만 기다려 주세요" },
+  { at: 100, text: "분석을 모두 마쳤어요" },
+] as const;
+
+type ProgressMessage = {
+  at: number;
+  text: string;
+};
+
 export function InvestmentActionLoader({
   title,
   description,
   progress,
+  progressMessages,
   className,
 }: {
   title: string;
   description: string;
   progress?: number;
+  progressMessages?: readonly ProgressMessage[];
   className?: string;
 }) {
   const safeProgress =
@@ -22,6 +41,13 @@ export function InvestmentActionLoader({
       INVESTMENT_WISDOM[Math.floor(Math.random() * INVESTMENT_WISDOM.length)],
     [title],
   );
+  const activeProgressMessage =
+    safeProgress === undefined || !progressMessages?.length
+      ? null
+      : ([...progressMessages]
+          .reverse()
+          .find((message) => safeProgress >= message.at) ??
+        progressMessages[0]);
 
   return (
     <div
@@ -71,6 +97,29 @@ export function InvestmentActionLoader({
                   className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-violet-500 transition-[width] duration-300 ease-out"
                   style={{ width: `${safeProgress}%` }}
                 />
+              </div>
+            )}
+
+            {activeProgressMessage && (
+              <div className="mt-3 flex min-h-10 items-start gap-2 overflow-hidden text-xs leading-5 font-bold text-emerald-600 dark:text-emerald-400">
+                <span
+                  className="mt-1.5 flex shrink-0 items-center gap-1"
+                  aria-hidden
+                >
+                  {[0, 1, 2].map((dot) => (
+                    <span
+                      key={dot}
+                      className="size-1.5 animate-bounce rounded-full bg-current"
+                      style={{ animationDelay: `${dot * 120}ms` }}
+                    />
+                  ))}
+                </span>
+                <p
+                  key={activeProgressMessage.text}
+                  className="animate-in fade-in slide-in-from-bottom-1 duration-300"
+                >
+                  {activeProgressMessage.text}
+                </p>
               </div>
             )}
 

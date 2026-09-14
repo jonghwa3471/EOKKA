@@ -26,7 +26,10 @@ import {
 } from "react-router";
 
 import ConfirmDialog from "~/core/components/confirm-dialog";
-import { InvestmentActionLoader } from "~/core/components/investment-action-loader";
+import {
+  ANALYSIS_PROGRESS_MESSAGES,
+  InvestmentActionLoader,
+} from "~/core/components/investment-action-loader";
 import { Button } from "~/core/components/ui/button";
 import { Checkbox } from "~/core/components/ui/checkbox";
 import {
@@ -39,6 +42,7 @@ import {
 } from "~/core/components/ui/dialog";
 import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
+import { useAdaptiveProgress } from "~/core/hooks/use-adaptive-progress";
 import i18next from "~/core/lib/i18next.server";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
@@ -277,7 +281,7 @@ const HOME_TAB_STORAGE_KEY = "eokka:home-tab:v1";
 const GOAL_PRESETS = [1, 10, 100];
 const MONTHLY_CONTRIBUTION_MAX = 1_000_000_000;
 const MONTHLY_CONTRIBUTION_PRESETS = [10_000, 50_000, 100_000];
-const ANALYSIS_ESTIMATED_SECONDS = 20;
+const ANALYSIS_ESTIMATED_MS = 35_000;
 type CurrencyTrailPoint = {
   x: number;
   y: number;
@@ -1269,9 +1273,12 @@ export default function Home() {
     used: number;
     remaining: number;
   } | null>(null);
-  const [analysisSecondsLeft, setAnalysisSecondsLeft] = useState(
-    ANALYSIS_ESTIMATED_SECONDS,
-  );
+  const {
+    progress: analysisProgress,
+    remainingSeconds: analysisSecondsLeft,
+    overtime: analysisOvertime,
+    completing: analysisCompleting,
+  } = useAdaptiveProgress(isAnalyzing, "quick-analysis", ANALYSIS_ESTIMATED_MS);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [goalConflict, setGoalConflict] = useState<{
@@ -1318,15 +1325,6 @@ export default function Home() {
       if (matrixTrailRef.current.length > 34) matrixTrailRef.current.shift();
     }
   };
-
-  useEffect(() => {
-    if (!isAnalyzing) return;
-    setAnalysisSecondsLeft(ANALYSIS_ESTIMATED_SECONDS);
-    const timer = window.setInterval(() => {
-      setAnalysisSecondsLeft((seconds) => Math.max(0, seconds - 1));
-    }, 1_000);
-    return () => window.clearInterval(timer);
-  }, [isAnalyzing]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -1724,16 +1722,12 @@ export default function Home() {
           void analyze(true);
         }}
       />
-      {isAnalyzing && (
+      {(isAnalyzing || analysisCompleting) && (
         <InvestmentActionLoader
           title="포트폴리오를 분석하고 있어요"
           description="시세와 목표 달성 시점, 투자 인사이트를 차례로 계산하고 있어요."
-          progress={Math.min(
-            95,
-            ((ANALYSIS_ESTIMATED_SECONDS - analysisSecondsLeft) /
-              ANALYSIS_ESTIMATED_SECONDS) *
-              100,
-          )}
+          progress={analysisProgress}
+          progressMessages={ANALYSIS_PROGRESS_MESSAGES}
         />
       )}
       <CurrencyMatrixSpotlight
@@ -2325,27 +2319,23 @@ export default function Home() {
                           </>
                         )}
                       </Button>
-                      {isAnalyzing && (
+                      {(isAnalyzing || analysisCompleting) && (
                         <div className="mt-3" role="status" aria-live="polite">
                           <div className="text-muted-foreground flex items-center justify-between gap-3 text-xs">
                             <span>시세·시나리오·AI 전략을 분석하고 있어요</span>
                             <span className="shrink-0 font-bold text-emerald-600 tabular-nums dark:text-emerald-400">
-                              {analysisSecondsLeft > 0
-                                ? `약 ${analysisSecondsLeft}초 남음`
-                                : "마무리 중..."}
+                              {analysisCompleting
+                                ? "분석 완료"
+                                : !analysisOvertime
+                                  ? `약 ${analysisSecondsLeft}초 남음`
+                                  : "마무리 중..."}
                             </span>
                           </div>
                           <div className="bg-muted mt-2 h-1.5 overflow-hidden rounded-full">
                             <div
                               className="h-full rounded-full bg-emerald-500 transition-[width] duration-1000 ease-linear"
                               style={{
-                                width: `${Math.min(
-                                  95,
-                                  ((ANALYSIS_ESTIMATED_SECONDS -
-                                    analysisSecondsLeft) /
-                                    ANALYSIS_ESTIMATED_SECONDS) *
-                                    100,
-                                )}%`,
+                                width: `${analysisProgress}%`,
                               }}
                             />
                           </div>

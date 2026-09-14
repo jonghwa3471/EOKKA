@@ -41,10 +41,13 @@ function DashboardRouteTransitionSkeleton() {
           ? "insights"
           : targetPath.startsWith("/account/")
             ? "account"
-            : targetPath.startsWith("/dashboard/pro") ||
-                targetPath.startsWith("/dashboard/payments")
-              ? "coming-soon"
-              : "dashboard";
+            : targetPath.startsWith("/dashboard/pro")
+              ? "pro"
+              : targetPath.startsWith("/dashboard/payments")
+                ? "payments"
+                : targetPath.startsWith("/dashboard/notifications")
+                  ? "notifications"
+                  : "dashboard";
 
   useEffect(() => {
     if (!isRouteLoading) {

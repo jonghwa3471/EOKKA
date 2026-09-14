@@ -6,6 +6,8 @@ import {
   PanelLeftIcon,
   SparklesIcon,
 } from "lucide-react";
+import { useEffect } from "react";
+import { createPortal } from "react-dom";
 
 import { EokkaLogo } from "~/core/components/eokka-logo";
 import { Skeleton } from "~/core/components/ui/skeleton";
@@ -18,6 +20,9 @@ export type RouteSkeletonVariant =
   | "precise-analysis"
   | "insights"
   | "account"
+  | "pro"
+  | "payments"
+  | "notifications"
   | "coming-soon"
   | "generic";
 
@@ -38,13 +43,16 @@ const dashboardMenu = [
 
 function ImmediateDashboardSidebar() {
   return (
-    <aside className="hidden h-svh w-64 shrink-0 p-2 md:block">
+    <aside className="text-sidebar-foreground hidden h-svh w-64 shrink-0 p-2 font-sans md:block">
       <div className="bg-sidebar/92 border-sidebar-border/70 flex h-full w-full flex-col overflow-hidden rounded-2xl border shadow-[0_20px_55px_-28px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:shadow-[0_24px_65px_-30px_rgba(0,0,0,0.9)]">
         <div className="border-sidebar-border/60 border-b p-3">
-          <div className="flex h-12 items-center gap-3 px-2">
-            <EokkaLogo className="size-10" priority />
-            <div className="leading-tight">
-              <p className="bg-gradient-to-r from-emerald-500 to-violet-500 bg-clip-text font-black tracking-[-0.03em] text-transparent">
+          <div className="flex h-12 w-full items-center gap-3 overflow-hidden rounded-2xl p-2 text-left text-sm font-semibold tracking-[-0.012em]">
+            <EokkaLogo
+              className="size-10 shrink-0 drop-shadow-[0_8px_18px_rgba(16,185,129,0.18)]"
+              priority
+            />
+            <div className="grid flex-1 text-left leading-tight">
+              <p className="bg-gradient-to-r from-emerald-500 to-violet-500 bg-clip-text text-base font-black tracking-[-0.03em] text-transparent">
                 EOKKA
               </p>
               <p className="text-sidebar-foreground/50 text-[10px] font-bold tracking-[0.08em]">
@@ -53,23 +61,28 @@ function ImmediateDashboardSidebar() {
             </div>
           </div>
         </div>
-        <div className="flex-1 px-3 py-3">
-          <p className="text-sidebar-foreground/50 mb-2 flex h-8 items-center gap-2 px-2 text-xs font-bold">
-            <span className="size-1.5 rounded-full bg-emerald-500" />내 투자
+        <div className="flex-1 px-3 py-4">
+          <p className="text-sidebar-foreground/55 mb-1 flex h-8 items-center rounded-lg px-3 text-[10px] font-black tracking-[0.14em] uppercase">
+            <span className="mr-2 size-1.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]" />
+            내 투자
           </p>
           <div className="space-y-1">
             {dashboardMenu.map(([Icon, label], index) => (
               <div
                 key={label}
                 className={cn(
-                  "flex h-8 items-center gap-2 rounded-md px-2 text-sm font-medium",
+                  "flex h-10 items-center gap-3 overflow-hidden rounded-xl p-2 text-sm font-semibold tracking-[-0.012em]",
                   index === 0
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground/70",
+                    ? "text-sidebar-accent-foreground bg-gradient-to-r from-emerald-500/15 to-violet-500/12 font-black shadow-[inset_3px_0_0_rgba(16,185,129,0.85)]"
+                    : "text-sidebar-foreground",
                 )}
               >
-                <Icon className="size-4" />
-                <span>{label}</span>
+                <Icon
+                  className={cn("size-[18px] shrink-0", {
+                    "text-emerald-500": index === 0,
+                  })}
+                />
+                <span className="truncate">{label}</span>
               </div>
             ))}
           </div>
@@ -284,28 +297,67 @@ function InsightsSkeleton() {
   );
 }
 
-function SettingsSkeleton({ account = false }: { account?: boolean }) {
+function AccountCardSkeleton({
+  height,
+  danger = false,
+  fields = 1,
+}: {
+  height: string;
+  danger?: boolean;
+  fields?: number;
+}) {
   return (
-    <>
-      <PageHeading />
-      <div className={cn("mt-7 grid gap-5", account && "lg:grid-cols-2")}>
-        {Array.from({ length: account ? 3 : 1 }, (_, card) => (
-          <div key={card} className="bg-card rounded-3xl border p-6">
-            <Skeleton className="h-6 w-36 rounded-lg" />
-            <Skeleton className="mt-2 h-3 w-64 max-w-full rounded-full" />
-            <div className="mt-6 space-y-5">
-              {[0, 1, account ? 2 : 3].map((item) => (
-                <div key={item} className="space-y-2">
-                  <Skeleton className="h-3 w-24 rounded-full" />
-                  <Skeleton className="h-12 w-full rounded-xl" />
-                </div>
-              ))}
-            </div>
-            <Skeleton className="mt-6 h-11 w-32 rounded-full" />
+    <div
+      className={cn(
+        "bg-card w-full rounded-xl border p-6 shadow-sm",
+        height,
+        danger && "border-red-500/35 bg-red-500/[0.04]",
+      )}
+    >
+      <div className="flex items-start gap-3">
+        {danger && <Skeleton className="size-10 shrink-0 rounded-xl" />}
+        <div className="min-w-0 flex-1 space-y-2">
+          <Skeleton className="h-6 w-40 max-w-full rounded-lg" />
+          <Skeleton className="h-3 w-80 max-w-full rounded-full" />
+        </div>
+      </div>
+      <div className="mt-6 space-y-5">
+        {Array.from({ length: fields }, (_, field) => (
+          <div key={field} className="space-y-2">
+            <Skeleton className="h-3 w-24 rounded-full" />
+            <Skeleton className="h-10 w-full rounded-md" />
           </div>
         ))}
       </div>
-    </>
+      {danger && <Skeleton className="mt-6 h-10 w-full rounded-md" />}
+    </div>
+  );
+}
+
+function AccountSkeleton() {
+  return (
+    <div className="mx-auto flex w-full max-w-screen-md flex-col gap-10">
+      <div className="bg-card min-h-[25rem] w-full rounded-xl border p-6 shadow-sm">
+        <Skeleton className="h-6 w-32 rounded-lg" />
+        <Skeleton className="mt-2 h-3 w-72 max-w-full rounded-full" />
+        <div className="mt-6 flex items-center gap-5">
+          <Skeleton className="size-24 shrink-0 rounded-full" />
+          <div className="w-full space-y-3">
+            <Skeleton className="h-10 w-full rounded-md" />
+            <Skeleton className="h-4 w-48 max-w-full rounded-full" />
+          </div>
+        </div>
+        <div className="mt-7 space-y-2">
+          <Skeleton className="h-3 w-16 rounded-full" />
+          <Skeleton className="h-10 w-full rounded-md" />
+        </div>
+        <Skeleton className="mt-6 h-10 w-full rounded-md" />
+      </div>
+      <AccountCardSkeleton height="min-h-[13rem]" />
+      <AccountCardSkeleton height="min-h-[16rem]" fields={2} />
+      <AccountCardSkeleton height="min-h-[17rem]" danger />
+      <AccountCardSkeleton height="min-h-[18rem]" danger />
+    </div>
   );
 }
 
@@ -318,6 +370,97 @@ function ComingSoonSkeleton() {
         <Skeleton className="mx-auto mt-4 h-9 w-56 max-w-full rounded-xl" />
         <Skeleton className="mx-auto mt-4 h-4 w-full max-w-sm rounded-full" />
         <Skeleton className="mx-auto mt-2 h-4 w-64 max-w-full rounded-full" />
+      </div>
+    </div>
+  );
+}
+
+function ProSkeleton() {
+  return (
+    <div className="mx-auto w-full max-w-6xl">
+      <div className="bg-card grid gap-8 rounded-[2rem] border p-7 md:p-10 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div>
+          <Skeleton className="h-7 w-32 rounded-full" />
+          <Skeleton className="mt-6 h-12 w-full max-w-lg rounded-xl" />
+          <Skeleton className="mt-3 h-12 w-3/4 max-w-md rounded-xl" />
+          <Skeleton className="mt-5 h-4 w-full max-w-xl rounded-full" />
+          <Skeleton className="mt-2 h-4 w-4/5 max-w-lg rounded-full" />
+          <div className="mt-6 flex gap-2">
+            <Skeleton className="h-8 w-24 rounded-full" />
+            <Skeleton className="h-8 w-32 rounded-full" />
+          </div>
+        </div>
+        <Skeleton className="h-64 rounded-3xl" />
+      </div>
+      <div className="mt-8 text-center">
+        <Skeleton className="mx-auto h-4 w-28 rounded-full" />
+        <Skeleton className="mx-auto mt-3 h-8 w-72 max-w-full rounded-xl" />
+      </div>
+      <div className="bg-card mt-6 rounded-3xl border p-6">
+        <div className="grid grid-cols-3 gap-4 border-b pb-4">
+          {[0, 1, 2].map((item) => (
+            <Skeleton key={item} className="h-5 rounded-full" />
+          ))}
+        </div>
+        <div className="mt-4 space-y-4">
+          {[0, 1, 2, 3].map((row) => (
+            <div key={row} className="grid grid-cols-3 gap-4">
+              {[0, 1, 2].map((cell) => (
+                <Skeleton key={cell} className="h-4 rounded-full" />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PaymentsSkeleton() {
+  return (
+    <div className="mx-auto w-full max-w-6xl">
+      <PageHeading action />
+      <div className="mt-7 grid gap-4 md:grid-cols-3">
+        {[0, 1, 2].map((item) => (
+          <MetricCard key={item} />
+        ))}
+      </div>
+      <div className="bg-card mt-7 rounded-3xl border p-6">
+        <div className="flex items-center justify-between border-b pb-5">
+          <Skeleton className="h-6 w-28 rounded-lg" />
+          <Skeleton className="h-7 w-16 rounded-full" />
+        </div>
+        <div className="space-y-4 pt-5">
+          {[0, 1, 2].map((item) => (
+            <Skeleton key={item} className="h-20 w-full rounded-2xl" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NotificationsSkeleton() {
+  return (
+    <div className="mx-auto w-full max-w-5xl">
+      <PageHeading action />
+      <div className="bg-card mt-7 overflow-hidden rounded-3xl border">
+        <div className="flex items-center justify-between border-b px-6 py-5">
+          <Skeleton className="h-5 w-24 rounded-full" />
+          <Skeleton className="h-7 w-24 rounded-full" />
+        </div>
+        <div className="divide-y px-6">
+          {[0, 1, 2, 3, 4].map((item) => (
+            <div key={item} className="flex items-start gap-4 py-5">
+              <Skeleton className="size-10 shrink-0 rounded-xl" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-40 rounded-full" />
+                <Skeleton className="h-3 w-full max-w-xl rounded-full" />
+                <Skeleton className="h-3 w-24 rounded-full" />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -354,7 +497,13 @@ function SkeletonContent({ variant }: { variant: RouteSkeletonVariant }) {
     case "insights":
       return <InsightsSkeleton />;
     case "account":
-      return <SettingsSkeleton account />;
+      return <AccountSkeleton />;
+    case "pro":
+      return <ProSkeleton />;
+    case "payments":
+      return <PaymentsSkeleton />;
+    case "notifications":
+      return <NotificationsSkeleton />;
     case "coming-soon":
       return <ComingSoonSkeleton />;
     default:
@@ -368,39 +517,55 @@ export function RouteTransitionSkeleton({
   dashboardSidebarCollapsed = false,
   variant = "generic",
 }: RouteTransitionSkeletonProps) {
-  if (withDashboardShell)
-    return (
-      <div
-        className="fixed inset-0 z-[9998] flex min-h-svh w-full overflow-hidden bg-[radial-gradient(circle_at_0%_0%,rgba(16,185,129,0.08),transparent_28%),radial-gradient(circle_at_22%_85%,rgba(139,92,246,0.08),transparent_30%)]"
-        role="status"
-        aria-live="polite"
-        aria-label="대시보드 이동 중"
-      >
-        <ImmediateDashboardSidebar />
-        <div className="bg-background border-border/60 m-0 flex min-w-0 flex-1 flex-col overflow-hidden md:m-2 md:ml-0 md:rounded-2xl md:border md:shadow-[0_18px_50px_-30px_rgba(15,23,42,0.4)]">
-          <div className="bg-background/80 border-border/60 relative flex h-16 shrink-0 items-center border-b px-5 shadow-[0_10px_30px_-26px_rgba(15,23,42,0.55)] backdrop-blur-xl">
-            <span className="border-border/60 bg-background/70 -ml-1 flex size-8 items-center justify-center rounded-xl border shadow-sm">
-              <PanelLeftIcon className="size-4" />
-            </span>
-            <span className="ml-3 text-sm font-black tracking-[-0.02em]">
-              내 투자 대시보드
-            </span>
-            <span className="ml-3 size-1.5 rounded-full bg-emerald-500" />
-          </div>
-          <div className="mx-auto w-full max-w-7xl px-5 py-8 md:px-8 md:py-12">
-            <SkeletonContent variant={variant} />
-          </div>
+  useEffect(() => {
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousBodyPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth =
+      window.innerWidth - document.documentElement.clientWidth;
+
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    if (scrollbarWidth > 0)
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+
+    return () => {
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+      document.body.style.paddingRight = previousBodyPaddingRight;
+    };
+  }, []);
+
+  const skeleton = withDashboardShell ? (
+    <div
+      className="bg-background fixed -inset-px z-[9998] flex min-h-[calc(100svh+2px)] overflow-hidden bg-[radial-gradient(circle_at_0%_0%,rgba(16,185,129,0.08),transparent_28%),radial-gradient(circle_at_22%_85%,rgba(139,92,246,0.08),transparent_30%)]"
+      role="status"
+      aria-live="polite"
+      aria-label="대시보드 이동 중"
+    >
+      <ImmediateDashboardSidebar />
+      <div className="bg-background border-border/60 m-0 flex min-w-0 flex-1 flex-col overflow-hidden md:m-2 md:ml-0 md:rounded-2xl md:border md:shadow-[0_18px_50px_-30px_rgba(15,23,42,0.4)]">
+        <div className="bg-background/80 border-border/60 relative flex h-16 shrink-0 items-center border-b px-5 shadow-[0_10px_30px_-26px_rgba(15,23,42,0.55)] backdrop-blur-xl">
+          <span className="border-border/60 bg-background/70 -ml-1 flex size-8 items-center justify-center rounded-xl border shadow-sm">
+            <PanelLeftIcon className="size-4" />
+          </span>
+          <span className="ml-3 text-sm font-black tracking-[-0.02em]">
+            내 투자 대시보드
+          </span>
+          <span className="ml-3 size-1.5 rounded-full bg-emerald-500" />
+        </div>
+        <div className="mx-auto w-full max-w-7xl px-5 py-8 md:px-8 md:py-12">
+          <SkeletonContent variant={variant} />
         </div>
       </div>
-    );
-
-  return (
+    </div>
+  ) : (
     <div
       className={cn(
         "bg-background overflow-hidden",
         withinDashboard
           ? cn(
-              "fixed inset-x-0 top-0 bottom-0 z-40 md:top-2 md:right-2 md:bottom-2",
+              "fixed inset-0 z-40",
               dashboardSidebarCollapsed
                 ? "md:left-[4.5rem]"
                 : "md:left-[17rem]",
@@ -422,4 +587,8 @@ export function RouteTransitionSkeleton({
       </div>
     </div>
   );
+
+  return typeof document === "undefined"
+    ? skeleton
+    : createPortal(skeleton, document.body);
 }

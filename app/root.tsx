@@ -41,10 +41,14 @@ import {
 } from "remix-themes";
 import { Toaster } from "sonner";
 
-import { InvestmentActionLoader } from "./core/components/investment-action-loader";
+import {
+  ANALYSIS_PROGRESS_MESSAGES,
+  InvestmentActionLoader,
+} from "./core/components/investment-action-loader";
 import { RouteTransitionSkeleton } from "./core/components/route-transition-skeleton";
 import { Dialog } from "./core/components/ui/dialog";
 import { Sheet } from "./core/components/ui/sheet";
+import { useAdaptiveProgress } from "./core/hooks/use-adaptive-progress";
 import i18next from "./core/lib/i18next.server";
 import { themeSessionResolver } from "./core/lib/theme-session.server";
 import { cn } from "./core/lib/utils";
@@ -275,15 +279,30 @@ export default function App() {
           ? "insights"
           : targetPath.startsWith("/account/")
             ? "account"
-            : targetPath.startsWith("/dashboard/pro") ||
-                targetPath.startsWith("/dashboard/payments")
-              ? "coming-soon"
-              : targetPath.startsWith("/dashboard")
-                ? "dashboard"
-                : "generic";
+            : targetPath.startsWith("/dashboard/pro")
+              ? "pro"
+              : targetPath.startsWith("/dashboard/payments")
+                ? "payments"
+                : targetPath.startsWith("/dashboard/notifications")
+                  ? "notifications"
+                  : targetPath.startsWith("/dashboard")
+                    ? "dashboard"
+                    : "generic";
+  const requestIntent = String(requestFormData?.get("intent") ?? "");
+  const progressKey =
+    requestIntent || (isAuthAction ? "authentication" : "action");
+  const progressEstimateMs =
+    requestIntent === "analyze-managed" ||
+    requestIntent === "refresh-managed-analysis"
+      ? 35_000
+      : 8_000;
+  const { progress: loadingProgress } = useAdaptiveProgress(
+    isActionBusy,
+    progressKey,
+    progressEstimateMs,
+  );
   const [showBlockingLoader, setShowBlockingLoader] = useState(false);
   const [showRouteSkeleton, setShowRouteSkeleton] = useState(false);
-  const [loadingProgress, setLoadingProgress] = useState(0);
 
   // Initialize NProgress with spinner for better UX during navigation
   useEffect(() => {
@@ -294,14 +313,15 @@ export default function App() {
   // than the threshold show a blocking loader.
   useEffect(() => {
     if (!isActionBusy) {
-      setShowBlockingLoader(false);
-      setLoadingProgress(0);
       NProgress.done();
-      return;
+      const completionTimer = window.setTimeout(
+        () => setShowBlockingLoader(false),
+        340,
+      );
+      return () => window.clearTimeout(completionTimer);
     }
 
     const timer = window.setTimeout(() => {
-      setLoadingProgress(8);
       setShowBlockingLoader(true);
       NProgress.start();
     }, 450);
@@ -322,18 +342,6 @@ export default function App() {
   }, [isRouteBusy]);
 
   useEffect(() => {
-    if (!showBlockingLoader || !isActionBusy) return;
-    const timer = window.setInterval(() => {
-      setLoadingProgress((progress) =>
-        progress >= 92
-          ? 92
-          : Math.min(92, progress + Math.max(1, (92 - progress) * 0.08)),
-      );
-    }, 350);
-    return () => window.clearInterval(timer);
-  }, [isActionBusy, showBlockingLoader]);
-
-  useEffect(() => {
     if (!showBlockingLoader) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -345,7 +353,6 @@ export default function App() {
   // Handle Supabase authentication redirects
   // This is a workaround for a Supabase auth issue: https://github.com/supabase/auth/issues/1927
   // TODO: Remove this once the issue is fixed
-  const requestIntent = String(requestFormData?.get("intent") ?? "");
   const loadingCopy = (() => {
     switch (requestIntent) {
       case "analyze-managed":
@@ -461,6 +468,12 @@ export default function App() {
             title={loadingCopy.title}
             description={loadingCopy.description}
             progress={loadingProgress}
+            progressMessages={
+              requestIntent === "analyze-managed" ||
+              requestIntent === "refresh-managed-analysis"
+                ? ANALYSIS_PROGRESS_MESSAGES
+                : undefined
+            }
           />
         )}
       </Dialog>
