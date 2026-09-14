@@ -155,6 +155,20 @@
       "when": 1789344767313,
       "tag": "0021_modern_master_mold",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1789364962695,
+      "tag": "0022_create_avatars_bucket",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1789365552398,
+      "tag": "0023_allow_avatar_upsert_select",
+      "breakpoints": true
     }
   ]
 }

@@ -11,12 +11,25 @@ import makeServerClient from "../lib/supa-client.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const [client] = makeServerClient(request);
-  const userPromise = client.auth.getUser().then(async (result) => ({
-    ...result,
-    unreadNotificationCount: result.data.user
-      ? await getUnreadNotificationCount(result.data.user.id)
-      : 0,
-  }));
+  const userPromise = client.auth.getUser().then(async (result) => {
+    const user = result.data.user;
+    const [unreadNotificationCount, profileResult] = user
+      ? await Promise.all([
+          getUnreadNotificationCount(user.id),
+          client
+            .from("profiles")
+            .select("name, avatar_url")
+            .eq("profile_id", user.id)
+            .maybeSingle(),
+        ])
+      : [0, null];
+
+    return {
+      ...result,
+      unreadNotificationCount,
+      profile: profileResult?.data ?? null,
+    };
+  });
   return { userPromise };
 }
 
@@ -26,14 +39,16 @@ export default function NavigationLayout({ loaderData }: Route.ComponentProps) {
     <div className="flex min-h-screen flex-col justify-between">
       <Suspense fallback={<NavigationBar loading={true} />}>
         <Await resolve={userPromise}>
-          {({ data: { user }, unreadNotificationCount }) =>
+          {({ data: { user }, unreadNotificationCount, profile }) =>
             user === null ? (
               <NavigationBar loading={false} />
             ) : (
               <NavigationBar
-                name={user.user_metadata.name || "사용자"}
+                name={profile?.name || user.user_metadata.name || "사용자"}
                 email={user.email}
-                avatarUrl={user.user_metadata.avatar_url}
+                avatarUrl={
+                  profile?.avatar_url ?? user.user_metadata.avatar_url ?? null
+                }
                 unreadNotificationCount={unreadNotificationCount}
                 loading={false}
               />

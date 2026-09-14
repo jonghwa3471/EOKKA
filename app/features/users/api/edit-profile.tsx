@@ -91,13 +91,19 @@ export async function action({ request }: Route.ActionArgs) {
   // Get current user profile to determine existing avatar URL
   const profile = await getUserProfile(client, { userId: user.id });
   let avatarUrl = profile?.avatar_url || null;
+  const hasAvatarUpload =
+    validData.avatar instanceof File && validData.avatar.size > 0;
+
+  if (hasAvatarUpload && validData.avatar.size > 1024 * 1024) {
+    return data(
+      { error: "프로필 사진은 1MB 이하만 업로드할 수 있어요." },
+      { status: 400 },
+    );
+  }
 
   // Handle avatar image upload if a valid file was provided
   if (
-    validData.avatar &&
-    validData.avatar instanceof File &&
-    validData.avatar.size > 0 &&
-    validData.avatar.size < 1024 * 1024 && // 1MB size limit
+    hasAvatarUpload &&
     validData.avatar.type.startsWith("image/") // Ensure it's an image file
   ) {
     // Upload avatar to Supabase Storage
@@ -111,7 +117,17 @@ export async function action({ request }: Route.ActionArgs) {
 
     // Handle upload errors
     if (uploadError) {
-      return data({ error: uploadError.message }, { status: 400 });
+      const isMissingAvatarBucket =
+        uploadError.message.toLowerCase().includes("bucket not found");
+
+      return data(
+        {
+          error: isMissingAvatarBucket
+            ? "프로필 이미지 저장소가 아직 준비되지 않았어요. 잠시 후 다시 시도해 주세요."
+            : uploadError.message,
+        },
+        { status: 400 },
+      );
     }
 
     // Get public URL for the uploaded avatar

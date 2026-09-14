@@ -2,7 +2,7 @@ import type { Route as SocialAvatarRoute } from "@rr/app/features/users/api/+typ
 
 import { CheckIcon, Loader2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useFetcher } from "react-router";
+import { useFetcher, useLocation, useNavigate } from "react-router";
 
 import FormErrors from "~/core/components/form-error";
 import FormSuccess from "~/core/components/form-success";
@@ -56,11 +56,18 @@ export default function ConnectSocialAccountsForm({
   providers: string[];
   connectionFeedback: {
     provider: "google" | "kakao";
-    status: "connected" | "exists" | "cancelled" | "failed";
+    status:
+      | "connected"
+      | "disconnected"
+      | "exists"
+      | "cancelled"
+      | "failed";
   } | null;
   currentAvatarUrl: string | null;
   socialAvatarUrls: Record<string, string | null>;
 }) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const avatarFetcher =
     useFetcher<SocialAvatarRoute.ComponentProps["actionData"]>();
   const avatarChoiceFinished = Boolean(
@@ -68,11 +75,36 @@ export default function ConnectSocialAccountsForm({
       "success" in avatarFetcher.data &&
       avatarFetcher.data.success,
   );
+  const [visibleFeedback, setVisibleFeedback] = useState(connectionFeedback);
   const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
 
   useEffect(() => {
-    if (connectionFeedback?.status === "connected") setAvatarDialogOpen(true);
-  }, [connectionFeedback?.provider, connectionFeedback?.status]);
+    if (!connectionFeedback) return;
+
+    setVisibleFeedback(connectionFeedback);
+    if (connectionFeedback.status === "connected") setAvatarDialogOpen(true);
+
+    // OAuth and unlink results are one-time feedback. Preserve the result in
+    // component state, but consume it from the URL so refresh cannot replay an
+    // old avatar prompt or overwrite a newer unlink result.
+    const searchParams = new URLSearchParams(location.search);
+    searchParams.delete("social");
+    searchParams.delete("provider");
+    const search = searchParams.toString();
+    void navigate(
+      {
+        pathname: location.pathname,
+        search: search ? `?${search}` : "",
+      },
+      { replace: true, preventScrollReset: true },
+    );
+  }, [
+    connectionFeedback?.provider,
+    connectionFeedback?.status,
+    location.pathname,
+    location.search,
+    navigate,
+  ]);
 
   useEffect(() => {
     if (avatarChoiceFinished) setAvatarDialogOpen(false);
@@ -88,17 +120,19 @@ export default function ConnectSocialAccountsForm({
       <CardContent className="flex flex-col gap-4">
         {enabledProviders.map((provider) => {
           const feedback =
-            connectionFeedback?.provider === provider.key
-              ? connectionFeedback
+            visibleFeedback?.provider === provider.key
+              ? visibleFeedback
               : null;
           const message = feedback
             ? feedback.status === "connected"
               ? `${provider.name} 계정을 연결했어요.`
-              : feedback.status === "exists"
-                ? `이 ${provider.name} 계정은 이미 다른 EOKKA 계정에 연결되어 있어요.`
-                : feedback.status === "cancelled"
-                  ? `${provider.name} 계정 연결을 취소했어요.`
-                  : `${provider.name} 계정을 연결하지 못했어요. 다시 시도해 주세요.`
+              : feedback.status === "disconnected"
+                ? `${provider.name} 계정 연결을 해제했어요.`
+                : feedback.status === "exists"
+                  ? `이 ${provider.name} 계정은 이미 다른 EOKKA 계정에 연결되어 있어요.`
+                  : feedback.status === "cancelled"
+                    ? `${provider.name} 계정 연결을 취소했어요.`
+                    : `${provider.name} 계정을 연결하지 못했어요. 다시 시도해 주세요.`
             : null;
 
           return (
@@ -116,7 +150,9 @@ export default function ConnectSocialAccountsForm({
                   providerKey={provider.key}
                 />
               )}
-              {message && feedback?.status === "connected" ? (
+              {message &&
+              (feedback?.status === "connected" ||
+                feedback?.status === "disconnected") ? (
                 <FormSuccess message={message} />
               ) : null}
               {feedback?.status === "connected" ? (
@@ -207,7 +243,9 @@ export default function ConnectSocialAccountsForm({
                   반영했어요.
                 </p>
               ) : null}
-              {message && feedback?.status !== "connected" ? (
+              {message &&
+              feedback?.status !== "connected" &&
+              feedback?.status !== "disconnected" ? (
                 <div className="rounded-xl border border-red-500/20 bg-red-500/[0.06] px-4 py-3">
                   <FormErrors errors={[message]} />
                 </div>

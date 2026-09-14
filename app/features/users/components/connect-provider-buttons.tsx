@@ -12,7 +12,6 @@ import { useFetcher } from "react-router";
 
 import ConfirmDialog from "~/core/components/confirm-dialog";
 import FormErrors from "~/core/components/form-error";
-import FormSuccess from "~/core/components/form-success";
 import { Button } from "~/core/components/ui/button";
 
 export function ConnectProviderButton({
@@ -26,48 +25,71 @@ export function ConnectProviderButton({
 }) {
   const fetcher =
     useFetcher<ConnectProviderRoute.ComponentProps["actionData"]>();
+  const formRef = useRef<HTMLFormElement>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   return (
-    <fetcher.Form
-      method={"post"}
-      action={"/api/users/providers"}
-      className="space-y-3"
-      onSubmit={() => {
-        sessionStorage.setItem(
-          "eokka:social-link-scroll-y",
-          String(window.scrollY),
-        );
-      }}
-    >
-      <input type="hidden" name="provider" value={providerKey} />
-      <Button
-        disabled={fetcher.state === "submitting"}
-        className="w-full justify-between"
-        variant={"outline"}
+    <>
+      <fetcher.Form
+        ref={formRef}
+        method={"post"}
+        action={"/api/users/providers"}
+        className="space-y-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setConfirmOpen(true);
+        }}
       >
-        <div className="flex items-center gap-3">
-          <span>{logo}</span>
-          <span>{provider}</span>
-        </div>
-        <div className="inline-flex items-center justify-center gap-2">
-          <span className="flex items-center gap-2 text-xs">
-            {fetcher.state === "idle" ? (
-              <>
-                <PlugIcon className="block size-4" />
-                연결
-              </>
-            ) : null}
-            {fetcher.state !== "idle" ? (
-              <Loader2Icon className="size-4 animate-spin" />
-            ) : null}
-          </span>
-        </div>
-      </Button>
-      {fetcher.data && "error" in fetcher.data ? (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/[0.06] px-4 py-3">
-          <FormErrors errors={[fetcher.data.error]} />
-        </div>
-      ) : null}
-    </fetcher.Form>
+        <input type="hidden" name="provider" value={providerKey} />
+        <Button
+          disabled={fetcher.state === "submitting"}
+          className="w-full justify-between"
+          variant={"outline"}
+        >
+          <div className="flex items-center gap-3">
+            <span>{logo}</span>
+            <span>{provider}</span>
+          </div>
+          <div className="inline-flex items-center justify-center gap-2">
+            <span className="flex items-center gap-2 text-xs">
+              {fetcher.state === "idle" ? (
+                <>
+                  <PlugIcon className="block size-4" />
+                  연결
+                </>
+              ) : null}
+              {fetcher.state !== "idle" ? (
+                <Loader2Icon className="size-4 animate-spin" />
+              ) : null}
+            </span>
+          </div>
+        </Button>
+        {fetcher.data && "error" in fetcher.data ? (
+          <div className="rounded-xl border border-red-500/20 bg-red-500/[0.06] px-4 py-3">
+            <FormErrors errors={[fetcher.data.error]} />
+          </div>
+        ) : null}
+      </fetcher.Form>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={`${provider} 계정을 연결할까요?`}
+        description={`연결 후에는 ${provider} 계정으로도 EOKKA에 로그인할 수 있어요.`}
+        confirmLabel="계정 연결"
+        busy={fetcher.state !== "idle"}
+        onConfirm={() => {
+          if (!formRef.current) return;
+          sessionStorage.setItem(
+            "eokka:social-link-scroll-y",
+            String(window.scrollY),
+          );
+          setConfirmOpen(false);
+          void fetcher.submit(formRef.current, {
+            method: "post",
+            action: "/api/users/providers",
+          });
+        }}
+      />
+    </>
   );
 }
 
@@ -125,9 +147,6 @@ export function DisconnectProviderButton({
           <div className="rounded-xl border border-red-500/20 bg-red-500/[0.06] px-4 py-3">
             <FormErrors errors={[fetcher.data.error]} />
           </div>
-        ) : null}
-        {fetcher.data && "success" in fetcher.data && fetcher.data.success ? (
-          <FormSuccess message={`${provider} 계정 연결을 해제했어요.`} />
         ) : null}
       </fetcher.Form>
       <ConfirmDialog

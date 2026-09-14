@@ -24,6 +24,7 @@ export type RouteSkeletonVariant =
 interface RouteTransitionSkeletonProps {
   withinDashboard?: boolean;
   withDashboardShell?: boolean;
+  dashboardSidebarCollapsed?: boolean;
   variant?: RouteSkeletonVariant;
 }
 
@@ -364,6 +365,7 @@ function SkeletonContent({ variant }: { variant: RouteSkeletonVariant }) {
 export function RouteTransitionSkeleton({
   withinDashboard = false,
   withDashboardShell = false,
+  dashboardSidebarCollapsed = false,
   variant = "generic",
 }: RouteTransitionSkeletonProps) {
   if (withDashboardShell)
@@ -397,7 +399,12 @@ export function RouteTransitionSkeleton({
       className={cn(
         "bg-background overflow-hidden",
         withinDashboard
-          ? "absolute inset-x-0 top-16 z-10 min-h-[calc(100svh-4rem)] group-has-[[data-collapsible=icon]]/sidebar-wrapper:top-12 group-has-[[data-collapsible=icon]]/sidebar-wrapper:min-h-[calc(100svh-3rem)]"
+          ? cn(
+              "fixed inset-x-0 top-0 bottom-0 z-40 md:top-2 md:right-2 md:bottom-2",
+              dashboardSidebarCollapsed
+                ? "md:left-[4.5rem]"
+                : "md:left-[17rem]",
+            )
           : "fixed inset-0 z-[9998] pt-16",
       )}
       role="status"

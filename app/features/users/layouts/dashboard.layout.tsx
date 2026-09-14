@@ -9,15 +9,18 @@ import {
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
+  useSidebar,
 } from "~/core/components/ui/sidebar";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { getUnreadNotificationCount } from "~/features/notifications/notifications.server";
 
 import { markUserActive } from "../activity.server";
 import DashboardSidebar from "../components/dashboard-sidebar";
+import { getUserProfile } from "../queries";
 
 function DashboardRouteTransitionSkeleton() {
   const navigation = useNavigation();
+  const { state: sidebarState } = useSidebar();
   const [visible, setVisible] = useState(false);
   const targetPath = navigation.location?.pathname ?? "";
   const targetStaysInDashboard =
@@ -54,7 +57,11 @@ function DashboardRouteTransitionSkeleton() {
   }, [isRouteLoading]);
 
   return visible ? (
-    <RouteTransitionSkeleton withinDashboard variant={variant} />
+    <RouteTransitionSkeleton
+      withinDashboard
+      dashboardSidebarCollapsed={sidebarState === "collapsed"}
+      variant={variant}
+    />
   ) : null;
 }
 
@@ -64,20 +71,27 @@ export async function loader({ request }: Route.LoaderArgs) {
     data: { user },
   } = await client.auth.getUser();
   if (user) await markUserActive(user.id);
-  const unreadNotificationCount = user
-    ? await getUnreadNotificationCount(user.id)
-    : 0;
+  const [unreadNotificationCount, profile] = user
+    ? await Promise.all([
+        getUnreadNotificationCount(user.id),
+        getUserProfile(client, { userId: user.id }),
+      ])
+    : [0, null];
   return {
     unreadNotificationCount,
     user: user
       ? {
           name:
+            profile?.name ??
             user.user_metadata.name ??
             user.user_metadata.full_name ??
             user.email?.split("@")[0] ??
             "사용자",
           avatarUrl:
-            user.user_metadata.avatar_url ?? user.user_metadata.picture ?? "",
+            profile?.avatar_url ??
+            user.user_metadata.avatar_url ??
+            user.user_metadata.picture ??
+            "",
           email: user.email ?? "",
         }
       : null,

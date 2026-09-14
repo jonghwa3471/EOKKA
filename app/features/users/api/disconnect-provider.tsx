@@ -116,8 +116,13 @@ export async function action({ request, params }: Route.ActionArgs) {
     );
   }
 
-  // Return success response
-  return {
-    success: true,
-  };
+  // Keep the result at account-page level. The provider button is replaced as
+  // soon as identities are revalidated, so component-local feedback would be
+  // unmounted before the user can read it.
+  return redirect(
+    `/account/edit?${new URLSearchParams({
+      social: "disconnected",
+      provider: parsedParams.provider,
+    })}`,
+  );
 }

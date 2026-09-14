@@ -143,6 +143,7 @@ export default function Account({ loaderData }: Route.ComponentProps) {
                 connectionFeedback={
                   (socialProvider === "google" || socialProvider === "kakao") &&
                   (socialStatus === "connected" ||
+                    socialStatus === "disconnected" ||
                     socialStatus === "exists" ||
                     socialStatus === "cancelled" ||
                     socialStatus === "failed")

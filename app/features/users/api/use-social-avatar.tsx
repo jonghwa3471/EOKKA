@@ -11,6 +11,14 @@ const schema = z.object({
   choice: z.enum(["current", "provider"]),
 });
 
+const MAX_AVATAR_BYTES = 1024 * 1024;
+const ALLOWED_AVATAR_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+
 function avatarFromIdentity(identityData: Record<string, unknown> | undefined) {
   if (!identityData) return null;
   const avatarKey = /(avatar|picture|profile.*image|image.*profile|thumbnail)/i;
@@ -34,6 +42,24 @@ function avatarFromIdentity(identityData: Record<string, unknown> | undefined) {
     }
   }
   return null;
+}
+
+function isAllowedProviderAvatarUrl(
+  avatarUrl: string,
+  provider: "google" | "kakao",
+) {
+  try {
+    const url = new URL(avatarUrl);
+    if (url.protocol !== "https:") return false;
+    const hostname = url.hostname.toLowerCase();
+
+    return provider === "google"
+      ? hostname === "googleusercontent.com" ||
+          hostname.endsWith(".googleusercontent.com")
+      : hostname === "kakaocdn.net" || hostname.endsWith(".kakaocdn.net");
+  } catch {
+    return false;
+  }
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -66,12 +92,86 @@ export async function action({ request }: Route.ActionArgs) {
       { status: 400 },
     );
 
+  if (!isAllowedProviderAvatarUrl(avatarUrl, parsed.data.provider))
+    return data(
+      { error: "소셜 계정의 프로필 사진 주소를 안전하게 확인하지 못했어요." },
+      { status: 400 },
+    );
+
+  let avatarResponse: Response;
+  try {
+    avatarResponse = await fetch(avatarUrl, {
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    return data(
+      { error: "소셜 계정의 프로필 사진을 불러오지 못했어요." },
+      { status: 502 },
+    );
+  }
+
+  if (
+    !avatarResponse.ok ||
+    !isAllowedProviderAvatarUrl(
+      avatarResponse.url || avatarUrl,
+      parsed.data.provider,
+    )
+  )
+    return data(
+      { error: "소셜 계정의 프로필 사진을 안전하게 불러오지 못했어요." },
+      { status: 502 },
+    );
+
+  const contentType =
+    avatarResponse.headers.get("content-type")?.split(";", 1)[0].trim() ?? "";
+  const declaredSize = Number(
+    avatarResponse.headers.get("content-length") ?? "0",
+  );
+  if (!ALLOWED_AVATAR_TYPES.has(contentType))
+    return data(
+      { error: "지원하지 않는 소셜 프로필 사진 형식이에요." },
+      { status: 400 },
+    );
+  if (declaredSize > MAX_AVATAR_BYTES)
+    return data(
+      { error: "소셜 프로필 사진은 1MB 이하만 사용할 수 있어요." },
+      { status: 400 },
+    );
+
+  const avatarBytes = await avatarResponse.arrayBuffer();
+  if (avatarBytes.byteLength > MAX_AVATAR_BYTES)
+    return data(
+      { error: "소셜 프로필 사진은 1MB 이하만 사용할 수 있어요." },
+      { status: 400 },
+    );
+
+  // Every source (direct upload, Google, Kakao) uses one fixed object path.
+  // Upsert replaces the previous bytes, so unused avatars never accumulate.
+  const { error: uploadError } = await client.storage
+    .from("avatars")
+    .upload(user.id, avatarBytes, {
+      upsert: true,
+      cacheControl: "3600",
+      contentType,
+    });
+
+  if (uploadError)
+    return data(
+      { error: "소셜 프로필 사진을 저장하지 못했어요. 다시 시도해 주세요." },
+      { status: 500 },
+    );
+
+  const {
+    data: { publicUrl },
+  } = client.storage.from("avatars").getPublicUrl(user.id);
+  const storedAvatarUrl = `${publicUrl}?v=${Date.now()}`;
+
   const { error: profileError } = await client
     .from("profiles")
-    .update({ avatar_url: avatarUrl })
+    .update({ avatar_url: storedAvatarUrl })
     .eq("profile_id", user.id);
   const { error: authError } = await client.auth.updateUser({
-    data: { ...user.user_metadata, avatar_url: avatarUrl },
+    data: { ...user.user_metadata, avatar_url: storedAvatarUrl },
   });
 
   if (profileError || authError)

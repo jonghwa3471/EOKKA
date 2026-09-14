@@ -1,5 +1,5 @@
 import { type Route } from "@rr/app/features/users/api/+types/edit-profile";
-import { UserIcon } from "lucide-react";
+import { RotateCcwIcon, UserIcon, ZoomInIcon, ZoomOutIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 
@@ -12,6 +12,7 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "~/core/components/ui/avatar";
+import { Button } from "~/core/components/ui/button";
 import {
   Card,
   CardContent,
@@ -50,6 +51,7 @@ export default function EditProfileForm({
   const [hasNewAvatar, setHasNewAvatar] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [avatar, setAvatar] = useState<string | null>(avatarUrl);
+  const [avatarZoom, setAvatarZoom] = useState(1);
   const isDirty =
     profileName !== initialNameRef.current ||
     marketingEnabled !== initialMarketingConsentRef.current ||
@@ -119,7 +121,11 @@ export default function EditProfileForm({
             <div className="flex items-center gap-10">
               <div className="flex flex-col items-start gap-2">
                 <span>프로필 사진</span>
-                <Dialog>
+                <Dialog
+                  onOpenChange={(open) => {
+                    if (!open) setAvatarZoom(1);
+                  }}
+                >
                   <DialogTrigger asChild>
                     <button
                       type="button"
@@ -140,16 +146,69 @@ export default function EditProfileForm({
                     <DialogHeader>
                       <DialogTitle>프로필 사진</DialogTitle>
                     </DialogHeader>
-                    <div className="bg-muted/40 flex min-h-80 items-center justify-center overflow-hidden rounded-xl p-4">
+                    <div className="bg-muted/40 relative overflow-hidden rounded-xl">
                       {avatar ? (
-                        <img
-                          src={avatar}
-                          alt="프로필 사진 크게 보기"
-                          className="max-h-[70vh] max-w-full rounded-lg object-contain"
-                        />
+                        <>
+                          <div className="bg-background/90 absolute top-3 right-3 z-10 flex items-center gap-1 rounded-xl border p-1 shadow-lg backdrop-blur-sm">
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="size-8 rounded-lg"
+                              aria-label="프로필 사진 축소"
+                              disabled={avatarZoom <= 0.5}
+                              onClick={() =>
+                                setAvatarZoom((zoom) =>
+                                  Math.max(0.5, zoom - 0.25),
+                                )
+                              }
+                            >
+                              <ZoomOutIcon className="size-4" />
+                            </Button>
+                            <span className="text-muted-foreground w-12 text-center text-xs font-semibold tabular-nums">
+                              {Math.round(avatarZoom * 100)}%
+                            </span>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="size-8 rounded-lg"
+                              aria-label="프로필 사진 확대"
+                              disabled={avatarZoom >= 3}
+                              onClick={() =>
+                                setAvatarZoom((zoom) =>
+                                  Math.min(3, zoom + 0.25),
+                                )
+                              }
+                            >
+                              <ZoomInIcon className="size-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="size-8 rounded-lg"
+                              aria-label="프로필 사진 원래 크기"
+                              disabled={avatarZoom === 1}
+                              onClick={() => setAvatarZoom(1)}
+                            >
+                              <RotateCcwIcon className="size-4" />
+                            </Button>
+                          </div>
+                          <div className="flex max-h-[70vh] min-h-80 items-center justify-center overflow-auto p-12">
+                            <img
+                              src={avatar}
+                              alt="프로필 사진 크게 보기"
+                              className="max-h-[55vh] max-w-full rounded-lg object-contain transition-transform duration-200 ease-out"
+                              style={{ transform: `scale(${avatarZoom})` }}
+                            />
+                          </div>
+                        </>
                       ) : (
-                        <div className="bg-muted flex size-48 items-center justify-center rounded-full">
-                          <UserIcon className="text-muted-foreground size-20" />
+                        <div className="flex min-h-80 items-center justify-center p-4">
+                          <div className="bg-muted flex size-48 items-center justify-center rounded-full">
+                            <UserIcon className="text-muted-foreground size-20" />
+                          </div>
                         </div>
                       )}
                     </div>

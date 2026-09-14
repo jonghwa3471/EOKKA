@@ -5,7 +5,7 @@ import {
   MicroscopeIcon,
   SparklesIcon,
 } from "lucide-react";
-import { Link, useLocation } from "react-router";
+import { Link, useLocation, useNavigation } from "react-router";
 
 import { EokkaLogo } from "~/core/components/eokka-logo";
 import {
@@ -56,6 +56,8 @@ export default function DashboardSidebar({
   unreadNotificationCount: number;
 }) {
   const { pathname } = useLocation();
+  const routeNavigation = useNavigation();
+  const activePathname = routeNavigation.location?.pathname ?? pathname;
 
   return (
     <Sidebar
@@ -103,7 +105,7 @@ export default function DashboardSidebar({
                 <SidebarMenuButton
                   asChild
                   tooltip={item.title}
-                  isActive={pathname === item.url}
+                  isActive={activePathname === item.url}
                   className="hover:[&>svg]:animate-sidebar-menu-icon hover:[&>svg]:text-emerald-500 motion-reduce:hover:[&>svg]:animate-none"
                 >
                   <Link
