@@ -109,6 +109,11 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   // Extract query parameters from the URL
   const { searchParams } = new URL(request.url);
+  const requestedNext = searchParams.get("next");
+  const nextPath =
+    requestedNext?.startsWith("/") && !requestedNext.startsWith("//")
+      ? requestedNext
+      : "/";
 
   // Try to validate the parameters as a successful OAuth callback
   const { success, data: validData } = searchParamsSchema.safeParse(
@@ -142,8 +147,9 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const [client, headers] = makeServerClient(request);
 
   // Exchange the OAuth code for a session
-  const { data: authData, error } =
-    await client.auth.exchangeCodeForSession(validData.code);
+  const { data: authData, error } = await client.auth.exchangeCodeForSession(
+    validData.code,
+  );
 
   // Return error if session exchange fails
   if (error) {
@@ -218,7 +224,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   }
 
   // Redirect to home page with auth cookies in headers
-  return redirect("/", { headers });
+  return redirect(nextPath, { headers });
 }
 
 /**

@@ -12,7 +12,6 @@
  * - Integration with Supabase Auth API for email updates
  * - Error handling for invalid inputs and API errors
  */
-
 import type { Route } from "./+types/change-email";
 
 import { data } from "react-router";
@@ -59,32 +58,70 @@ const schema = z.object({
 export async function action({ request }: Route.ActionArgs) {
   // Validate request method (only allow POST)
   requireMethod("POST")(request);
-  
+
   // Create a server-side Supabase client with the user's session
   const [client] = makeServerClient(request);
-  
+
   // Verify the user is authenticated
   await requireAuthentication(client);
-  
+
+  const { data: identities, error: identitiesError } =
+    await client.auth.getUserIdentities();
+  if (identitiesError) {
+    return data(
+      { error: "로그인 정보를 확인하지 못했어요. 잠시 후 다시 시도해 주세요." },
+      { status: 500 },
+    );
+  }
+  if (
+    !identities?.identities.some((identity) => identity.provider === "email")
+  ) {
+    return data(
+      { error: "소셜 로그인으로 가입한 계정의 이메일은 변경할 수 없어요." },
+      { status: 403 },
+    );
+  }
+
   // Extract and validate form data
   const formData = await request.formData();
   const { success, data: validData } = schema.safeParse(
     Object.fromEntries(formData),
   );
-  
+
   // Return error if email validation fails
   if (!success) {
-    return data({ error: "Invalid email" }, { status: 400 });
+    return data(
+      { error: "올바른 이메일 주소를 입력해 주세요." },
+      { status: 400 },
+    );
   }
-  
+
+  const {
+    data: { user },
+  } = await client.auth.getUser();
+  if (user?.email?.toLowerCase() === validData.email.toLowerCase()) {
+    return data(
+      { error: "현재 이메일과 다른 주소를 입력해 주세요." },
+      { status: 400 },
+    );
+  }
+
   // Submit email change request to Supabase Auth API
-  const { error } = await client.auth.updateUser({
-    email: validData.email,
-  });
+  const { error } = await client.auth.updateUser(
+    {
+      email: validData.email,
+    },
+    {
+      emailRedirectTo: `${new URL(request.url).origin}/auth/confirm?next=/account/edit`,
+    },
+  );
 
   // Handle API errors
   if (error) {
-    return data({ error: error.message }, { status: 400 });
+    return data(
+      { error: "이메일 변경을 요청하지 못했어요. 잠시 후 다시 시도해 주세요." },
+      { status: 400 },
+    );
   }
 
   // Return success response

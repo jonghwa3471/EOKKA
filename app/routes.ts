@@ -33,6 +33,8 @@ export default [
       index("features/users/api/delete-account.tsx"),
       route("/password", "features/users/api/change-password.tsx"),
       route("/email", "features/users/api/change-email.tsx"),
+      route("/social-avatar", "features/users/api/use-social-avatar.tsx"),
+      route("/data", "features/users/api/reset-user-data.tsx"),
       route("/profile", "features/users/api/edit-profile.tsx"),
       route("/providers", "features/users/api/connect-provider.tsx"),
       route(
@@ -54,6 +56,10 @@ export default [
 
   layout("core/layouts/navigation.layout.tsx", [
     route("/auth/confirm", "features/auth/screens/confirm.tsx"),
+    route(
+      "/auth/social/complete/:provider/link",
+      "features/auth/screens/social/link-complete.tsx",
+    ),
     index("features/home/screens/home.tsx"),
     route("/about", "features/stocks/screens/about.tsx"),
     route("/methodology", "features/stocks/screens/methodology.tsx"),

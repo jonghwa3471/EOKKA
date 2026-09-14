@@ -7,10 +7,11 @@ import {
   CrownIcon,
   SparklesIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Form, Link, data, redirect, useActionData } from "react-router";
 import { z } from "zod";
 
+import ConfirmDialog from "~/core/components/confirm-dialog";
 import { Button } from "~/core/components/ui/button";
 import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
@@ -262,6 +263,12 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
     used: number;
     remaining: number;
   } | null>(null);
+  const [goalChange, setGoalChange] = useState<{
+    current: number;
+    requested: number;
+  } | null>(null);
+  const analysisFormRef = useRef<HTMLFormElement>(null);
+  const confirmedGoalChangeRef = useRef(false);
   const isActive = managed?.portfolio.status === "active";
   const goalPlaceholder = String(defaultGoalAmount);
   const contributionPlaceholder = String(
@@ -297,6 +304,34 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
 
   return (
     <main className="flex flex-1 flex-col px-5 pt-8 pb-14 md:px-8 md:pt-12">
+      <ConfirmDialog
+        open={goalChange !== null}
+        onOpenChange={(open) => {
+          if (!open) setGoalChange(null);
+        }}
+        title="저장 목표 금액을 바꿀까요?"
+        description={
+          goalChange ? (
+            <>
+              무료 플랜에서는 목표 금액을 하나만 저장할 수 있어요. 현재 목표
+              <strong> {moneyLabel(goalChange.current)}</strong>을
+              <strong> {moneyLabel(goalChange.requested)}</strong>으로 바꾸면
+              이전 목표의 분석 기록이 삭제됩니다.
+            </>
+          ) : null
+        }
+        confirmLabel="목표 변경하기"
+        destructive
+        onConfirm={() => {
+          const form = analysisFormRef.current;
+          if (!form) return;
+          const hidden = form.elements.namedItem("replaceExistingGoal");
+          if (hidden instanceof HTMLInputElement) hidden.value = "on";
+          confirmedGoalChangeRef.current = true;
+          setGoalChange(null);
+          form.requestSubmit();
+        }}
+      />
       <div className="mx-auto w-full max-w-5xl">
         <header>
           <p className="flex items-center gap-2 text-sm font-bold text-emerald-500">
@@ -439,13 +474,18 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
                 </p>
               )}
               <Form
+                ref={analysisFormRef}
                 method="post"
                 className="mt-5 grid gap-4 sm:grid-cols-2"
                 onSubmit={(event) => {
+                  if (confirmedGoalChangeRef.current) {
+                    confirmedGoalChangeRef.current = false;
+                    return;
+                  }
                   const requestedGoal = Number(
                     new FormData(event.currentTarget).get("goalAmount"),
                   );
-                  const currentGoal = loaderData.isPro
+                  const currentGoal = !loaderData.isPro
                     ? loaderData.accountGoalAmount
                     : null;
                   if (
@@ -454,17 +494,11 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
                     !Number.isFinite(requestedGoal)
                   )
                     return;
-                  const confirmed = window.confirm(
-                    `무료 플랜에서는 목표 금액을 하나만 저장할 수 있어요.\n\n현재 목표 ${moneyLabel(currentGoal)}을 ${moneyLabel(requestedGoal)}으로 바꾸면 이전 목표의 분석 기록은 삭제돼요. 목표를 변경할까요?`,
-                  );
-                  if (!confirmed) {
-                    event.preventDefault();
-                    return;
-                  }
-                  const hidden = event.currentTarget.elements.namedItem(
-                    "replaceExistingGoal",
-                  );
-                  if (hidden instanceof HTMLInputElement) hidden.value = "on";
+                  event.preventDefault();
+                  setGoalChange({
+                    current: currentGoal,
+                    requested: requestedGoal,
+                  });
                 }}
               >
                 <input type="hidden" name="intent" value="analyze-managed" />

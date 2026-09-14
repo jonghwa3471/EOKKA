@@ -3,6 +3,7 @@ import { UserIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 
+import ConfirmDialog from "~/core/components/confirm-dialog";
 import FetcherFormButton from "~/core/components/fetcher-form-button";
 import FormErrors from "~/core/components/form-error";
 import FormSuccess from "~/core/components/form-success";
@@ -41,19 +42,52 @@ export default function EditProfileForm({
 }) {
   const fetcher = useFetcher<Route.ComponentProps["actionData"]>();
   const formRef = useRef<HTMLFormElement>(null);
+  const saveInFlightRef = useRef(false);
+  const initialNameRef = useRef(name);
+  const initialMarketingConsentRef = useRef(marketingConsent);
+  const [profileName, setProfileName] = useState(name);
+  const [marketingEnabled, setMarketingEnabled] = useState(marketingConsent);
+  const [hasNewAvatar, setHasNewAvatar] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [avatar, setAvatar] = useState<string | null>(avatarUrl);
+  const isDirty =
+    profileName !== initialNameRef.current ||
+    marketingEnabled !== initialMarketingConsentRef.current ||
+    hasNewAvatar;
+
   useEffect(() => {
-    if (fetcher.data && "success" in fetcher.data && fetcher.data.success) {
+    if (fetcher.state !== "idle") {
+      saveInFlightRef.current = true;
+      return;
+    }
+    if (
+      saveInFlightRef.current &&
+      fetcher.data &&
+      "success" in fetcher.data &&
+      fetcher.data.success
+    ) {
+      saveInFlightRef.current = false;
+      initialNameRef.current = profileName;
+      initialMarketingConsentRef.current = marketingEnabled;
+      setHasNewAvatar(false);
+      const fileInput = formRef.current?.elements.namedItem("avatar");
+      if (fileInput instanceof HTMLInputElement) fileInput.value = "";
       formRef.current?.blur();
       formRef.current?.querySelectorAll("input").forEach((input) => {
         input.blur();
       });
     }
-  }, [fetcher.data]);
-  const [avatar, setAvatar] = useState<string | null>(avatarUrl);
+  }, [fetcher.data, fetcher.state, marketingEnabled, profileName]);
+
+  useEffect(() => {
+    if (!hasNewAvatar) setAvatar(avatarUrl);
+  }, [avatarUrl, hasNewAvatar]);
+
   const onChangeAvatar = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setAvatar(URL.createObjectURL(file));
+      setHasNewAvatar(true);
     }
   };
   return (
@@ -63,11 +97,22 @@ export default function EditProfileForm({
       encType="multipart/form-data"
       ref={formRef}
       action="/api/users/profile"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!isDirty) return;
+        if (!event.currentTarget.checkValidity()) {
+          event.currentTarget.reportValidity();
+          return;
+        }
+        setConfirmOpen(true);
+      }}
     >
       <Card className="justify-between">
         <CardHeader>
           <CardTitle>프로필 수정</CardTitle>
-          <CardDescription>프로필 사진과 이름을 관리할 수 있어요.</CardDescription>
+          <CardDescription>
+            프로필 사진과 이름을 관리할 수 있어요.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex w-full flex-col gap-7">
@@ -78,7 +123,7 @@ export default function EditProfileForm({
                   <DialogTrigger asChild>
                     <button
                       type="button"
-                      className="cursor-pointer rounded-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+                      className="focus-visible:ring-ring cursor-pointer rounded-full focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
                       aria-label="프로필 사진 크게 보기"
                     >
                       <Avatar className="size-24">
@@ -95,7 +140,7 @@ export default function EditProfileForm({
                     <DialogHeader>
                       <DialogTitle>프로필 사진</DialogTitle>
                     </DialogHeader>
-                    <div className="flex min-h-80 items-center justify-center overflow-hidden rounded-xl bg-muted/40 p-4">
+                    <div className="bg-muted/40 flex min-h-80 items-center justify-center overflow-hidden rounded-xl p-4">
                       {avatar ? (
                         <img
                           src={avatar}
@@ -103,7 +148,7 @@ export default function EditProfileForm({
                           className="max-h-[70vh] max-w-full rounded-lg object-contain"
                         />
                       ) : (
-                        <div className="flex size-48 items-center justify-center rounded-full bg-muted">
+                        <div className="bg-muted flex size-48 items-center justify-center rounded-full">
                           <UserIcon className="text-muted-foreground size-20" />
                         </div>
                       )}
@@ -136,7 +181,8 @@ export default function EditProfileForm({
                 required
                 type="text"
                 placeholder="이름을 입력해 주세요"
-                defaultValue={name}
+                value={profileName}
+                onChange={(event) => setProfileName(event.target.value)}
               />
               {fetcher.data &&
               "fieldErrors" in fetcher.data &&
@@ -148,7 +194,10 @@ export default function EditProfileForm({
               <Checkbox
                 id="marketingConsent"
                 name="marketingConsent"
-                defaultChecked={marketingConsent}
+                checked={marketingEnabled}
+                onCheckedChange={(checked) =>
+                  setMarketingEnabled(checked === true)
+                }
               />
               <Label htmlFor="marketingConsent">
                 새로운 기능과 소식을 이메일로 받을게요. (선택)
@@ -168,6 +217,7 @@ export default function EditProfileForm({
             submitting={fetcher.state === "submitting"}
             label="프로필 저장"
             className="w-full"
+            disabled={fetcher.state !== "idle" || !isDirty}
           />
           {fetcher.data && "success" in fetcher.data && fetcher.data.success ? (
             <FormSuccess message="프로필이 저장되었습니다." />
@@ -177,6 +227,23 @@ export default function EditProfileForm({
           ) : null}
         </CardFooter>
       </Card>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="프로필 변경사항을 저장할까요?"
+        description="변경한 이름, 프로필 사진과 이메일 소식 수신 설정을 계정에 반영해요."
+        confirmLabel="프로필 저장"
+        busy={fetcher.state !== "idle"}
+        onConfirm={() => {
+          if (!formRef.current) return;
+          setConfirmOpen(false);
+          void fetcher.submit(formRef.current, {
+            method: "post",
+            action: "/api/users/profile",
+            encType: "multipart/form-data",
+          });
+        }}
+      />
     </fetcher.Form>
   );
 }

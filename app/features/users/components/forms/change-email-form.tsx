@@ -1,5 +1,6 @@
 import type { Route } from "@rr/app/features/users/api/+types/change-email";
 
+import { LockKeyholeIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useFetcher } from "react-router";
 
@@ -16,7 +17,13 @@ import {
 import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
 
-export default function ChangeEmailForm({ email }: { email: string }) {
+export default function ChangeEmailForm({
+  email,
+  canChangeEmail,
+}: {
+  email: string;
+  canChangeEmail: boolean;
+}) {
   const fetcher = useFetcher<Route.ComponentProps["actionData"]>();
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => {
@@ -30,6 +37,43 @@ export default function ChangeEmailForm({ email }: { email: string }) {
       });
     }
   }, [fetcher.data]);
+
+  if (!canChangeEmail) {
+    return (
+      <Card className="w-full max-w-screen-md">
+        <CardHeader>
+          <div className="flex items-start gap-3">
+            <span className="bg-muted text-muted-foreground flex size-10 shrink-0 items-center justify-center rounded-xl">
+              <LockKeyholeIcon className="size-5" />
+            </span>
+            <div className="space-y-1">
+              <CardTitle>이메일</CardTitle>
+              <CardDescription>
+                소셜 로그인으로 가입한 계정의 이메일은 EOKKA에서 변경할 수
+                없어요.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <Label htmlFor="social-email">현재 이메일</Label>
+            <Input
+              id="social-email"
+              type="email"
+              disabled
+              value={email}
+              className="cursor-not-allowed"
+            />
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              이메일을 바꾸려면 연결된 구글 또는 카카오 계정에서 변경해 주세요.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <fetcher.Form
       ref={formRef}
@@ -83,7 +127,7 @@ export default function ChangeEmailForm({ email }: { email: string }) {
             disabled={fetcher.state === "submitting"}
           />
           {fetcher.data && "success" in fetcher.data && fetcher.data.success ? (
-            <FormSuccess message="이메일 변경을 요청했습니다. 기존 이메일로 전송된 인증 링크를 확인해 주세요." />
+            <FormSuccess message="확인 메일을 보냈어요. 메일의 인증 링크를 누르면 이메일 변경이 완료돼요." />
           ) : null}
           {fetcher.data && "error" in fetcher.data && fetcher.data.error ? (
             <FormErrors errors={[fetcher.data.error]} />

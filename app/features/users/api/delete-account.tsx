@@ -16,10 +16,17 @@
 import type { Route } from "./+types/delete-account";
 
 import { data, redirect } from "react-router";
+import { z } from "zod";
 
 import { requireAuthentication, requireMethod } from "~/core/lib/guards.server";
 import adminClient from "~/core/lib/supa-admin-client.server";
 import makeServerClient from "~/core/lib/supa-client.server";
+
+const deleteAccountSchema = z.object({
+  confirmation: z.literal("DELETE"),
+  "confirm-delete": z.literal("on"),
+  "confirm-irreversible": z.literal("on"),
+});
 
 /**
  * Action handler for processing account deletion requests
@@ -53,6 +60,16 @@ export async function action({ request }: Route.ActionArgs) {
 
   // Verify the user is authenticated
   await requireAuthentication(client);
+
+  const parsed = deleteAccountSchema.safeParse(
+    Object.fromEntries(await request.formData()),
+  );
+  if (!parsed.success) {
+    return data(
+      { error: "확인 항목에 동의하고 DELETE를 정확히 입력해 주세요." },
+      { status: 400 },
+    );
+  }
 
   // Get the authenticated user's information
   const {

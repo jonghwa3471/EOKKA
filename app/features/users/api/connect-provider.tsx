@@ -34,6 +34,23 @@ const schema = z.object({
   provider: z.enum(["google", "kakao"]),
 });
 
+function getLinkingErrorMessage(error: { code?: string; message: string }) {
+  const detail = `${error.code ?? ""} ${error.message}`.toLowerCase();
+
+  if (detail.includes("manual") && detail.includes("link")) {
+    return "소셜 계정 연결 기능이 아직 활성화되지 않았어요. 서비스 관리자에게 문의해 주세요.";
+  }
+  if (
+    detail.includes("already") ||
+    detail.includes("exists") ||
+    detail.includes("identity_already")
+  ) {
+    return "이 소셜 계정은 이미 다른 EOKKA 계정에 연결되어 있어요.";
+  }
+
+  return "소셜 계정을 연결하지 못했어요. 잠시 후 다시 시도해 주세요.";
+}
+
 /**
  * Action handler for processing provider connection requests
  *
@@ -74,7 +91,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   // Return error if provider validation fails
   if (!success) {
-    return data({ error: "Invalid provider" }, { status: 400 });
+    return data({ error: "지원하지 않는 소셜 계정입니다." }, { status: 400 });
   }
 
   // Initiate identity linking process with Supabase Auth API
@@ -84,13 +101,23 @@ export async function action({ request }: Route.ActionArgs) {
       options: {
         // Note: There is a known issue with this option
         // See: https://github.com/supabase/auth/issues/1927
-        redirectTo: `${new URL(request.url).origin}/account/edit`,
+        redirectTo: `${new URL(request.url).origin}/auth/social/complete/${parsedParams.provider}/link`,
       },
     });
 
   // Handle API errors
   if (linkingError) {
-    return data({ error: linkingError.message }, { status: 400 });
+    console.error("Social identity linking failed", {
+      provider: parsedParams.provider,
+      code: linkingError.code,
+      message: linkingError.message,
+    });
+    return data(
+      {
+        error: getLinkingErrorMessage(linkingError),
+      },
+      { status: 400 },
+    );
   }
 
   // Redirect to provider's OAuth flow

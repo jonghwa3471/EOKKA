@@ -73,7 +73,7 @@ export async function action({ request, params }: Route.ActionArgs) {
   // Validate the provider parameter
   const { error, success, data: parsedParams } = schema.safeParse(params);
   if (!success) {
-    return data({ error: "Invalid provider" }, { status: 400 });
+    return data({ error: "지원하지 않는 소셜 계정입니다." }, { status: 400 });
   }
 
   // Fetch the user's current connected identities
@@ -86,7 +86,20 @@ export async function action({ request, params }: Route.ActionArgs) {
 
   // Return error if the identity is not found
   if (!identity) {
-    return data({ error: "Identity not found" }, { status: 400 });
+    return data(
+      { error: "연결된 소셜 계정을 찾지 못했어요." },
+      { status: 400 },
+    );
+  }
+
+  if ((userIdentities?.identities.length ?? 0) <= 1) {
+    return data(
+      {
+        error:
+          "로그인 수단이 하나뿐이라 연결을 해제할 수 없어요. 다른 계정을 먼저 연결해 주세요.",
+      },
+      { status: 400 },
+    );
   }
 
   // Unlink the identity using Supabase Auth API
@@ -94,7 +107,13 @@ export async function action({ request, params }: Route.ActionArgs) {
 
   // Handle API errors
   if (unlinkingError) {
-    return data({ error: unlinkingError.message }, { status: 400 });
+    return data(
+      {
+        error:
+          "소셜 계정 연결을 해제하지 못했어요. 잠시 후 다시 시도해 주세요.",
+      },
+      { status: 400 },
+    );
   }
 
   // Return success response

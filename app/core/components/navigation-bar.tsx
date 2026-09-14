@@ -15,7 +15,15 @@
  * - Authenticated state with user profile information
  * - Unauthenticated state with sign in/sign up buttons
  */
-import { BellIcon, HomeIcon, LogOutIcon, MenuIcon } from "lucide-react";
+import {
+  BellIcon,
+  CreditCardIcon,
+  HomeIcon,
+  LogOutIcon,
+  MenuIcon,
+  SparklesIcon,
+  UserCircle2Icon,
+} from "lucide-react";
 import { Link } from "react-router";
 
 import { EokkaLogo } from "./eokka-logo";
@@ -25,6 +33,7 @@ import { Button } from "./ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -104,34 +113,81 @@ function UserMenu({
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
 
-        {/* 대시보드 link */}
-        <DropdownMenuItem asChild>
-          <SheetClose asChild>
-            <Link to="/dashboard" viewTransition>
-              <HomeIcon className="size-4" />
-              대시보드
-            </Link>
-          </SheetClose>
-        </DropdownMenuItem>
-
-        <DropdownMenuItem asChild>
-          <SheetClose asChild>
-            <Link to="/dashboard/notifications" viewTransition>
-              <BellIcon className="size-4" />
-              알림
-              {unreadNotificationCount > 0 && (
-                <span className="ml-auto rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-black text-white">
-                  {unreadNotificationCount > 99
-                    ? "99+"
-                    : unreadNotificationCount}
-                </span>
-              )}
-            </Link>
-          </SheetClose>
-        </DropdownMenuItem>
+        <DropdownMenuGroup>
+          <DropdownMenuItem
+            asChild
+            className="hover:[&>svg]:animate-sidebar-menu-icon hover:[&>svg]:text-emerald-500 motion-reduce:hover:[&>svg]:animate-none"
+          >
+            <SheetClose asChild>
+              <Link to="/dashboard" viewTransition>
+                <HomeIcon className="size-4" />
+                대시보드
+              </Link>
+            </SheetClose>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            asChild
+            className="hover:[&>svg]:animate-sidebar-menu-icon text-amber-600 focus:from-amber-500/12 focus:to-violet-500/12 focus:text-amber-600 dark:text-amber-400 dark:focus:text-amber-300 hover:[&>svg]:text-amber-500 motion-reduce:hover:[&>svg]:animate-none"
+          >
+            <SheetClose asChild>
+              <Link to="/dashboard/pro" viewTransition>
+                <SparklesIcon className="size-4" />
+                EOKKA Pro
+              </Link>
+            </SheetClose>
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem
+            asChild
+            className="hover:[&>svg]:animate-sidebar-menu-icon hover:[&>svg]:text-emerald-500 motion-reduce:hover:[&>svg]:animate-none"
+          >
+            <SheetClose asChild>
+              <Link to="/account/edit" viewTransition>
+                <UserCircle2Icon className="size-4" />
+                프로필 설정
+              </Link>
+            </SheetClose>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            asChild
+            className="hover:[&>svg]:animate-sidebar-menu-icon hover:[&>svg]:text-emerald-500 motion-reduce:hover:[&>svg]:animate-none"
+          >
+            <SheetClose asChild>
+              <Link to="/dashboard/payments" viewTransition>
+                <CreditCardIcon className="size-4" />
+                결제 내역
+              </Link>
+            </SheetClose>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            asChild
+            className="hover:[&>svg]:animate-sidebar-menu-icon hover:[&>svg]:text-emerald-500 motion-reduce:hover:[&>svg]:animate-none"
+          >
+            <SheetClose asChild>
+              <Link to="/dashboard/notifications" viewTransition>
+                <BellIcon className="size-4" />
+                알림
+                {unreadNotificationCount > 0 && (
+                  <span className="ml-auto rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-black text-white">
+                    {unreadNotificationCount > 99
+                      ? "99+"
+                      : unreadNotificationCount}
+                  </span>
+                )}
+              </Link>
+            </SheetClose>
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
 
         {/* Logout link */}
-        <DropdownMenuItem asChild variant="destructive">
+        <DropdownMenuItem
+          asChild
+          variant="destructive"
+          className="hover:[&>svg]:animate-sidebar-menu-icon motion-reduce:hover:[&>svg]:animate-none"
+        >
           <SheetClose asChild>
             <Link to="/logout" viewTransition>
               <LogOutIcon className="size-4" />

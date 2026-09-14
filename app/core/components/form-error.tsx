@@ -15,10 +15,10 @@ import { XCircleIcon } from "lucide-react";
 
 /**
  * FormErrors component for displaying validation and server errors
- * 
+ *
  * This component renders a list of error messages with a consistent visual style,
  * including an X-circle icon to clearly indicate errors to users.
- * 
+ *
  * @param errors - Array of error message strings to display
  * @returns A component that displays the list of error messages with consistent styling
  */
@@ -27,9 +27,9 @@ export default function FormErrors({ errors }: { errors: string[] }) {
     <div className="space-y-2 text-sm text-red-500">
       {/* Map through each error message and render it with an icon */}
       {errors.map((error, index) => (
-        <p key={index} className="flex items-center gap-2">
+        <p key={index} className="flex items-start gap-2 leading-relaxed">
           {/* X-circle icon to visually indicate an error */}
-          <XCircleIcon className="size-4" />
+          <XCircleIcon className="mt-0.5 size-4 shrink-0" />
           {/* The error message text */}
           {error}
         </p>

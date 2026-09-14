@@ -25,6 +25,7 @@ import {
   useRevalidator,
 } from "react-router";
 
+import ConfirmDialog from "~/core/components/confirm-dialog";
 import { InvestmentActionLoader } from "~/core/components/investment-action-loader";
 import { Button } from "~/core/components/ui/button";
 import { Checkbox } from "~/core/components/ui/checkbox";
@@ -1272,6 +1273,11 @@ export default function Home() {
     ANALYSIS_ESTIMATED_SECONDS,
   );
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const [goalConflict, setGoalConflict] = useState<{
+    currentGoal: number;
+    nextGoal: number;
+  } | null>(null);
   const matrixCanvasRef = useRef<HTMLCanvasElement>(null);
   const matrixTrailRef = useRef<CurrencyTrailPoint[]>([]);
 
@@ -1550,10 +1556,10 @@ export default function Home() {
   };
 
   const clearStoredPortfolio = () => {
-    const shouldClear = window.confirm(
-      "현재 탭에 저장된 종목과 입력 정보를 모두 삭제할까요?",
-    );
-    if (!shouldClear) return;
+    setClearConfirmOpen(true);
+  };
+
+  const confirmClearStoredPortfolio = () => {
     window.sessionStorage.removeItem(HOLDINGS_STORAGE_KEY);
     window.sessionStorage.removeItem(ANALYSIS_STORAGE_KEY);
     setHoldings([emptyHolding(1)]);
@@ -1564,6 +1570,7 @@ export default function Home() {
     setInvestmentPeriodUnknown(false);
     setAnalysis(null);
     setAnalysisError("");
+    setClearConfirmOpen(false);
   };
 
   const targetAmount = Number(targetEok) * 100_000_000;
@@ -1656,16 +1663,10 @@ export default function Home() {
         body.code === "FREE_GOAL_CONFLICT" &&
         typeof body.currentGoalAmount === "number"
       ) {
-        const currentGoal = formatKoreanMoney(body.currentGoalAmount);
-        const nextGoal = formatKoreanMoney(targetAmount);
-        if (
-          window.confirm(
-            `무료 플랜에서는 목표 금액을 하나만 저장할 수 있어요.\n\n현재 목표 ${currentGoal}을 ${nextGoal}으로 바꾸면 이전 목표의 분석 기록은 삭제돼요. 목표를 변경할까요?`,
-          )
-        ) {
-          setIsAnalyzing(false);
-          await analyze(true);
-        }
+        setGoalConflict({
+          currentGoal: body.currentGoalAmount,
+          nextGoal: targetAmount,
+        });
         return;
       }
       if (!response.ok || "error" in body)
@@ -1691,6 +1692,38 @@ export default function Home() {
         matrixTrailRef.current = [];
       }}
     >
+      <ConfirmDialog
+        open={clearConfirmOpen}
+        onOpenChange={setClearConfirmOpen}
+        title="입력한 내용을 모두 지울까요?"
+        description="현재 탭에 저장된 종목, 목표 금액과 분석 결과가 초기화돼요. 저장된 계정 분석 기록에는 영향을 주지 않습니다."
+        confirmLabel="입력 내용 지우기"
+        destructive
+        onConfirm={confirmClearStoredPortfolio}
+      />
+      <ConfirmDialog
+        open={goalConflict !== null}
+        onOpenChange={(open) => {
+          if (!open) setGoalConflict(null);
+        }}
+        title="저장 목표 금액을 바꿀까요?"
+        description={
+          goalConflict ? (
+            <>
+              무료 플랜에서는 목표 금액을 하나만 저장할 수 있어요. 현재 목표
+              <strong> {formatKoreanMoney(goalConflict.currentGoal)}</strong>을
+              <strong> {formatKoreanMoney(goalConflict.nextGoal)}</strong>으로
+              바꾸면 이전 목표의 분석 기록이 삭제됩니다.
+            </>
+          ) : null
+        }
+        confirmLabel="목표 변경하기"
+        destructive
+        onConfirm={() => {
+          setGoalConflict(null);
+          void analyze(true);
+        }}
+      />
       {isAnalyzing && (
         <InvestmentActionLoader
           title="포트폴리오를 분석하고 있어요"
