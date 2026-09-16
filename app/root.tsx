@@ -54,6 +54,12 @@ import { themeSessionResolver } from "./core/lib/theme-session.server";
 import { cn } from "./core/lib/utils";
 import NotFound from "./core/screens/404";
 
+const BACKGROUND_ACTION_INTENTS = new Set(["mark-read", "mark-all-read"]);
+
+function isBackgroundAction(formData?: FormData) {
+  return BACKGROUND_ACTION_INTENTS.has(String(formData?.get("intent") ?? ""));
+}
+
 export const links: Route.LinksFunction = () => [
   { rel: "icon", href: "/favicon.ico?v=eokka-2", sizes: "any" },
   {
@@ -250,9 +256,15 @@ export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const activeFetcher = fetchers.find(
-    (fetcher) => fetcher.state !== "idle" && fetcher.formData,
+    (fetcher) =>
+      fetcher.state !== "idle" &&
+      fetcher.formData &&
+      !isBackgroundAction(fetcher.formData),
   );
-  const requestFormData = navigation.formData ?? activeFetcher?.formData;
+  const navigationFormData = isBackgroundAction(navigation.formData)
+    ? undefined
+    : navigation.formData;
+  const requestFormData = navigationFormData ?? activeFetcher?.formData;
   const targetPath = navigation.location?.pathname ?? "";
   const isAuthAction =
     targetPath === "/logout" ||
@@ -260,7 +272,7 @@ export default function App() {
     (navigation.state !== "idle" && location.pathname === "/login");
   const isActionBusy =
     Boolean(requestFormData) ||
-    navigation.state === "submitting" ||
+    (navigation.state === "submitting" && Boolean(navigationFormData)) ||
     Boolean(activeFetcher) ||
     isAuthAction;
   const isRouteBusy = navigation.state === "loading" && !isActionBusy;

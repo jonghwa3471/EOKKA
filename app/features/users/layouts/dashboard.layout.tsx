@@ -103,7 +103,30 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function DashboardLayout({ loaderData }: Route.ComponentProps) {
   const user = loaderData.user!;
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(
+    loaderData.unreadNotificationCount,
+  );
   const { pathname } = useLocation();
+
+  useEffect(() => {
+    setUnreadNotificationCount(loaderData.unreadNotificationCount);
+  }, [loaderData.unreadNotificationCount]);
+
+  useEffect(() => {
+    const handleUnreadChange = (event: Event) => {
+      const { delta } = (event as CustomEvent<{ delta: number }>).detail;
+      setUnreadNotificationCount((current) => Math.max(0, current + delta));
+    };
+    window.addEventListener(
+      "eokka:notification-unread-change",
+      handleUnreadChange,
+    );
+    return () =>
+      window.removeEventListener(
+        "eokka:notification-unread-change",
+        handleUnreadChange,
+      );
+  }, []);
   const pageTitle = pathname.startsWith("/account/")
     ? "프로필 설정"
     : pathname.startsWith("/dashboard/portfolio")
@@ -125,7 +148,7 @@ export default function DashboardLayout({ loaderData }: Route.ComponentProps) {
     <SidebarProvider>
       <DashboardSidebar
         user={user}
-        unreadNotificationCount={loaderData.unreadNotificationCount}
+        unreadNotificationCount={unreadNotificationCount}
       />
       <SidebarInset>
         <header className="bg-background/80 border-border/60 relative z-20 flex h-16 shrink-0 items-center gap-2 border-b shadow-[0_10px_30px_-26px_rgba(15,23,42,0.55)] backdrop-blur-xl transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12 after:absolute after:inset-x-0 after:bottom-[-1px] after:h-px after:bg-gradient-to-r after:from-emerald-500/35 after:via-violet-500/25 after:to-transparent">
