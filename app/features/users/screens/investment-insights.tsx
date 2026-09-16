@@ -124,15 +124,21 @@ function recordDateLabel(value: string) {
 
 function PeriodRecordStrip({
   history,
+  baseline,
   period,
 }: {
   history: Route.ComponentProps["loaderData"]["history"];
+  baseline?: Route.ComponentProps["loaderData"]["history"][number];
   period: InsightPeriod;
 }) {
   const profitChanges = new Map(
     history.map((item, index) => [
       item.savedOn,
-      index === 0 ? null : item.profit - history[index - 1].profit,
+      index === 0
+        ? baseline
+          ? item.profit - baseline.profit
+          : null
+        : item.profit - history[index - 1].profit,
     ]),
   );
   const periodChanges = history.map((item) => profitChanges.get(item.savedOn));
@@ -214,7 +220,7 @@ function PeriodRecordStrip({
                 >
                   <Icon className="size-3.5" />
                   {isBaseline
-                    ? "기준 기록"
+                    ? "비교 기준 없음"
                     : profitable
                       ? "수익"
                       : loss
@@ -321,6 +327,7 @@ export default function InvestmentInsights({
     (item) =>
       item.savedOn >= range.previousStart && item.savedOn <= range.previousEnd,
   );
+  const previousLatest = previousHistory.at(-1);
   const periodOptions: ReadonlyArray<readonly [InsightPeriod, string, string]> =
     [
       ["weekly", "주간 인사이트", "월요일부터 일요일"],
@@ -444,7 +451,11 @@ export default function InvestmentInsights({
           </div>
         </section>
 
-        <PeriodRecordStrip history={periodHistory} period={period} />
+        <PeriodRecordStrip
+          history={periodHistory}
+          baseline={previousLatest}
+          period={period}
+        />
 
         {periodHistory.length > 0 ? (
           <HistoricalInsights

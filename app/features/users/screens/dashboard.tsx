@@ -254,14 +254,19 @@ function difference(current: number | null, previous: number | null) {
   return current - previous;
 }
 
-function calculateHistoryInsights(history: History) {
+function calculateHistoryInsights(
+  history: History,
+  baseline?: History[number],
+) {
   const first = history[0];
   const latest = history.at(-1)!;
-  const changes = history.slice(1).map((item, index) => ({
+  const comparisonHistory = baseline ? [baseline, ...history] : history;
+  const comparisonStart = baseline ?? first;
+  const changes = comparisonHistory.slice(1).map((item, index) => ({
     savedOn: item.savedOn,
-    asset: item.currentValue - history[index].currentValue,
-    profit: item.profit - history[index].profit,
-    returnRate: item.returnRate - history[index].returnRate,
+    asset: item.currentValue - comparisonHistory[index].currentValue,
+    profit: item.profit - comparisonHistory[index].profit,
+    returnRate: item.returnRate - comparisonHistory[index].returnRate,
   }));
   const increasingChanges = changes.filter((change) => change.asset > 0);
   const decreasingChanges = changes.filter((change) => change.asset < 0);
@@ -288,7 +293,7 @@ function calculateHistoryInsights(history: History) {
   const flatCount = changes.length - upCount - downCount;
   let longestUpStreak = 0;
   let currentUpStreak = 0;
-  let runningPeak = first.currentValue;
+  let runningPeak = comparisonStart.currentValue;
   let maximumDrawdown = 0;
   for (const item of history) {
     runningPeak = Math.max(runningPeak, item.currentValue);
@@ -307,7 +312,7 @@ function calculateHistoryInsights(history: History) {
     ? changes.reduce((sum, change) => sum + Math.abs(change.asset), 0) /
       changes.length
     : 0;
-  const firstGoalMonth = first.goalMonth;
+  const firstGoalMonth = comparisonStart.goalMonth;
   const latestGoalMonth = latest.goalMonth;
   const goalMonthImprovement =
     firstGoalMonth !== null && latestGoalMonth !== null
@@ -320,12 +325,12 @@ function calculateHistoryInsights(history: History) {
     currentTopHolding && latest.currentValue > 0
       ? (currentTopHolding.valueKrw / latest.currentValue) * 100
       : null;
-  const initialMatchingHolding = first.result.holdings.find(
+  const initialMatchingHolding = comparisonStart.result.holdings.find(
     (holding) => holding.ticker === currentTopHolding?.ticker,
   );
   const initialTopWeight =
-    initialMatchingHolding && first.currentValue > 0
-      ? (initialMatchingHolding.valueKrw / first.currentValue) * 100
+    initialMatchingHolding && comparisonStart.currentValue > 0
+      ? (initialMatchingHolding.valueKrw / comparisonStart.currentValue) * 100
       : null;
   const concentrationChange =
     currentTopWeight !== null && initialTopWeight !== null
@@ -340,10 +345,10 @@ function calculateHistoryInsights(history: History) {
     ),
   );
   const weeklyHistory = history;
-  const weeklyFirst = weeklyHistory[0];
-  const weeklyChanges = weeklyHistory.slice(1).map((item, index) => ({
-    savedOn: item.savedOn,
-    asset: item.currentValue - weeklyHistory[index].currentValue,
+  const weeklyFirst = comparisonStart;
+  const weeklyChanges = changes.map(({ savedOn, asset }) => ({
+    savedOn,
+    asset,
   }));
   const weeklyFirstHoldings = new Map(
     weeklyFirst?.result.holdings.map((holding) => [
@@ -374,7 +379,7 @@ function calculateHistoryInsights(history: History) {
       .filter((holding) => holding.change < 0)
       .sort((a, b) => a.change - b.change)[0] ?? null;
   const weeklyReturnRankings =
-    weeklyHistory.length < 2
+    weeklyHistory.length < (baseline ? 1 : 2)
       ? []
       : latest.result.holdings
           .flatMap((holding) => {
@@ -433,14 +438,14 @@ function calculateHistoryInsights(history: History) {
     currentTopWeight,
     concentrationChange,
     elapsedDays,
-    totalAssetChange: latest.currentValue - first.currentValue,
+    totalAssetChange: latest.currentValue - comparisonStart.currentValue,
     totalProfitChange: changes.reduce((sum, change) => sum + change.profit, 0),
     totalReturnRateChange: changes.reduce(
       (sum, change) => sum + change.returnRate,
       0,
     ),
     holdingCountChange:
-      latest.result.holdings.length - first.result.holdings.length,
+      latest.result.holdings.length - comparisonStart.result.holdings.length,
     weekly: {
       history: weeklyHistory,
       changes: weeklyChanges,
@@ -1466,7 +1471,11 @@ export function HistoricalInsights({
   period?: "weekly" | "monthly" | "annual";
   rangeLabel?: string;
 }) {
-  const insight = calculateHistoryInsights(history);
+  const previousLatest = previousHistory.at(-1) ?? null;
+  const insight = calculateHistoryInsights(
+    history,
+    previousLatest ?? undefined,
+  );
   const isWeekly = period === "weekly";
   const periodLabel = isWeekly
     ? "주간"
@@ -1478,7 +1487,6 @@ export function HistoricalInsights({
     ? (insight.upCount / transitions) * 100
     : null;
   const profitImproved = insight.totalProfitChange >= 0;
-  const previousLatest = previousHistory.at(-1) ?? null;
   const previousPeriodLabel = isWeekly
     ? "지난주"
     : period === "monthly"
@@ -1498,6 +1506,149 @@ export function HistoricalInsights({
   const previousGoalChange = previousLatest
     ? difference(insight.latest.goalMonth, previousLatest.goalMonth)
     : null;
+  const comparisonStartLabel = previousLatest
+    ? `${previousPeriodLabel} 마지막 기록`
+    : `${periodLabel} 첫 기록`;
+  const periodTheme =
+    period === "weekly"
+      ? {
+          eyebrow: "이번 주 경기 리포트",
+          title: "짧은 승부에서 어떤 힘이 돋보였을까요?",
+          description:
+            "한 주를 한 경기처럼 보고, 상승한 날과 흔들린 날의 리듬을 빠르게 훑어봤어요.",
+          cards: [
+            {
+              icon: TrendingUpIcon,
+              label: "이번 주 승률",
+              value: transitions ? `${insight.upCount}/${transitions}일` : "—",
+              detail:
+                risingRatio === null
+                  ? "비교할 기록이 더 필요해요."
+                  : `기록 사이 움직임의 ${risingRatio.toFixed(0)}%가 상승이었어요.`,
+              tone: "emerald" as const,
+            },
+            {
+              icon: FlameIcon,
+              label: "가장 뜨거웠던 하루",
+              value: insight.weekly.dramaticChange
+                ? recordDate(insight.weekly.dramaticChange.savedOn)
+                : "—",
+              detail: insight.weekly.dramaticChange
+                ? `${formatWon(Math.abs(insight.weekly.dramaticChange.asset))} 움직인 이번 주의 승부처예요.`
+                : "이번 주의 승부처를 찾고 있어요.",
+              tone: "rose" as const,
+            },
+            {
+              icon: AwardIcon,
+              label: "연속 득점",
+              value: `${insight.longestUpStreak}회`,
+              detail:
+                insight.longestUpStreak > 1
+                  ? "상승 흐름이 연달아 이어진 구간이에요."
+                  : "아직 연승보다는 하루하루 다른 흐름이에요.",
+              tone: "violet" as const,
+            },
+          ],
+        }
+      : period === "monthly"
+        ? {
+            eyebrow: "이번 달 투자 가계부",
+            title: "한 달 동안 자산의 생활 리듬은 어땠을까요?",
+            description:
+              "하루의 소음보다 한 달의 습관에 집중해, 평소 흔들림과 쏠림 변화를 살펴봤어요.",
+            cards: [
+              {
+                icon: CoinsIcon,
+                label: "한 달 손익 통장",
+                value:
+                  insight.totalProfitChange === 0
+                    ? "변화 없음"
+                    : `${insight.totalProfitChange > 0 ? "+" : "-"}${formatWon(Math.abs(insight.totalProfitChange))}`,
+                detail:
+                  insight.totalProfitChange >= 0
+                    ? "월초 기준보다 통장이 두툼해졌어요."
+                    : "월초 기준보다 통장이 가벼워졌어요.",
+                tone:
+                  insight.totalProfitChange >= 0
+                    ? ("rose" as const)
+                    : ("blue" as const),
+              },
+              {
+                icon: ActivityIcon,
+                label: "평소 하루 파도",
+                value: transitions ? formatWon(insight.averageMovement) : "—",
+                detail: "기록 사이에서 자산이 오르내린 금액의 평균이에요.",
+                tone: "violet" as const,
+              },
+              {
+                icon: ScaleIcon,
+                label: "쏠림 온도",
+                value:
+                  insight.concentrationChange === null
+                    ? "비교 준비 중"
+                    : `${Math.abs(insight.concentrationChange).toFixed(1)}%p`,
+                detail:
+                  insight.concentrationChange === null
+                    ? "월초 비교 기록이 더 필요해요."
+                    : insight.concentrationChange > 0
+                      ? "가장 큰 종목에 무게가 더 실렸어요."
+                      : insight.concentrationChange < 0
+                        ? "가장 큰 종목의 쏠림이 한결 가벼워졌어요."
+                        : "가장 큰 종목의 비중이 그대로예요.",
+                tone: "violet" as const,
+              },
+            ],
+          }
+        : {
+            eyebrow: "올해 투자 성적표",
+            title: "긴 레이스에서 얼마나 멀리, 안정적으로 왔을까요?",
+            description:
+              "올해를 마라톤처럼 보고 자산 성장, 가장 깊었던 내리막, 목표까지 당겨진 시간을 정리했어요.",
+            cards: [
+              {
+                icon: PiggyBankIcon,
+                label: "올해 자산 성장",
+                value:
+                  insight.totalAssetChange === 0
+                    ? "변화 없음"
+                    : `${insight.totalAssetChange > 0 ? "+" : "-"}${formatWon(Math.abs(insight.totalAssetChange))}`,
+                detail:
+                  insight.totalAssetChange >= 0
+                    ? "출발선보다 앞에서 올해 레이스를 달리고 있어요."
+                    : "출발선 회복이 올해 남은 과제예요.",
+                tone:
+                  insight.totalAssetChange >= 0
+                    ? ("emerald" as const)
+                    : ("blue" as const),
+              },
+              {
+                icon: ShieldAlertIcon,
+                label: "가장 깊었던 내리막",
+                value: `${insight.maximumDrawdown.toFixed(1)}%`,
+                detail: "올해 고점에서 가장 크게 내려왔던 순간의 낙폭이에요.",
+                tone: "blue" as const,
+              },
+              {
+                icon: TargetIcon,
+                label: "목표까지 당긴 시간",
+                value:
+                  insight.goalMonthImprovement === null
+                    ? "비교 불가"
+                    : insight.goalMonthImprovement === 0
+                      ? "변화 없음"
+                      : `${Math.abs(insight.goalMonthImprovement)}개월`,
+                detail:
+                  insight.goalMonthImprovement === null
+                    ? "연초 비교 기록이 더 필요해요."
+                    : insight.goalMonthImprovement > 0
+                      ? "목표 도착 시계를 이만큼 앞으로 당겼어요."
+                      : insight.goalMonthImprovement < 0
+                        ? "목표 도착 시계가 이만큼 뒤로 밀렸어요."
+                        : "목표 도착 예상 시점이 그대로예요.",
+                tone: "violet" as const,
+              },
+            ],
+          };
 
   return (
     <section className="bg-card mt-5 rounded-3xl border p-5 shadow-sm md:p-7">
@@ -1598,6 +1749,23 @@ export function HistoricalInsights({
         </p>
       </div>
 
+      <div className="mt-6 overflow-hidden rounded-3xl border bg-gradient-to-br from-violet-500/8 via-transparent to-emerald-500/8 p-5 md:p-7">
+        <p className="text-xs font-black tracking-[0.14em] text-violet-500 uppercase">
+          {periodTheme.eyebrow}
+        </p>
+        <h3 className="mt-2 text-xl font-black md:text-2xl">
+          {periodTheme.title}
+        </h3>
+        <p className="text-muted-foreground mt-2 max-w-3xl text-sm leading-6">
+          {periodTheme.description}
+        </p>
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          {periodTheme.cards.map((card) => (
+            <InsightStat key={card.label} {...card} />
+          ))}
+        </div>
+      </div>
+
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <InsightStat
           icon={AwardIcon}
@@ -1667,6 +1835,7 @@ export function HistoricalInsights({
       <WeeklyReturnPodium
         rankings={insight.weekly.returnRankings}
         periodLabel={periodLabel}
+        comparisonStartLabel={comparisonStartLabel}
       />
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -1757,7 +1926,7 @@ export function HistoricalInsights({
                 ? "변화 없음"
                 : `${Math.abs(insight.weekly.goalMonthChange)}개월 ${insight.weekly.goalMonthChange > 0 ? "단축" : "증가"}`
           }
-          description={`${periodLabel} 첫 기록과 최신 기록의 평균 시나리오를 비교했어요.`}
+          description={`${comparisonStartLabel}과 최신 기록의 평균 시나리오를 비교했어요.`}
           tone="emerald"
         />
       </div>
@@ -1803,7 +1972,8 @@ export function HistoricalInsights({
                 : `${Math.abs(insight.goalMonthImprovement)}개월 ${insight.goalMonthImprovement > 0 ? "단축" : "증가"}`}
           </p>
           <p className="text-muted-foreground mt-2 text-sm leading-6">
-            첫 기록과 최신 기록의 평균 시나리오 도달 기간을 비교했어요.
+            {comparisonStartLabel}과 최신 기록의 평균 시나리오 도달 기간을
+            비교했어요.
           </p>
           <div className="mt-4 flex items-center justify-between border-t pt-4 text-sm">
             <span className="text-muted-foreground">현재 예상 기간</span>
@@ -1866,7 +2036,7 @@ export function HistoricalInsights({
             )}
             {insight.concentrationChange !== null && (
               <p className="text-muted-foreground">
-                첫 기록보다 해당 종목의 비중이{" "}
+                {comparisonStartLabel}보다 해당 종목의 비중이{" "}
                 <strong
                   className={
                     insight.concentrationChange > 0
@@ -1881,11 +2051,10 @@ export function HistoricalInsights({
               </p>
             )}
             <p className="text-muted-foreground">
-              보유 종목 수는 첫 기록보다{" "}
               <strong className="text-foreground">
                 {insight.holdingCountChange === 0
-                  ? "같아요"
-                  : `${Math.abs(insight.holdingCountChange)}개 ${insight.holdingCountChange > 0 ? "늘었어요" : "줄었어요"}`}
+                  ? `보유 종목 수는 ${comparisonStartLabel}과 같아요`
+                  : `보유 종목 수는 ${comparisonStartLabel}보다 ${Math.abs(insight.holdingCountChange)}개 ${insight.holdingCountChange > 0 ? "늘었어요" : "줄었어요"}`}
               </strong>
               .
             </p>
@@ -1905,9 +2074,11 @@ export function HistoricalInsights({
 function WeeklyReturnPodium({
   rankings,
   periodLabel,
+  comparisonStartLabel,
 }: {
   rankings: Array<{ name: string; returnRate: number }>;
   periodLabel: "주간" | "월간" | "연간";
+  comparisonStartLabel: string;
 }) {
   const { ref, isRevealed } = useRevealOncePerVisit<HTMLElement>();
   const confettiCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -2001,7 +2172,7 @@ function WeeklyReturnPodium({
             {periodLabel} 수익률 TOP 3
           </h4>
           <p className="text-muted-foreground mt-1 text-sm">
-            {periodLabel} 첫 기록과 최신 기록의 종목별 현재가를 비교했어요.
+            {comparisonStartLabel}과 최신 기록의 종목별 현재가를 비교했어요.
           </p>
         </div>
         <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-600 dark:text-amber-300">
@@ -2018,8 +2189,8 @@ function WeeklyReturnPodium({
             아직 순위를 정할 수 없어요
           </h5>
           <p className="text-muted-foreground mx-auto mt-2 max-w-md text-sm leading-6">
-            이 {periodLabel}에 분석 기록이 두 개 이상 쌓이면, 처음과 최신
-            기록에서 함께 보유한 종목의 수익률을 비교해 TOP 3를 선정할게요.
+            비교할 이전 기록과 현재 {periodLabel} 기록이 쌓이면, 함께 보유한
+            종목의 수익률을 비교해 TOP 3를 선정할게요.
           </p>
         </div>
       ) : (
