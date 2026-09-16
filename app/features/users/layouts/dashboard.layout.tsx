@@ -12,6 +12,7 @@ import {
   useSidebar,
 } from "~/core/components/ui/sidebar";
 import makeServerClient from "~/core/lib/supa-client.server";
+import { isAdmin } from "~/features/admin/admin.server";
 import { getUnreadNotificationCount } from "~/features/notifications/notifications.server";
 
 import { markUserActive } from "../activity.server";
@@ -81,6 +82,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       ])
     : [0, null];
   return {
+    isAdmin: user ? await isAdmin(user.id) : false,
     unreadNotificationCount,
     user: user
       ? {
@@ -127,26 +129,29 @@ export default function DashboardLayout({ loaderData }: Route.ComponentProps) {
         handleUnreadChange,
       );
   }, []);
-  const pageTitle = pathname.startsWith("/account/")
-    ? "프로필 설정"
-    : pathname.startsWith("/dashboard/portfolio")
-      ? "내 포트폴리오"
-      : pathname.startsWith("/dashboard/precise-analysis")
-        ? "정밀 분석"
-        : pathname.startsWith("/dashboard/insights")
-          ? "투자 인사이트"
-          : pathname.startsWith("/dashboard/history")
-            ? "분석 기록"
-            : pathname.startsWith("/dashboard/pro")
-              ? "EOKKA Pro"
-              : pathname.startsWith("/dashboard/payments")
-                ? "결제내역"
-                : pathname.startsWith("/dashboard/notifications")
-                  ? "알림"
-                  : "내 투자 대시보드";
+  const pageTitle = pathname.startsWith("/dashboard/admin")
+    ? "운영 관리"
+    : pathname.startsWith("/account/")
+      ? "프로필 설정"
+      : pathname.startsWith("/dashboard/portfolio")
+        ? "내 포트폴리오"
+        : pathname.startsWith("/dashboard/precise-analysis")
+          ? "정밀 분석"
+          : pathname.startsWith("/dashboard/insights")
+            ? "투자 인사이트"
+            : pathname.startsWith("/dashboard/history")
+              ? "분석 기록"
+              : pathname.startsWith("/dashboard/pro")
+                ? "EOKKA Pro"
+                : pathname.startsWith("/dashboard/payments")
+                  ? "결제내역"
+                  : pathname.startsWith("/dashboard/notifications")
+                    ? "알림"
+                    : "내 투자 대시보드";
   return (
     <SidebarProvider>
       <DashboardSidebar
+        isAdmin={loaderData.isAdmin}
         user={user}
         unreadNotificationCount={unreadNotificationCount}
       />

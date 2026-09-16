@@ -96,7 +96,7 @@ export default [
       // Routes that should only be visible to authenticated users.
       route("/logout", "features/auth/screens/logout.tsx"),
     ]),
-    route("/contact", "features/contact/screens/contact-us.tsx"),
+    route("/contact", "features/contact/screens/support.tsx"),
     ...prefix("/payments", [
       route("/checkout", "features/payments/screens/checkout.tsx"),
       layout("core/layouts/private.layout.tsx", { id: "private-payments" }, [
@@ -110,6 +110,7 @@ export default [
     layout("features/users/layouts/dashboard.layout.tsx", [
       ...prefix("/dashboard", [
         index("features/users/screens/dashboard.tsx"),
+        route("/admin", "features/admin/screens/admin.tsx"),
         route("/portfolio", "features/users/screens/managed-portfolio.tsx"),
         route(
           "/precise-analysis",

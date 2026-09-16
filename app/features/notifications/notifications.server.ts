@@ -5,6 +5,9 @@ import db from "~/core/db/drizzle-client.server";
 import { notifications } from "./schema";
 
 export type NotificationType =
+  | "support_received"
+  | "support_reply"
+  | "site_announcement"
   | "analysis_created"
   | "analysis_updated"
   | "analysis_deleted"

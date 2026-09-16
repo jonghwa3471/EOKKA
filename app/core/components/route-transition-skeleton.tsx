@@ -2,6 +2,7 @@ import {
   BriefcaseBusinessIcon,
   CalendarDaysIcon,
   ChartNoAxesCombinedIcon,
+  MessageSquareIcon,
   MicroscopeIcon,
   PanelLeftIcon,
   SparklesIcon,
@@ -39,6 +40,7 @@ const dashboardMenu = [
   [MicroscopeIcon, "정밀 분석"],
   [SparklesIcon, "투자 인사이트"],
   [CalendarDaysIcon, "분석 기록"],
+  [MessageSquareIcon, "문의하기"],
 ] as const;
 
 function ImmediateDashboardSidebar() {

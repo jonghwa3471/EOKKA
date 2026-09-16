@@ -4,6 +4,8 @@ import {
   BellIcon,
   CheckCheckIcon,
   CheckIcon,
+  MegaphoneIcon,
+  MessageSquareIcon,
   RefreshCwIcon,
   Trash2Icon,
 } from "lucide-react";
@@ -130,7 +132,7 @@ function NotificationRow({
             />
           )}
         </div>
-        <p className="text-muted-foreground mt-1 text-sm leading-6">
+        <p className="text-muted-foreground mt-1 text-sm leading-6 break-words whitespace-pre-wrap">
           {notification.message}
         </p>
         <p className="text-muted-foreground mt-2 text-[11px]">
@@ -186,6 +188,8 @@ function NotificationRow({
 }
 
 function notificationIcon(type: string) {
+  if (type.startsWith("support_")) return MessageSquareIcon;
+  if (type === "site_announcement") return MegaphoneIcon;
   if (type.includes("deleted")) return Trash2Icon;
   return RefreshCwIcon;
 }

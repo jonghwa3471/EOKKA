@@ -169,6 +169,13 @@
       "when": 1789365552398,
       "tag": "0023_allow_avatar_upsert_select",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789536011281,
+      "tag": "0024_moaning_thunderball",
+      "breakpoints": true
     }
   ]
 }

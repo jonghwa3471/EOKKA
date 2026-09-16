@@ -3,7 +3,7 @@ import { Link } from "react-router";
 const footerLinks = [
   { to: "/about", label: "서비스 소개" },
   { to: "/methodology", label: "분석 방법" },
-  { to: "/contact-us", label: "문의하기" },
+  { to: "/contact", label: "문의하기" },
   { to: "/legal/terms-of-service", label: "이용약관" },
   { to: "/legal/privacy-policy", label: "개인정보처리방침" },
 ] as const;

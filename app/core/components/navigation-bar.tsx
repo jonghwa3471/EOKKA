@@ -21,6 +21,8 @@ import {
   HomeIcon,
   LogOutIcon,
   MenuIcon,
+  MessageSquareIcon,
+  ShieldCheckIcon,
   SparklesIcon,
   UserCircle2Icon,
 } from "lucide-react";
@@ -69,11 +71,13 @@ import {
  * @returns A dropdown menu component with user information and actions
  */
 function UserMenu({
+  isAdmin = false,
   name,
   email,
   avatarUrl,
   unreadNotificationCount = 0,
 }: {
+  isAdmin?: boolean;
   name: string;
   email?: string;
   avatarUrl?: string | null;
@@ -185,6 +189,24 @@ function UserMenu({
                 </Link>
               </SheetClose>
             </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <SheetClose asChild>
+                <Link to="/contact">
+                  <MessageSquareIcon className="size-4" />
+                  문의하기
+                </Link>
+              </SheetClose>
+            </DropdownMenuItem>
+            {isAdmin && (
+              <DropdownMenuItem asChild>
+                <SheetClose asChild>
+                  <Link to="/dashboard/admin">
+                    <ShieldCheckIcon className="size-4" />
+                    운영 관리
+                  </Link>
+                </SheetClose>
+              </DropdownMenuItem>
+            )}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
 
@@ -299,12 +321,14 @@ function Actions() {
  * @returns The complete navigation bar component
  */
 export function NavigationBar({
+  isAdmin = false,
   name,
   email,
   avatarUrl,
   unreadNotificationCount,
   loading,
 }: {
+  isAdmin?: boolean;
   name?: string;
   email?: string;
   avatarUrl?: string | null;
@@ -372,6 +396,7 @@ export function NavigationBar({
                   email={email}
                   avatarUrl={avatarUrl}
                   unreadNotificationCount={unreadNotificationCount}
+                  isAdmin={isAdmin}
                 />
               ) : (
                 // Unauthenticated state with auth buttons
@@ -421,6 +446,7 @@ export function NavigationBar({
                       email={email}
                       avatarUrl={avatarUrl}
                       unreadNotificationCount={unreadNotificationCount}
+                      isAdmin={isAdmin}
                     />
                   </div>
                 </div>

@@ -3,6 +3,7 @@ import type { Route } from "./+types/navigation.layout";
 import { Suspense } from "react";
 import { Await, Outlet } from "react-router";
 
+import { isAdmin } from "~/features/admin/admin.server";
 import { getUnreadNotificationCount } from "~/features/notifications/notifications.server";
 
 import Footer from "../components/footer";
@@ -26,6 +27,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
     return {
       ...result,
+      isAdmin: user ? await isAdmin(user.id) : false,
       unreadNotificationCount,
       profile: profileResult?.data ?? null,
     };
@@ -39,11 +41,12 @@ export default function NavigationLayout({ loaderData }: Route.ComponentProps) {
     <div className="flex min-h-screen flex-col justify-between">
       <Suspense fallback={<NavigationBar loading={true} />}>
         <Await resolve={userPromise}>
-          {({ data: { user }, unreadNotificationCount, profile }) =>
+          {({ data: { user }, unreadNotificationCount, profile, isAdmin }) =>
             user === null ? (
               <NavigationBar loading={false} />
             ) : (
               <NavigationBar
+                isAdmin={isAdmin}
                 name={profile?.name || user.user_metadata.name || "사용자"}
                 email={user.email}
                 avatarUrl={

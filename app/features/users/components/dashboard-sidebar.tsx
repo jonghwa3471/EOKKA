@@ -2,7 +2,9 @@ import {
   BriefcaseBusinessIcon,
   CalendarDaysIcon,
   ChartNoAxesCombinedIcon,
+  MessageSquareIcon,
   MicroscopeIcon,
+  ShieldCheckIcon,
   SparklesIcon,
 } from "lucide-react";
 import { Link, useLocation, useNavigation } from "react-router";
@@ -50,10 +52,12 @@ const navigation = [
 export default function DashboardSidebar({
   user,
   unreadNotificationCount,
+  isAdmin = false,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   user: { name: string; email: string; avatarUrl: string };
   unreadNotificationCount: number;
+  isAdmin?: boolean;
 }) {
   const { pathname } = useLocation();
   const routeNavigation = useNavigation();
@@ -100,7 +104,19 @@ export default function DashboardSidebar({
             내 투자
           </SidebarGroupLabel>
           <SidebarMenu>
-            {navigation.map((item) => (
+            {[
+              ...navigation,
+              { title: "문의하기", url: "/contact", icon: MessageSquareIcon },
+              ...(isAdmin
+                ? [
+                    {
+                      title: "운영 관리",
+                      url: "/dashboard/admin",
+                      icon: ShieldCheckIcon,
+                    },
+                  ]
+                : []),
+            ].map((item) => (
               <SidebarMenuItem key={item.title}>
                 <SidebarMenuButton
                   asChild

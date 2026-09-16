@@ -1019,7 +1019,7 @@ function TrendChart({
                       cy={y(item.currentValue)}
                       r="12"
                       fill="none"
-                      stroke="#f59e0b"
+                      stroke="#ec4899"
                       strokeWidth="2"
                       opacity={isRevealed ? seriesOpacity("actual") * 0.7 : 0}
                     />
@@ -1028,7 +1028,7 @@ function TrendChart({
                       cy={y(item.currentValue)}
                       r="8"
                       fill="none"
-                      stroke="#f59e0b"
+                      stroke="#ec4899"
                       strokeWidth="2"
                       className="motion-reduce:hidden"
                       opacity={isRevealed ? seriesOpacity("actual") : 0}
@@ -1053,7 +1053,7 @@ function TrendChart({
                   cy={y(item.currentValue)}
                   r={isCarried ? "4" : "7"}
                   fill={
-                    isLatest ? "#f59e0b" : isCarried ? "#64748b" : "#10b981"
+                    isLatest ? "#ec4899" : isCarried ? "#64748b" : "#10b981"
                   }
                   style={{
                     opacity:
@@ -1094,7 +1094,7 @@ function TrendChart({
                   className={cn(
                     "text-[13px]",
                     isLatest
-                      ? "fill-amber-500 font-black"
+                      ? "fill-pink-500 font-black"
                       : "fill-muted-foreground",
                   )}
                 >
@@ -1155,7 +1155,7 @@ function TrendChart({
                 cx={hoverX}
                 cy={y(hovered.item.currentValue)}
                 r="5"
-                fill={hovered.item.savedOn === endDate ? "#f59e0b" : "#10b981"}
+                fill={hovered.item.savedOn === endDate ? "#ec4899" : "#10b981"}
                 stroke="white"
                 strokeWidth="2"
               />
@@ -1211,7 +1211,7 @@ function TrendChart({
                     x="138"
                     y="20"
                     textAnchor="end"
-                    fill="#f59e0b"
+                    fill="#ec4899"
                     className="text-[10px] font-black"
                   >
                     최신 종가
