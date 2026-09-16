@@ -582,7 +582,7 @@ function useRevealOncePerVisit<T extends Element>() {
   return { ref, isRevealed };
 }
 
-type TrendSeries = "actual" | "expected" | "market";
+type TrendSeries = "actual" | "expected" | "market" | "actualMarket";
 type TrendInterval = "daily" | "weekly" | "monthly" | "yearly";
 
 function calendarTrendHistory(history: History, endDate: string) {
@@ -660,6 +660,30 @@ function aggregateTrendHistory(
   );
 }
 
+function actualMarketValue(
+  item: History[number],
+  baseline: History[number] | undefined,
+) {
+  const baselineComponents = baseline?.result.benchmark?.observedComponents;
+  const currentComponents = item.result.benchmark?.observedComponents;
+  if (!baseline || !baselineComponents?.length || !currentComponents?.length)
+    return null;
+
+  const currentByLabel = new Map(
+    currentComponents.map((component) => [component.label, component]),
+  );
+  let matchedWeight = 0;
+  let weightedGrowth = 0;
+  for (const component of baselineComponents) {
+    const current = currentByLabel.get(component.label);
+    if (!current || component.close <= 0 || current.close <= 0) continue;
+    matchedWeight += component.weight;
+    weightedGrowth += component.weight * (current.close / component.close);
+  }
+  if (matchedWeight <= 0) return null;
+  return baseline.currentValue * (weightedGrowth / matchedWeight);
+}
+
 function TrendChart({
   history,
   endDate,
@@ -691,6 +715,9 @@ function TrendChart({
     interval,
   );
   const first = history[0];
+  const actualMarketBaseline = history.find(
+    (item) => item.result.benchmark?.observedComponents?.length,
+  );
   const startTime = new Date(`${first.savedOn}T00:00:00Z`).getTime();
   const projectionValue = (
     savedOn: string,
@@ -723,12 +750,14 @@ function TrendChart({
       periodLabel,
       expected: projectionValue(item.savedOn, "base"),
       market: projectionValue(item.savedOn, "market"),
+      actualMarket: actualMarketValue(item, actualMarketBaseline),
     }),
   );
-  const values = records.flatMap(({ item, expected, market }) => [
+  const values = records.flatMap(({ item, expected, market, actualMarket }) => [
     item.currentValue,
     ...(expected === null ? [] : [expected]),
     ...(market === null ? [] : [market]),
+    ...(actualMarket === null ? [] : [actualMarket]),
   ]);
   const min = Math.min(...values);
   const max = Math.max(...values);
@@ -755,6 +784,10 @@ function TrendChart({
   const marketPoints = visibleRecords.flatMap(({ market, index }) =>
     market === null ? [] : [`${x(index)},${y(market)}`],
   );
+  const actualMarketPoints = visibleRecords.flatMap(
+    ({ actualMarket, index }) =>
+      actualMarket === null ? [] : [`${x(index)},${y(actualMarket)}`],
+  );
   const area = `${x(visibleRecords[0].index)},${height - padding.bottom} ${actualPoints.join(" ")} ${x(visibleRecords.at(-1)!.index)},${height - padding.bottom}`;
   const hovered = hoveredIndex === null ? null : records[hoveredIndex];
   const hoverX = hoveredIndex === null ? null : x(hoveredIndex);
@@ -762,6 +795,7 @@ function TrendChart({
     ? 58 +
       (hovered.expected !== null ? 18 : 0) +
       (hovered.market !== null ? 18 : 0) +
+      (hovered.actualMarket !== null ? 18 : 0) +
       (hovered.isCarried ? 18 : 0)
     : 58;
   const seriesOpacity = (series: TrendSeries) =>
@@ -858,7 +892,7 @@ function TrendChart({
           className="h-full min-h-[280px] max-w-none"
           style={{ width: `${zoom * 100}%` }}
           role="img"
-          aria-label="실제 평가금액과 최초 예상 및 시장 기준의 비교 추이"
+          aria-label="실제 평가금액과 최초 예상, 최초 시장 예상 및 시장 실제 추이의 비교"
         >
           <defs>
             <linearGradient id="dashboard-area" x1="0" y1="0" x2="0" y2="1">
@@ -936,6 +970,44 @@ function TrendChart({
                 "stroke-dashoffset 1000ms cubic-bezier(0.4, 0, 0.2, 1)",
             }}
           />
+          {actualMarketPoints.length > 0 && (
+            <>
+              <polyline
+                points={actualMarketPoints.join(" ")}
+                fill="none"
+                stroke="#06b6d4"
+                strokeWidth="5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                pathLength="1"
+                style={{
+                  opacity: seriesOpacity("actualMarket"),
+                  strokeDasharray: 1,
+                  strokeDashoffset: isRevealed ? 0 : 1,
+                  filter: "drop-shadow(0 0 4px rgba(6,182,212,0.75))",
+                  transition: "stroke-dashoffset 900ms ease-out 220ms",
+                }}
+              />
+              {visibleRecords.map(({ actualMarket, index, item }) =>
+                actualMarket === null ? null : (
+                  <circle
+                    key={`actual-market-${item.savedOn}`}
+                    cx={x(index)}
+                    cy={y(actualMarket)}
+                    r="10"
+                    fill="#06b6d4"
+                    stroke="white"
+                    strokeWidth="2"
+                    style={{
+                      opacity: isRevealed ? seriesOpacity("actualMarket") : 0,
+                      filter: "drop-shadow(0 0 4px rgba(6,182,212,0.85))",
+                      transition: `opacity 250ms ease-out ${300 + Math.min(index, 30) * 15}ms`,
+                    }}
+                  />
+                ),
+              )}
+            </>
+          )}
           {records.map(({ item, isCarried }, index) => {
             const isLatest = item.savedOn === endDate;
             return (
@@ -1107,6 +1179,16 @@ function TrendChart({
                   strokeWidth="1.5"
                 />
               )}
+              {hovered.actualMarket !== null && (
+                <circle
+                  cx={hoverX}
+                  cy={y(hovered.actualMarket)}
+                  r="4"
+                  fill="#06b6d4"
+                  stroke="white"
+                  strokeWidth="1.5"
+                />
+              )}
               <g
                 transform={`translate(${hoverX > width - 225 ? hoverX - 212 : hoverX + 12}, ${padding.top + 8})`}
               >
@@ -1156,22 +1238,35 @@ function TrendChart({
                 {hovered.market !== null && (
                   <text
                     x="12"
-                    y="77"
+                    y={
+                      59 +
+                      (hovered.expected !== null ? 18 : 0) +
+                      (hovered.actualMarket !== null ? 18 : 0)
+                    }
                     fill="#a78bfa"
                     className="text-[11px] font-semibold"
                   >
-                    시장 기준 · {won.format(hovered.market)}원
+                    최초 시장 예상 · {won.format(hovered.market)}원
+                  </text>
+                )}
+                {hovered.actualMarket !== null && (
+                  <text
+                    x="12"
+                    y={59 + (hovered.expected !== null ? 18 : 0)}
+                    fill="#06b6d4"
+                    className="text-[11px] font-semibold"
+                  >
+                    시장 실제 추이 · {won.format(hovered.actualMarket)}원
                   </text>
                 )}
                 {hovered.isCarried && (
                   <text
                     x="12"
                     y={
-                      hovered.market !== null
-                        ? "95"
-                        : hovered.expected !== null
-                          ? "77"
-                          : "59"
+                      59 +
+                      (hovered.expected !== null ? 18 : 0) +
+                      (hovered.actualMarket !== null ? 18 : 0) +
+                      (hovered.market !== null ? 18 : 0)
                     }
                     className="fill-muted-foreground text-[10px] font-semibold"
                   >
@@ -2787,7 +2882,24 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                     )}
                   >
                     <span className="w-4 border-t-2 border-dashed border-violet-500" />
-                    시장 기준
+                    최초 시장 예상
+                  </button>
+                )}
+                {history.some(
+                  (item) => item.result.benchmark?.observedComponents?.length,
+                ) && (
+                  <button
+                    type="button"
+                    onClick={() => toggleTrendSeries("actualMarket")}
+                    aria-pressed={!dimmedTrendSeries.includes("actualMarket")}
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-full px-3 py-1.5 transition",
+                      dimmedTrendSeries.includes("actualMarket")
+                        ? "bg-muted text-cyan-500 opacity-40 hover:opacity-65"
+                        : "bg-cyan-500/15 text-cyan-500 ring-1 ring-cyan-500/30",
+                    )}
+                  >
+                    <span className="h-0.5 w-4 bg-cyan-500" /> 시장 실제 추이
                   </button>
                 )}
               </div>

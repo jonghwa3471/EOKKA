@@ -353,6 +353,11 @@ export async function analyzePortfolio(
     (sum, item) => sum + item.valueKrw,
     0,
   );
+  const analysisAsOf = marketData
+    .map(({ data }) => data.asOf)
+    .sort()
+    .at(0)!;
+  const analysisAsOfCompact = analysisAsOf.replaceAll("-", "");
   const weights = holdingResults.map((item) => item.valueKrw / currentValue);
   const expectedLongTermReturn = longTermAnnualReturn(marketData, weights);
 
@@ -668,6 +673,23 @@ export async function analyzePortfolio(
                   input.investmentPeriodMonths,
                 ),
         })),
+        observedComponents: components.flatMap(({ name, weight, history }) => {
+          const observed = [...history]
+            .reverse()
+            .find(
+              (point) => point.date.replaceAll("-", "") <= analysisAsOfCompact,
+            );
+          return observed && observed.close > 0
+            ? [
+                {
+                  label: name,
+                  weight,
+                  asOf: observed.date,
+                  close: observed.close,
+                },
+              ]
+            : [];
+        }),
       };
     }
   } catch (error) {
@@ -795,10 +817,7 @@ export async function analyzePortfolio(
   );
 
   return {
-    asOf: marketData
-      .map(({ data }) => data.asOf)
-      .sort()
-      .at(0)!,
+    asOf: analysisAsOf,
     marketMode,
     goalAmount: input.goalAmount,
     monthlyContribution: input.monthlyContribution,

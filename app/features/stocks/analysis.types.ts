@@ -91,6 +91,12 @@ export interface AnalysisResult {
       label: string;
       annualReturn: number | null;
     }>;
+    observedComponents?: Array<{
+      label: string;
+      weight: number;
+      asOf: string;
+      close: number;
+    }>;
   } | null;
   probability: {
     tenYears: number;
