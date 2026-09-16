@@ -14,12 +14,10 @@ import { Form, Link, redirect } from "react-router";
 import { Button } from "~/core/components/ui/button";
 import makeServerClient from "~/core/lib/supa-client.server";
 import {
-  FREE_HISTORY_LIMIT,
   getActiveAnalysisHistory,
   getPreferredGoalAmount,
   setPreferredGoalAmount,
 } from "~/features/stocks/history/analysis-history.server";
-import { getAutomaticAnalysisSettings } from "~/features/users/automatic-analysis-settings.server";
 
 import { HistoricalInsights } from "./dashboard";
 
@@ -246,13 +244,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   } = await client.auth.getUser();
   if (!user) throw redirect("/login");
 
-  const [allHistory, savedPreferredGoal, automaticSettings] = await Promise.all(
-    [
-      getActiveAnalysisHistory(user.id),
-      getPreferredGoalAmount(user.id),
-      getAutomaticAnalysisSettings(user.id),
-    ],
-  );
+  const [allHistory, savedPreferredGoal] = await Promise.all([
+    getActiveAnalysisHistory(user.id),
+    getPreferredGoalAmount(user.id),
+  ]);
   const goalOptions = [
     ...new Set(allHistory.map((item) => item.goalAmount)),
   ].sort((a, b) => a - b);
@@ -274,9 +269,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     history,
     goalOptions,
     preferredGoal,
-    historyLimit: FREE_HISTORY_LIMIT,
     today: koreanToday(),
-    isPro: automaticSettings.isPro,
   };
 }
 
@@ -302,8 +295,7 @@ export async function action({ request }: Route.ActionArgs) {
 export default function InvestmentInsights({
   loaderData,
 }: Route.ComponentProps) {
-  const { history, goalOptions, preferredGoal, historyLimit, today, isPro } =
-    loaderData;
+  const { history, goalOptions, preferredGoal, today } = loaderData;
   const [period, setPeriod] = useState<InsightPeriod>("weekly");
 
   useEffect(() => {
@@ -311,11 +303,11 @@ export default function InvestmentInsights({
     if (
       savedPeriod === "weekly" ||
       savedPeriod === "monthly" ||
-      (isPro && savedPeriod === "annual")
+      savedPeriod === "annual"
     ) {
       setPeriod(savedPeriod);
     }
-  }, [isPro]);
+  }, []);
 
   const selectPeriod = (nextPeriod: InsightPeriod) => {
     setPeriod(nextPeriod);
@@ -333,9 +325,7 @@ export default function InvestmentInsights({
     [
       ["weekly", "주간 인사이트", "월요일부터 일요일"],
       ["monthly", "월간 인사이트", "매월 1일부터 마지막 날"],
-      ...(isPro
-        ? ([["annual", "연간 인사이트", "매년 1월부터 12월"]] as const)
-        : []),
+      ["annual", "연간 인사이트", "매년 1월부터 12월"],
     ];
 
   if (history.length === 0) {
@@ -381,9 +371,7 @@ export default function InvestmentInsights({
               기록 속에서 찾은 투자 인사이트
             </h1>
             <p className="text-muted-foreground mt-2">
-              {isPro
-                ? "선택한 목표로 저장된 모든 기록을 함께 분석했어요."
-                : `선택한 목표의 최근 ${historyLimit}개 기록을 함께 분석했어요.`}
+              선택한 목표로 저장된 모든 기록을 함께 분석했어요.
             </p>
           </div>
           <Button asChild variant="outline" className="rounded-full">
@@ -421,9 +409,7 @@ export default function InvestmentInsights({
 
         <section className="bg-card mt-7 rounded-3xl border p-2 shadow-sm">
           <div
-            className={
-              isPro ? "grid grid-cols-3 gap-2" : "grid grid-cols-2 gap-2"
-            }
+            className="grid grid-cols-3 gap-2"
             role="tablist"
             aria-label="투자 인사이트 기간"
           >

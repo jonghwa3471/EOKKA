@@ -87,7 +87,7 @@ function nextAutomaticAnalysisLabel(now = new Date()) {
 export async function loader({ request }: Route.LoaderArgs) {
   const [
     { default: makeServerClient },
-    { FREE_HISTORY_LIMIT, getActiveAnalysisHistory, getPreferredGoalAmount },
+    { getActiveAnalysisHistory, getPreferredGoalAmount },
     { getAutomaticAnalysisSettings },
     { getLatestCachedMarketDate, refreshLatestDomesticMarketDate },
     { getLatestKisMarketDate },
@@ -186,7 +186,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       user?.user_metadata.full_name ??
       user?.email?.split("@")[0] ??
       "사용자",
-    historyLimit: FREE_HISTORY_LIMIT,
     latestMarketDate,
     isPro: automaticSettings?.isPro ?? false,
     nextAutomaticAnalysis: nextAutomaticAnalysisLabel(),
@@ -579,22 +578,113 @@ function useRevealOncePerVisit<T extends Element>() {
 }
 
 type TrendSeries = "actual" | "expected" | "market";
+type TrendInterval = "daily" | "weekly" | "monthly" | "yearly";
+
+function calendarTrendHistory(history: History, endDate: string) {
+  const latest = history.at(-1);
+  if (!latest) return [];
+  const byDate = new Map(history.map((item) => [item.savedOn, item]));
+  const start = history[0].savedOn;
+  const totalDays =
+    Math.max(
+      0,
+      Math.round(
+        (new Date(`${endDate}T00:00:00Z`).getTime() -
+          new Date(`${start}T00:00:00Z`).getTime()) /
+          86_400_000,
+      ),
+    ) + 1;
+  let carried = history[0];
+
+  return Array.from({ length: totalDays }, (_, index) => {
+    const savedOn = shiftDate(start, index);
+    const actual = byDate.get(savedOn) ?? null;
+    if (actual) carried = actual;
+    const weekday = new Date(`${savedOn}T00:00:00Z`).getUTCDay();
+    return {
+      item: actual ?? { ...carried, savedOn },
+      isCarried: actual === null,
+      closedReason:
+        actual !== null
+          ? null
+          : weekday === 0 || weekday === 6
+            ? "휴장일"
+            : "분석 미갱신일",
+      periodLabel: savedOn,
+    };
+  });
+}
+
+function trendPeriodKey(savedOn: string, interval: TrendInterval) {
+  if (interval === "daily") return savedOn;
+  if (interval === "monthly") return savedOn.slice(0, 7);
+  if (interval === "yearly") return savedOn.slice(0, 4);
+  const date = new Date(`${savedOn}T00:00:00Z`);
+  const mondayOffset = (date.getUTCDay() + 6) % 7;
+  return shiftDate(savedOn, -mondayOffset);
+}
+
+function aggregateTrendHistory(
+  calendarHistory: ReturnType<typeof calendarTrendHistory>,
+  interval: TrendInterval,
+) {
+  if (interval === "daily") return calendarHistory;
+  const groups = new Map<
+    string,
+    (typeof calendarHistory)[number] & { hasActualRecord: boolean }
+  >();
+  for (const record of calendarHistory) {
+    const key = trendPeriodKey(record.item.savedOn, interval);
+    const previous = groups.get(key);
+    groups.set(key, {
+      ...record,
+      isCarried: false,
+      closedReason: null,
+      hasActualRecord:
+        (previous?.hasActualRecord ?? false) || !record.isCarried,
+      periodLabel:
+        interval === "weekly"
+          ? `${key.replaceAll("-", ".")}~${shiftDate(key, 6).replaceAll("-", ".")}`
+          : interval === "monthly"
+            ? `${key.replace("-", ".")}월`
+            : `${key}년`,
+    });
+  }
+  return [...groups.values()].map(
+    ({ hasActualRecord: _, ...record }) => record,
+  );
+}
 
 function TrendChart({
   history,
+  endDate,
   dimmedSeries,
 }: {
   history: History;
+  endDate: string;
   dimmedSeries: TrendSeries[];
 }) {
   const { ref: chartRef, isRevealed } = useRevealOncePerVisit<HTMLDivElement>();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
+  const [interval, setInterval] = useState<TrendInterval>("daily");
+  const [latestPointVisible, setLatestPointVisible] = useState(false);
+
+  useEffect(() => {
+    setLatestPointVisible(false);
+    if (!isRevealed) return;
+    const timer = window.setTimeout(() => setLatestPointVisible(true), 1_100);
+    return () => window.clearTimeout(timer);
+  }, [isRevealed]);
 
   const width = 900;
   const height = 330;
   const padding = { top: 28, right: 24, bottom: 45, left: 24 };
+  const calendarHistory = aggregateTrendHistory(
+    calendarTrendHistory(history, endDate),
+    interval,
+  );
   const first = history[0];
   const startTime = new Date(`${first.savedOn}T00:00:00Z`).getTime();
   const projectionValue = (
@@ -620,11 +710,16 @@ function TrendChart({
       (elapsedMonth - previous.month) / (next.month - previous.month || 1);
     return previous.value + (next.value - previous.value) * ratio;
   };
-  const records = history.map((item) => ({
-    item,
-    expected: projectionValue(item.savedOn, "base"),
-    market: projectionValue(item.savedOn, "market"),
-  }));
+  const records = calendarHistory.map(
+    ({ item, isCarried, closedReason, periodLabel }) => ({
+      item,
+      isCarried,
+      closedReason,
+      periodLabel,
+      expected: projectionValue(item.savedOn, "base"),
+      market: projectionValue(item.savedOn, "market"),
+    }),
+  );
   const values = records.flatMap(({ item, expected, market }) => [
     item.currentValue,
     ...(expected === null ? [] : [expected]),
@@ -635,9 +730,9 @@ function TrendChart({
   const span = Math.max(1, max - min);
   const x = (index: number) =>
     padding.left +
-    (history.length === 1
+    (records.length === 1
       ? (width - padding.left - padding.right) / 2
-      : (index / (history.length - 1)) *
+      : (index / (records.length - 1)) *
         (width - padding.left - padding.right));
   const y = (value: number) =>
     padding.top +
@@ -658,7 +753,12 @@ function TrendChart({
   const area = `${x(visibleRecords[0].index)},${height - padding.bottom} ${actualPoints.join(" ")} ${x(visibleRecords.at(-1)!.index)},${height - padding.bottom}`;
   const hovered = hoveredIndex === null ? null : records[hoveredIndex];
   const hoverX = hoveredIndex === null ? null : x(hoveredIndex);
-  const tooltipHeight = hovered?.market === null ? 76 : 94;
+  const tooltipHeight = hovered
+    ? 58 +
+      (hovered.expected !== null ? 18 : 0) +
+      (hovered.market !== null ? 18 : 0) +
+      (hovered.isCarried ? 18 : 0)
+    : 58;
   const seriesOpacity = (series: TrendSeries) =>
     dimmedSeries.includes(series) ? 0.16 : 1;
   const updateZoom = (nextZoom: number, anchorRatio = 0.5) => {
@@ -680,10 +780,46 @@ function TrendChart({
       );
     });
   };
+  const selectInterval = (nextInterval: TrendInterval) => {
+    setInterval(nextInterval);
+    setHoveredIndex(null);
+    setZoom(1);
+    if (scrollRef.current) scrollRef.current.scrollLeft = 0;
+  };
 
   return (
     <div ref={chartRef} className="flex h-full min-h-0 flex-col">
-      <div className="mb-2 flex justify-end">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div
+          className="bg-muted/60 flex items-center gap-1 rounded-full p-1"
+          role="tablist"
+          aria-label="자산 성장 차트 표시 간격"
+        >
+          {(
+            [
+              ["daily", "일"],
+              ["weekly", "주"],
+              ["monthly", "월"],
+              ["yearly", "년"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={interval === value}
+              onClick={() => selectInterval(value)}
+              className={cn(
+                "min-w-9 rounded-full px-3 py-1.5 text-xs font-black transition",
+                interval === value
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="bg-background flex items-center gap-1 rounded-full border p-1 shadow-sm">
           <button
             type="button"
@@ -795,49 +931,113 @@ function TrendChart({
                 "stroke-dashoffset 1000ms cubic-bezier(0.4, 0, 0.2, 1)",
             }}
           />
-          {history.map((item, index) => (
-            <g key={item.id}>
-              <circle
-                cx={x(index)}
-                cy={y(item.currentValue)}
-                r="7"
-                fill="#10b981"
-                style={{
-                  opacity: isRevealed ? seriesOpacity("actual") : 0,
-                  transform: isRevealed ? "scale(1)" : "scale(0)",
-                  transformBox: "fill-box",
-                  transformOrigin: "center",
-                  transition: `opacity 220ms ease-out ${650 + index * 90}ms, transform 300ms ease-out ${650 + index * 90}ms`,
-                }}
-              />
-              <circle
-                cx={x(index)}
-                cy={y(item.currentValue)}
-                r="3"
-                fill="white"
-                style={{
-                  opacity: isRevealed ? seriesOpacity("actual") : 0,
-                  transition: `opacity 200ms ease-out ${720 + index * 90}ms`,
-                }}
-              />
-              <text
-                x={x(index)}
-                y={height - 14}
-                textAnchor="middle"
-                fill="currentColor"
-                className="text-muted-foreground text-[13px]"
-              >
-                {(index === 0 ||
-                  index === history.length - 1 ||
-                  index % Math.max(1, Math.ceil(history.length / 6)) === 0) && (
+          {records.map(({ item, isCarried }, index) => {
+            const isLatest = item.savedOn === endDate;
+            return (
+              <g key={item.savedOn}>
+                {isLatest && latestPointVisible && (
                   <>
-                    {Number(item.savedOn.slice(5, 7))}/
-                    {Number(item.savedOn.slice(8, 10))}
+                    <circle
+                      cx={x(index)}
+                      cy={y(item.currentValue)}
+                      r="12"
+                      fill="none"
+                      stroke="#f59e0b"
+                      strokeWidth="2"
+                      opacity={isRevealed ? seriesOpacity("actual") * 0.7 : 0}
+                    />
+                    <circle
+                      cx={x(index)}
+                      cy={y(item.currentValue)}
+                      r="8"
+                      fill="none"
+                      stroke="#f59e0b"
+                      strokeWidth="2"
+                      className="motion-reduce:hidden"
+                      opacity={isRevealed ? seriesOpacity("actual") : 0}
+                    >
+                      <animate
+                        attributeName="r"
+                        values="8;22"
+                        dur="1.8s"
+                        repeatCount="indefinite"
+                      />
+                      <animate
+                        attributeName="opacity"
+                        values="0.75;0"
+                        dur="1.8s"
+                        repeatCount="indefinite"
+                      />
+                    </circle>
                   </>
                 )}
-              </text>
-            </g>
-          ))}
+                <circle
+                  cx={x(index)}
+                  cy={y(item.currentValue)}
+                  r={isCarried ? "4" : "7"}
+                  fill={
+                    isLatest ? "#f59e0b" : isCarried ? "#64748b" : "#10b981"
+                  }
+                  style={{
+                    opacity:
+                      isRevealed && (!isLatest || latestPointVisible)
+                        ? seriesOpacity("actual")
+                        : 0,
+                    transform:
+                      isRevealed && (!isLatest || latestPointVisible)
+                        ? "scale(1)"
+                        : "scale(0)",
+                    transformBox: "fill-box",
+                    transformOrigin: "center",
+                    transition: isLatest
+                      ? "opacity 220ms ease-out, transform 300ms ease-out"
+                      : `opacity 220ms ease-out ${650 + Math.min(index, 30) * 20}ms, transform 300ms ease-out ${650 + Math.min(index, 30) * 20}ms`,
+                  }}
+                />
+                <circle
+                  cx={x(index)}
+                  cy={y(item.currentValue)}
+                  r={isCarried ? "1.5" : "3"}
+                  fill="white"
+                  style={{
+                    opacity:
+                      isRevealed && (!isLatest || latestPointVisible)
+                        ? seriesOpacity("actual")
+                        : 0,
+                    transition: isLatest
+                      ? "opacity 200ms ease-out"
+                      : `opacity 200ms ease-out ${720 + Math.min(index, 30) * 20}ms`,
+                  }}
+                />
+                <text
+                  x={x(index)}
+                  y={height - 14}
+                  textAnchor="middle"
+                  fill="currentColor"
+                  className={cn(
+                    "text-[13px]",
+                    isLatest
+                      ? "fill-amber-500 font-black"
+                      : "fill-muted-foreground",
+                  )}
+                >
+                  {(index === 0 ||
+                    index === records.length - 1 ||
+                    index % Math.max(1, Math.ceil(records.length / 6)) === 0) &&
+                    (interval === "yearly" ? (
+                      item.savedOn.slice(0, 4)
+                    ) : interval === "monthly" ? (
+                      item.savedOn.slice(0, 7).replace("-", ".")
+                    ) : (
+                      <>
+                        {Number(item.savedOn.slice(5, 7))}/
+                        {Number(item.savedOn.slice(8, 10))}
+                      </>
+                    ))}
+                </text>
+              </g>
+            );
+          })}
           <rect
             x={padding.left}
             y={padding.top}
@@ -853,11 +1053,11 @@ function TrendChart({
                   padding.left) /
                 (width - padding.left - padding.right);
               setHoveredIndex(
-                history.length === 1
+                records.length === 1
                   ? 0
                   : Math.min(
-                      history.length - 1,
-                      Math.max(0, Math.round(ratio * (history.length - 1))),
+                      records.length - 1,
+                      Math.max(0, Math.round(ratio * (records.length - 1))),
                     ),
               );
             }}
@@ -878,7 +1078,7 @@ function TrendChart({
                 cx={hoverX}
                 cy={y(hovered.item.currentValue)}
                 r="5"
-                fill="#10b981"
+                fill={hovered.item.savedOn === endDate ? "#f59e0b" : "#10b981"}
                 stroke="white"
                 strokeWidth="2"
               />
@@ -917,8 +1117,19 @@ function TrendChart({
                   y="20"
                   className="fill-foreground text-[11px] font-bold"
                 >
-                  {hovered.item.savedOn}
+                  {hovered.periodLabel}
                 </text>
+                {hovered.item.savedOn === endDate && (
+                  <text
+                    x="138"
+                    y="20"
+                    textAnchor="end"
+                    fill="#f59e0b"
+                    className="text-[10px] font-black"
+                  >
+                    최신 종가
+                  </text>
+                )}
                 <text
                   x="12"
                   y="41"
@@ -945,6 +1156,21 @@ function TrendChart({
                     className="text-[11px] font-semibold"
                   >
                     시장 기준 · {won.format(hovered.market)}원
+                  </text>
+                )}
+                {hovered.isCarried && (
+                  <text
+                    x="12"
+                    y={
+                      hovered.market !== null
+                        ? "95"
+                        : hovered.expected !== null
+                          ? "77"
+                          : "59"
+                    }
+                    className="fill-muted-foreground text-[10px] font-semibold"
+                  >
+                    {hovered.closedReason} · 직전 종가 유지
                   </text>
                 )}
               </g>
@@ -1924,7 +2150,6 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
   const {
     history,
     name,
-    historyLimit,
     goalOptions,
     preferredGoal,
     latestMarketDate,
@@ -2037,7 +2262,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <p className="text-muted-foreground">
-                최근 종가 {latest.savedOn} · 최근 {historyLimit}개 기록
+                최근 종가 {latest.savedOn} · 전체 {history.length}개 기록
               </p>
               <span
                 className={cn(
@@ -2346,7 +2571,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="text-muted-foreground text-sm font-semibold">
-                  최근 {historyLimit}개 기록
+                  전체 기간 기록
                 </p>
                 <h2 className="mt-1 text-xl font-black">내 자산 성장 추이</h2>
               </div>
@@ -2397,7 +2622,11 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
               </div>
             </div>
             <div className="mt-4 min-h-0 flex-1">
-              <TrendChart history={history} dimmedSeries={dimmedTrendSeries} />
+              <TrendChart
+                history={history}
+                endDate={latest.savedOn}
+                dimmedSeries={dimmedTrendSeries}
+              />
             </div>
           </div>
 
@@ -2442,7 +2671,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
               <div>
                 <h2 className="font-black">일별 분석 기록</h2>
                 <p className="text-muted-foreground text-xs">
-                  날짜별 마지막 분석을 최대 {historyLimit}개까지 표시
+                  저장된 전체 날짜별 마지막 분석을 표시
                 </p>
               </div>
             </div>
@@ -2454,7 +2683,6 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
               </div>
               <div className="max-h-[480px] divide-y overflow-y-auto pr-2 [scrollbar-gutter:stable]">
                 {history
-                  .slice(-historyLimit)
                   .map((item, index, records) => ({
                     item,
                     previous: records[index - 1],
