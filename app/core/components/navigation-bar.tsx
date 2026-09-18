@@ -21,7 +21,6 @@ import {
   HomeIcon,
   LogOutIcon,
   MenuIcon,
-  MessageSquareIcon,
   ShieldCheckIcon,
   SparklesIcon,
   UserCircle2Icon,
@@ -186,14 +185,6 @@ function UserMenu({
                         : unreadNotificationCount}
                     </span>
                   )}
-                </Link>
-              </SheetClose>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <SheetClose asChild>
-                <Link to="/contact">
-                  <MessageSquareIcon className="size-4" />
-                  문의하기
                 </Link>
               </SheetClose>
             </DropdownMenuItem>

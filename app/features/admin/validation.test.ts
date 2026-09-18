@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   announcementSchema,
   assertSameOrigin,
+  deleteMessageSchema,
+  deleteTicketSchema,
   replySchema,
   ticketSchema,
 } from "./validation";
@@ -45,6 +47,18 @@ test("답변·공지는 유효한 UUID와 비어 있지 않은 내용이 필요�
       title: "공지",
       body: "     ",
     }).success,
+    false,
+  );
+});
+test("문의와 댓글 삭제 대상은 UUID로 검증한다", () => {
+  const id = "a116f50d-c0c9-4e30-886b-b3e6b3367c57";
+  assert.equal(deleteTicketSchema.safeParse({ ticket: id }).success, true);
+  assert.equal(
+    deleteMessageSchema.safeParse({ ticket: id, message: id }).success,
+    true,
+  );
+  assert.equal(
+    deleteMessageSchema.safeParse({ ticket: id, message: "invalid" }).success,
     false,
   );
 });

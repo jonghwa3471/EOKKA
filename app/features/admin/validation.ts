@@ -9,6 +9,12 @@ export const replySchema = z.object({
   ticket: z.string().uuid(),
   body: z.string().trim().min(1).max(5000),
 });
+export const deleteTicketSchema = z.object({
+  ticket: z.string().uuid(),
+});
+export const deleteMessageSchema = deleteTicketSchema.extend({
+  message: z.string().uuid(),
+});
 export const announcementSchema = z.object({
   id: z.string().uuid(),
   title: z.string().trim().min(2).max(100),

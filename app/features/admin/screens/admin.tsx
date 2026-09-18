@@ -2,12 +2,14 @@ import type { Route } from "./+types/admin";
 
 import { eq } from "drizzle-orm";
 import {
+  ChevronRightIcon,
+  ExternalLinkIcon,
   MegaphoneIcon,
   MessagesSquareIcon,
   ShieldCheckIcon,
   UsersIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Form,
   Link,
@@ -19,31 +21,49 @@ import {
 import { z } from "zod";
 
 import ConfirmDialog from "~/core/components/confirm-dialog";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "~/core/components/ui/avatar";
 import { Button } from "~/core/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "~/core/components/ui/dialog";
 import { Input } from "~/core/components/ui/input";
 import { Textarea } from "~/core/components/ui/textarea";
 import db from "~/core/db/drizzle-client.server";
 
 import {
+  deleteSupportMessage,
+  deleteSupportTicket,
   getAdminOverview,
-  getThread,
   publishAnnouncement,
   replyToTicket,
   requireAdmin,
 } from "../admin.server";
 import { supportTickets } from "../schema";
-import SupportThread, { statusLabels } from "../support-thread";
+import SupportThread, {
+  statusBadgeClass,
+  statusLabels,
+} from "../support-thread";
 import {
   announcementSchema,
   assertSameOrigin,
   categoryLabels,
+  deleteMessageSchema,
+  deleteTicketSchema,
   replySchema,
 } from "../validation";
 
 export const meta = () => [{ title: "운영 관리 | EOKKA" }];
 export const headers = () => ({ "Cache-Control": "private, no-store" });
 export async function loader({ request }: Route.LoaderArgs) {
-  const user = await requireAdmin(request);
+  await requireAdmin(request);
   const url = new URL(request.url);
   const search = (url.searchParams.get("q") ?? "").slice(0, 100);
   const rawPage = Number(url.searchParams.get("page") ?? 0);
@@ -51,13 +71,21 @@ export async function loader({ request }: Route.LoaderArgs) {
     ? Math.max(0, Math.min(rawPage, 100000))
     : 0;
   const ticket = url.searchParams.get("ticket");
+  const statusFilter = z
+    .enum(["all", "open", "answered", "closed"])
+    .catch("all")
+    .parse(url.searchParams.get("status") ?? "all");
   if (ticket && !z.string().uuid().safeParse(ticket).success)
     throw new Response("잘못된 문의 주소예요.", { status: 400 });
+  const overview = await getAdminOverview(search, page);
+  if (ticket && !overview.tickets.some((item) => item.id === ticket))
+    throw new Response("문의를 찾을 수 없어요.", { status: 404 });
   return {
-    ...(await getAdminOverview(search, page)),
+    ...overview,
     search,
     page,
-    thread: ticket ? await getThread(ticket, user.id, true) : null,
+    initialTicketId: ticket,
+    statusFilter,
     tab: url.searchParams.get("tab") ?? "inbox",
   };
 }
@@ -65,7 +93,34 @@ export async function action({ request }: Route.ActionArgs) {
   assertSameOrigin(request);
   const user = await requireAdmin(request);
   const form = Object.fromEntries(await request.formData());
+  const requestedStatus = new URL(request.url).searchParams.get("status");
+  const statusFilter = ["open", "answered", "closed"].includes(
+    requestedStatus ?? "",
+  )
+    ? `&status=${requestedStatus}`
+    : "";
+  const inboxUrl = (ticket?: string) =>
+    `/dashboard/admin?tab=inbox${statusFilter}${ticket ? `&ticket=${ticket}` : ""}`;
   try {
+    if (form.intent === "delete-ticket") {
+      const parsed = deleteTicketSchema.safeParse(form);
+      if (!parsed.success)
+        return data({ error: "삭제할 문의를 확인해 주세요." }, { status: 400 });
+      await deleteSupportTicket(user.id, parsed.data.ticket, true);
+      return redirect(inboxUrl());
+    }
+    if (form.intent === "delete-message") {
+      const parsed = deleteMessageSchema.safeParse(form);
+      if (!parsed.success)
+        return data({ error: "삭제할 댓글을 확인해 주세요." }, { status: 400 });
+      await deleteSupportMessage(
+        user.id,
+        parsed.data.ticket,
+        parsed.data.message,
+        true,
+      );
+      return redirect(inboxUrl(parsed.data.ticket));
+    }
     if (form.intent === "reply") {
       const parsed = replySchema.safeParse(form);
       if (!parsed.success)
@@ -74,7 +129,7 @@ export async function action({ request }: Route.ActionArgs) {
           { status: 400 },
         );
       await replyToTicket(user.id, parsed.data.ticket, parsed.data.body, true);
-      return redirect(`/dashboard/admin?ticket=${parsed.data.ticket}`);
+      return redirect(inboxUrl(parsed.data.ticket));
     }
     if (form.intent === "status") {
       const parsed = z
@@ -89,7 +144,7 @@ export async function action({ request }: Route.ActionArgs) {
         .update(supportTickets)
         .set({ status: parsed.data.status, updated_at: new Date() })
         .where(eq(supportTickets.id, parsed.data.ticket));
-      return redirect(`/dashboard/admin?ticket=${parsed.data.ticket}`);
+      return redirect(inboxUrl(parsed.data.ticket));
     }
     if (form.intent === "announce") {
       const parsed = announcementSchema.safeParse(form);
@@ -122,14 +177,61 @@ export default function Admin({
   actionData,
 }: Route.ComponentProps) {
   const [confirm, setConfirm] = useState(false);
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(
+    d.initialTicketId,
+  );
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const requestId = useRef<string | null>(null);
   const submit = useSubmit();
   const busy = useNavigation().state !== "idle";
+  const selectedTicket = useMemo(
+    () => d.tickets.find((ticket) => ticket.id === selectedTicketId) ?? null,
+    [d.tickets, selectedTicketId],
+  );
+  const filteredTickets = useMemo(
+    () =>
+      d.statusFilter === "all"
+        ? d.tickets
+        : d.tickets.filter((ticket) => ticket.status === d.statusFilter),
+    [d.statusFilter, d.tickets],
+  );
+  const selectedUser = useMemo(() => {
+    const user = d.users.find((item) => item.id === selectedUserId);
+    if (user)
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        avatar_url: user.avatar_url,
+        admin: user.admin,
+        pro: user.pro,
+        ticket_count: user.ticket_count,
+        last_active_on: user.last_active_on,
+        joined_at: user.created_at,
+      };
+    const ticket = d.tickets.find((item) => item.user_id === selectedUserId);
+    return ticket
+      ? {
+          id: ticket.user_id,
+          name: ticket.name,
+          email: ticket.email,
+          avatar_url: ticket.avatar_url,
+          admin: ticket.admin,
+          pro: ticket.pro,
+          ticket_count: ticket.ticket_count,
+          last_active_on: ticket.last_active_on,
+          joined_at: ticket.joined_at,
+        }
+      : null;
+  }, [d.tickets, d.users, selectedUserId]);
   useEffect(() => {
     requestId.current = null;
     formRef.current?.reset();
   }, [d.announcements[0]?.id]);
+  useEffect(() => {
+    setSelectedTicketId(d.initialTicketId);
+  }, [d.initialTicketId]);
   const panel = "rounded-3xl border bg-card p-5 sm:p-7";
   return (
     <main className="mx-auto w-full max-w-6xl space-y-7 p-5 sm:p-8">
@@ -186,65 +288,189 @@ export default function Admin({
         </p>
       )}
       {d.tab === "inbox" && (
-        <div className="grid items-start gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
-          <section className={`${panel} space-y-3`}>
-            <h2 className="font-bold">최근 문의 100건</h2>
-            {!d.tickets.length && (
-              <p className="text-muted-foreground py-6 text-sm">
-                접수된 문의가 없어요.
-              </p>
-            )}
-            {d.tickets.map((t) => (
-              <Link
-                key={t.id}
-                to={`/dashboard/admin?ticket=${t.id}`}
-                className={`hover:bg-muted/50 block rounded-xl border p-3 ${d.thread?.ticket.id === t.id ? "border-emerald-500 bg-emerald-500/5" : ""}`}
-              >
-                <span className="text-xs text-emerald-500">
-                  {statusLabels[t.status]} ·{" "}
-                  {categoryLabels[t.category as keyof typeof categoryLabels]}
-                </span>
-                <p className="mt-1 text-sm font-bold break-words">{t.title}</p>
+        <>
+          <section className="bg-card overflow-hidden rounded-3xl border">
+            <div className="flex flex-col gap-4 border-b px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+              <div>
+                <h2 className="font-bold">문의함</h2>
                 <p className="text-muted-foreground mt-1 text-xs">
-                  {t.name ?? "사용자"}
+                  필터 결과 {filteredTickets.length}건 · 최신 작성순
                 </p>
-              </Link>
-            ))}
+              </div>
+              <div className="flex flex-wrap gap-2" aria-label="문의 상태 필터">
+                {[
+                  ["all", "전체"],
+                  ["open", "답변 대기"],
+                  ["answered", "답변 완료"],
+                  ["closed", "종료"],
+                ].map(([value, label]) => (
+                  <Button
+                    key={value}
+                    asChild
+                    size="sm"
+                    variant={d.statusFilter === value ? "default" : "outline"}
+                  >
+                    <Link
+                      to={`/dashboard/admin?tab=inbox${value === "all" ? "" : `&status=${value}`}`}
+                      preventScrollReset
+                    >
+                      {label}
+                    </Link>
+                  </Button>
+                ))}
+              </div>
+            </div>
+            {!filteredTickets.length ? (
+              <p className="text-muted-foreground px-6 py-20 text-center text-sm">
+                해당 상태의 문의가 없어요.
+              </p>
+            ) : (
+              <ul className="divide-y">
+                {filteredTickets.map((ticket) => (
+                  <li key={ticket.id}>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      className="hover:bg-muted/50 focus-visible:ring-ring grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-5 py-3.5 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset sm:grid-cols-[100px_minmax(0,1fr)_88px_110px_100px_16px] sm:px-7"
+                      onClick={() => {
+                        setSelectedTicketId(ticket.id);
+                      }}
+                      onKeyDown={(event) => {
+                        if (
+                          event.currentTarget === event.target &&
+                          (event.key === "Enter" || event.key === " ")
+                        ) {
+                          event.preventDefault();
+                          setSelectedTicketId(ticket.id);
+                        }
+                      }}
+                    >
+                      <span className="hidden text-xs font-bold text-emerald-500 sm:block">
+                        {
+                          categoryLabels[
+                            ticket.category as keyof typeof categoryLabels
+                          ]
+                        }
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate font-bold">
+                          {ticket.title}
+                        </span>
+                        <span className="text-muted-foreground mt-0.5 flex items-center gap-2 text-xs sm:hidden">
+                          <button
+                            type="button"
+                            className="hover:text-foreground max-w-28 cursor-pointer truncate underline decoration-dotted underline-offset-4"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelectedUserId(ticket.user_id);
+                            }}
+                          >
+                            {ticket.name}
+                          </button>
+                          <time className="shrink-0 whitespace-nowrap">
+                            {new Date(ticket.created_at).toLocaleDateString(
+                              "ko-KR",
+                            )}
+                          </time>
+                        </span>
+                      </span>
+                      <span
+                        className={`inline-flex min-w-20 items-center justify-center justify-self-stretch rounded-full px-2.5 py-1 text-center text-xs font-semibold ${statusBadgeClass(ticket.status)}`}
+                      >
+                        {statusLabels[ticket.status]}
+                      </span>
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-foreground hidden cursor-pointer truncate text-left text-xs underline decoration-dotted underline-offset-4 sm:block"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedUserId(ticket.user_id);
+                        }}
+                      >
+                        {ticket.name}
+                      </button>
+                      <time className="text-muted-foreground hidden text-xs whitespace-nowrap sm:block">
+                        {new Date(ticket.created_at).toLocaleDateString(
+                          "ko-KR",
+                        )}
+                      </time>
+                      <ChevronRightIcon className="text-muted-foreground hidden size-4 sm:block" />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
-          <div className="space-y-4">
-            {d.thread ? (
-              <>
-                <SupportThread thread={d.thread} staff />
-                <Form method="post" className="flex justify-end">
-                  <input type="hidden" name="intent" value="status" />
-                  <input
-                    type="hidden"
-                    name="ticket"
-                    value={d.thread.ticket.id}
-                  />
-                  <input
-                    type="hidden"
-                    name="status"
-                    value={
-                      d.thread.ticket.status === "closed" ? "open" : "closed"
+
+          <Dialog
+            open={Boolean(selectedTicket)}
+            onOpenChange={(open) => {
+              if (open) return;
+              setSelectedTicketId(null);
+            }}
+          >
+            <DialogContent className="max-h-[90vh] overflow-y-auto rounded-3xl p-0 sm:max-w-2xl">
+              <DialogTitle className="sr-only">문의 관리</DialogTitle>
+              <DialogDescription className="sr-only">
+                문의 내용을 확인하고 답변하거나 문의를 종료할 수 있어요.
+              </DialogDescription>
+              {selectedTicket && (
+                <>
+                  <SupportThread
+                    thread={{
+                      ticket: {
+                        ...selectedTicket,
+                        authorName: selectedTicket.name,
+                        authorAvatarUrl: selectedTicket.avatar_url,
+                      },
+                      messages: selectedTicket.messages.map(
+                        (message, index) => ({
+                          ...message,
+                          canDelete: index > 0,
+                        }),
+                      ),
+                    }}
+                    staff
+                    canDeleteTicket
+                    onAuthorClick={() =>
+                      setSelectedUserId(selectedTicket.user_id)
                     }
                   />
-                  <Button disabled={busy} variant="outline">
-                    {d.thread.ticket.status === "closed"
-                      ? "문의 다시 열기"
-                      : "문의 종료하기"}
-                  </Button>
-                </Form>
-              </>
-            ) : (
-              <div
-                className={`${panel} text-muted-foreground py-20 text-center`}
-              >
-                문의를 선택하면 대화와 답변 창이 열려요.
-              </div>
-            )}
-          </div>
-        </div>
+                  <div className="flex flex-col-reverse gap-3 px-7 pb-7 sm:flex-row sm:items-center sm:justify-between">
+                    <Button asChild variant="ghost">
+                      <Link
+                        to={`/contact?focus=${selectedTicket.id}#inquiry-${selectedTicket.id}`}
+                      >
+                        문의하기 페이지에서 보기
+                        <ExternalLinkIcon className="size-4" />
+                      </Link>
+                    </Button>
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="status" />
+                      <input
+                        type="hidden"
+                        name="ticket"
+                        value={selectedTicket.id}
+                      />
+                      <input
+                        type="hidden"
+                        name="status"
+                        value={
+                          selectedTicket.status === "closed" ? "open" : "closed"
+                        }
+                      />
+                      <Button disabled={busy} variant="outline">
+                        {selectedTicket.status === "closed"
+                          ? "문의 다시 열기"
+                          : "문의 종료하기"}
+                      </Button>
+                    </Form>
+                  </div>
+                </>
+              )}
+            </DialogContent>
+          </Dialog>
+        </>
       )}
       {d.tab === "users" && (
         <section className={panel}>
@@ -281,7 +507,24 @@ export default function Admin({
                 {d.users.map((u) => (
                   <tr key={u.id} className="border-b last:border-0">
                     <td className="p-3 font-bold whitespace-nowrap">
-                      {u.name}
+                      <button
+                        type="button"
+                        className="group flex cursor-pointer items-center gap-2.5 text-left hover:text-emerald-500"
+                        onClick={() => setSelectedUserId(u.id)}
+                      >
+                        <Avatar className="ring-border size-8 shrink-0 ring-1 transition-transform group-hover:scale-105">
+                          <AvatarImage
+                            src={u.avatar_url ?? undefined}
+                            alt={`${u.name} 프로필`}
+                          />
+                          <AvatarFallback className="text-xs font-black">
+                            {u.name.slice(0, 1)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="underline decoration-dotted underline-offset-4">
+                          {u.name}
+                        </span>
+                      </button>
                     </td>
                     <td className="p-3">{u.email}</td>
                     <td className="p-3 whitespace-nowrap">
@@ -394,6 +637,63 @@ export default function Admin({
           </section>
         </div>
       )}
+      <Dialog
+        open={Boolean(selectedUser)}
+        onOpenChange={(open) => !open && setSelectedUserId(null)}
+      >
+        <DialogContent className="rounded-3xl sm:max-w-md">
+          <DialogHeader className="pr-8 text-left">
+            <div className="flex items-center gap-4">
+              <Avatar className="size-14 ring-2 ring-emerald-500/20">
+                <AvatarImage
+                  src={selectedUser?.avatar_url ?? undefined}
+                  alt={`${selectedUser?.name ?? "사용자"} 프로필`}
+                />
+                <AvatarFallback className="text-lg font-black">
+                  {(selectedUser?.name ?? "사용자").slice(0, 1)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <DialogTitle className="truncate text-xl font-black">
+                  {selectedUser?.name ?? "사용자"}
+                </DialogTitle>
+                <DialogDescription className="mt-1 break-all">
+                  {selectedUser?.email}
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          {selectedUser && (
+            <dl className="grid grid-cols-2 gap-3">
+              <div className="bg-muted/50 rounded-2xl p-4">
+                <dt className="text-muted-foreground text-xs">이용 상태</dt>
+                <dd className="mt-1 font-bold">
+                  {selectedUser.admin ? "관리자 · " : ""}
+                  {selectedUser.pro ? "EOKKA Pro" : "무료"}
+                </dd>
+              </div>
+              <div className="bg-muted/50 rounded-2xl p-4">
+                <dt className="text-muted-foreground text-xs">작성 문의</dt>
+                <dd className="mt-1 font-bold">
+                  {selectedUser.ticket_count}건
+                </dd>
+              </div>
+              <div className="bg-muted/50 rounded-2xl p-4">
+                <dt className="text-muted-foreground text-xs">최근 활동</dt>
+                <dd className="mt-1 text-sm font-bold">
+                  {String(selectedUser.last_active_on).slice(0, 10)}
+                </dd>
+              </div>
+              <div className="bg-muted/50 rounded-2xl p-4">
+                <dt className="text-muted-foreground text-xs">가입일</dt>
+                <dd className="mt-1 text-sm font-bold">
+                  {new Date(selectedUser.joined_at).toLocaleDateString("ko-KR")}
+                </dd>
+              </div>
+            </dl>
+          )}
+        </DialogContent>
+      </Dialog>
       <ConfirmDialog
         open={confirm}
         onOpenChange={setConfirm}

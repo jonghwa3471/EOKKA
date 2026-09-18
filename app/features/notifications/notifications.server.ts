@@ -7,6 +7,7 @@ import { notifications } from "./schema";
 export type NotificationType =
   | "support_received"
   | "support_reply"
+  | "support_deleted"
   | "site_announcement"
   | "analysis_created"
   | "analysis_updated"
@@ -78,4 +79,19 @@ export async function markAllNotificationsRead(userId: string) {
     .where(
       and(eq(notifications.user_id, userId), isNull(notifications.read_at)),
     );
+}
+
+export async function deleteNotification(userId: string, id: number) {
+  await db
+    .delete(notifications)
+    .where(
+      and(
+        eq(notifications.user_id, userId),
+        eq(notifications.notification_id, id),
+      ),
+    );
+}
+
+export async function deleteAllNotifications(userId: string) {
+  await db.delete(notifications).where(eq(notifications.user_id, userId));
 }

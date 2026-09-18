@@ -13,10 +13,14 @@ import { useEffect, useRef, useState } from "react";
 import { Link, data, redirect, useFetcher } from "react-router";
 import { toast } from "sonner";
 
+import ConfirmDialog from "~/core/components/confirm-dialog";
 import { Button } from "~/core/components/ui/button";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
+import { assertSameOrigin } from "~/features/admin/validation";
 import {
+  deleteAllNotifications,
+  deleteNotification,
   getNotifications,
   markAllNotificationsRead,
   markNotificationRead,
@@ -36,6 +40,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  assertSameOrigin(request);
   const [client] = makeServerClient(request);
   const {
     data: { user },
@@ -46,6 +51,20 @@ export async function action({ request }: Route.ActionArgs) {
   try {
     if (intent === "mark-all-read") {
       await markAllNotificationsRead(user.id);
+      return data({ success: true, error: null });
+    }
+    if (intent === "delete-all") {
+      await deleteAllNotifications(user.id);
+      return data({ success: true, error: null });
+    }
+    if (intent === "delete") {
+      const id = Number(formData.get("notificationId"));
+      if (!Number.isSafeInteger(id) || id <= 0)
+        return data(
+          { success: false, error: "삭제할 알림을 확인하지 못했어요." },
+          { status: 400 },
+        );
+      await deleteNotification(user.id, id);
       return data({ success: true, error: null });
     }
     if (intent === "mark-read") {
@@ -62,7 +81,9 @@ export async function action({ request }: Route.ActionArgs) {
     return data(
       {
         success: false,
-        error: "읽음 상태를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.",
+        error: intent.startsWith("delete")
+          ? "알림을 삭제하지 못했어요. 잠시 후 다시 시도해 주세요."
+          : "읽음 상태를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.",
       },
       { status: 500 },
     );
@@ -84,10 +105,12 @@ function NotificationRow({
   notification,
   onOptimisticRead,
   onRollback,
+  onDeleteRequest,
 }: {
   notification: NotificationItem;
   onOptimisticRead: (id: number) => void;
   onRollback: (id: number) => void;
+  onDeleteRequest: (notification: NotificationItem) => void;
 }) {
   const fetcher = useFetcher<typeof action>();
   const submittedRef = useRef(false);
@@ -159,30 +182,46 @@ function NotificationRow({
       ) : (
         content
       )}
-      {!notification.readAt && (
-        <fetcher.Form
-          method="post"
-          className="shrink-0"
-          onSubmit={() => {
-            submittedRef.current = true;
-            onOptimisticRead(notification.id);
-            updateUnreadBadge(-1);
-          }}
-        >
-          <input type="hidden" name="notificationId" value={notification.id} />
-          <Button
-            type="submit"
-            name="intent"
-            value="mark-read"
-            size="icon"
-            variant="ghost"
-            title="읽음 처리"
-            aria-label="읽음 처리"
+      <div className="flex shrink-0 items-center gap-1">
+        {!notification.readAt && (
+          <fetcher.Form
+            method="post"
+            onSubmit={() => {
+              submittedRef.current = true;
+              onOptimisticRead(notification.id);
+              updateUnreadBadge(-1);
+            }}
           >
-            <CheckIcon />
-          </Button>
-        </fetcher.Form>
-      )}
+            <input
+              type="hidden"
+              name="notificationId"
+              value={notification.id}
+            />
+            <Button
+              type="submit"
+              name="intent"
+              value="mark-read"
+              size="icon"
+              variant="ghost"
+              title="읽음 처리"
+              aria-label="읽음 처리"
+            >
+              <CheckIcon />
+            </Button>
+          </fetcher.Form>
+        )}
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className="cursor-pointer text-red-500 hover:bg-red-500/10 hover:text-red-500"
+          title="알림 삭제"
+          aria-label="알림 삭제"
+          onClick={() => onDeleteRequest(notification)}
+        >
+          <Trash2Icon />
+        </Button>
+      </div>
     </article>
   );
 }
@@ -208,9 +247,15 @@ function dateTime(value: string | Date) {
 export default function Notifications({ loaderData }: Route.ComponentProps) {
   const [notifications, setNotifications] = useState(loaderData.notifications);
   const markAllFetcher = useFetcher<typeof action>();
+  const deleteFetcher = useFetcher<typeof action>();
+  const [deleteTarget, setDeleteTarget] = useState<
+    NotificationItem | "all" | null
+  >(null);
   const markAllSubmittedRef = useRef(false);
   const markAllRequestStartedRef = useRef(false);
   const previousNotificationsRef = useRef(loaderData.notifications);
+  const deleteSubmittedRef = useRef(false);
+  const deleteRequestStartedRef = useRef(false);
   const unreadCount = notifications.filter(
     (notification) => !notification.readAt,
   ).length;
@@ -239,6 +284,29 @@ export default function Notifications({ loaderData }: Route.ComponentProps) {
     }
   }, [markAllFetcher.data, markAllFetcher.state]);
 
+  useEffect(() => {
+    if (!deleteSubmittedRef.current) return;
+    if (deleteFetcher.state !== "idle") {
+      deleteRequestStartedRef.current = true;
+      return;
+    }
+    if (!deleteRequestStartedRef.current) return;
+    deleteSubmittedRef.current = false;
+    deleteRequestStartedRef.current = false;
+    if (deleteFetcher.data?.success === false) {
+      const restored = previousNotificationsRef.current;
+      const currentUnread = notifications.filter(
+        (notification) => !notification.readAt,
+      ).length;
+      const restoredUnread = restored.filter(
+        (notification) => !notification.readAt,
+      ).length;
+      setNotifications(restored);
+      updateUnreadBadge(restoredUnread - currentUnread);
+      toast.error(deleteFetcher.data.error);
+    }
+  }, [deleteFetcher.data, deleteFetcher.state, notifications]);
+
   const markReadOptimistically = (id: number) => {
     setNotifications((current) =>
       current.map((notification) =>
@@ -259,6 +327,34 @@ export default function Notifications({ loaderData }: Route.ComponentProps) {
     );
   };
 
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    previousNotificationsRef.current = notifications;
+    const removed =
+      deleteTarget === "all"
+        ? notifications
+        : notifications.filter(
+            (notification) => notification.id === deleteTarget.id,
+          );
+    const removedUnread = removed.filter(
+      (notification) => !notification.readAt,
+    ).length;
+    setNotifications((current) =>
+      deleteTarget === "all"
+        ? []
+        : current.filter((notification) => notification.id !== deleteTarget.id),
+    );
+    if (removedUnread) updateUnreadBadge(-removedUnread);
+    deleteSubmittedRef.current = true;
+    deleteRequestStartedRef.current = false;
+    const form = new FormData();
+    form.set("intent", deleteTarget === "all" ? "delete-all" : "delete");
+    if (deleteTarget !== "all")
+      form.set("notificationId", String(deleteTarget.id));
+    void deleteFetcher.submit(form, { method: "post" });
+    setDeleteTarget(null);
+  };
+
   return (
     <main className="flex flex-1 flex-col px-5 pt-8 pb-14 md:px-8 md:pt-12">
       <div className="mx-auto w-full max-w-5xl">
@@ -274,30 +370,44 @@ export default function Notifications({ loaderData }: Route.ComponentProps) {
               분석 갱신과 기록 변경처럼 놓치면 안 되는 소식을 모아 보여드려요.
             </p>
           </div>
-          {unreadCount > 0 && (
-            <markAllFetcher.Form
-              method="post"
-              onSubmit={() => {
-                previousNotificationsRef.current = notifications;
-                markAllSubmittedRef.current = true;
-                updateUnreadBadge(-unreadCount);
-                setNotifications((current) =>
-                  current.map((notification) => ({
-                    ...notification,
-                    readAt: notification.readAt ?? new Date(),
-                  })),
-                );
-              }}
-            >
-              <Button
-                name="intent"
-                value="mark-all-read"
-                variant="outline"
-                className="rounded-full"
-              >
-                <CheckCheckIcon /> 모두 읽음
-              </Button>
-            </markAllFetcher.Form>
+          {(unreadCount > 0 || notifications.length > 0) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {unreadCount > 0 && (
+                <markAllFetcher.Form
+                  method="post"
+                  onSubmit={() => {
+                    previousNotificationsRef.current = notifications;
+                    markAllSubmittedRef.current = true;
+                    updateUnreadBadge(-unreadCount);
+                    setNotifications((current) =>
+                      current.map((notification) => ({
+                        ...notification,
+                        readAt: notification.readAt ?? new Date(),
+                      })),
+                    );
+                  }}
+                >
+                  <Button
+                    name="intent"
+                    value="mark-all-read"
+                    variant="outline"
+                    className="rounded-full"
+                  >
+                    <CheckCheckIcon /> 모두 읽음
+                  </Button>
+                </markAllFetcher.Form>
+              )}
+              {notifications.length > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="cursor-pointer rounded-full text-red-500 hover:bg-red-500/10 hover:text-red-500"
+                  onClick={() => setDeleteTarget("all")}
+                >
+                  <Trash2Icon /> 전체 삭제
+                </Button>
+              )}
+            </div>
           )}
         </header>
 
@@ -328,12 +438,31 @@ export default function Notifications({ loaderData }: Route.ComponentProps) {
                   notification={notification}
                   onOptimisticRead={markReadOptimistically}
                   onRollback={rollbackRead}
+                  onDeleteRequest={setDeleteTarget}
                 />
               ))}
             </div>
           )}
         </section>
       </div>
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title={
+          deleteTarget === "all"
+            ? "모든 알림을 삭제할까요?"
+            : "알림을 삭제할까요?"
+        }
+        description={
+          deleteTarget === "all"
+            ? "저장된 모든 알림이 삭제되며 복구할 수 없어요."
+            : "선택한 알림이 삭제되며 복구할 수 없어요."
+        }
+        confirmLabel={deleteTarget === "all" ? "전체 삭제" : "알림 삭제"}
+        destructive
+        busy={deleteFetcher.state !== "idle"}
+        onConfirm={confirmDelete}
+      />
     </main>
   );
 }

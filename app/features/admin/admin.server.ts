@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { redirect } from "react-router";
 
 import db from "~/core/db/drizzle-client.server";
@@ -12,6 +12,10 @@ import {
   supportMessages,
   supportTickets,
 } from "./schema";
+import {
+  canDeleteSupportMessage,
+  canDeleteSupportTicket,
+} from "./support-permissions";
 
 export async function isAdmin(userId: string) {
   const [member] = await db
@@ -41,8 +45,17 @@ export async function getThread(
   staff = false,
 ) {
   const [ticket] = await db
-    .select()
+    .select({
+      id: supportTickets.id,
+      title: supportTickets.title,
+      status: supportTickets.status,
+      category: supportTickets.category,
+      created_at: supportTickets.created_at,
+      authorName: profiles.name,
+      authorAvatarUrl: profiles.avatar_url,
+    })
     .from(supportTickets)
+    .leftJoin(profiles, eq(profiles.profile_id, supportTickets.user_id))
     .where(
       and(
         eq(supportTickets.id, ticketId),
@@ -51,11 +64,116 @@ export async function getThread(
     );
   if (!ticket) throw new Response("문의를 찾을 수 없어요.", { status: 404 });
   const messages = await db
-    .select()
+    .select({
+      id: supportMessages.id,
+      is_staff: supportMessages.is_staff,
+      body: supportMessages.body,
+      created_at: supportMessages.created_at,
+    })
     .from(supportMessages)
     .where(eq(supportMessages.ticket_id, ticket.id))
-    .orderBy(asc(supportMessages.created_at));
+    .orderBy(asc(supportMessages.created_at), asc(supportMessages.id));
   return { ticket, messages };
+}
+
+function maskDisplayName(name: string | null) {
+  const value = name?.trim() || "사용자";
+  if (value.length === 1) return `${value}*`;
+  if (value.length === 2) return `${value[0]}*`;
+  return `${value[0]}${"*".repeat(Math.min(value.length - 2, 3))}${value.at(-1)}`;
+}
+
+const SUPPORT_PAGE_SIZE = 15;
+
+export async function getPublicSupportBoard(
+  viewerId?: string,
+  requestedPage = 1,
+  focusTicketId?: string | null,
+) {
+  const [{ total }] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(supportTickets);
+  const totalPages = Math.max(1, Math.ceil(Number(total) / SUPPORT_PAGE_SIZE));
+  let page = Math.min(Math.max(1, requestedPage), totalPages);
+
+  if (focusTicketId) {
+    const [focused] = await db
+      .select({ created_at: supportTickets.created_at })
+      .from(supportTickets)
+      .where(eq(supportTickets.id, focusTicketId))
+      .limit(1);
+    if (!focused) throw new Response("문의를 찾을 수 없어요.", { status: 404 });
+    const [position] = await db.execute<{ newer: number }>(sql`
+      select count(*)::int as newer
+      from support_tickets newer
+      cross join support_tickets focused
+      where focused.id = ${focusTicketId}::uuid
+        and (
+          newer.created_at > focused.created_at
+          or (
+            newer.created_at = focused.created_at
+            and newer.id::text > focused.id::text
+          )
+        )
+    `);
+    page = Math.floor(Number(position.newer) / SUPPORT_PAGE_SIZE) + 1;
+  }
+
+  const rows = await db
+    .select({
+      id: supportTickets.id,
+      title: supportTickets.title,
+      status: supportTickets.status,
+      category: supportTickets.category,
+      created_at: supportTickets.created_at,
+      ownerId: supportTickets.user_id,
+      authorName: profiles.name,
+      authorAvatarUrl: profiles.avatar_url,
+    })
+    .from(supportTickets)
+    .leftJoin(profiles, eq(profiles.profile_id, supportTickets.user_id))
+    .orderBy(desc(supportTickets.created_at), desc(supportTickets.id))
+    .limit(SUPPORT_PAGE_SIZE)
+    .offset((page - 1) * SUPPORT_PAGE_SIZE);
+  const ticketIds = rows.map((ticket) => ticket.id);
+  const messages = ticketIds.length
+    ? await db
+        .select({
+          id: supportMessages.id,
+          ticket_id: supportMessages.ticket_id,
+          author_id: supportMessages.author_id,
+          is_staff: supportMessages.is_staff,
+          body: supportMessages.body,
+          created_at: supportMessages.created_at,
+        })
+        .from(supportMessages)
+        .where(inArray(supportMessages.ticket_id, ticketIds))
+        .orderBy(asc(supportMessages.created_at), asc(supportMessages.id))
+    : [];
+  return {
+    tickets: rows.map(({ ownerId, ...ticket }) => ({
+      ...ticket,
+      isOwner: Boolean(viewerId && ownerId === viewerId),
+      authorName: maskDisplayName(ticket.authorName),
+      messages: messages
+        .filter((message) => message.ticket_id === ticket.id)
+        .map(({ ticket_id: _ticketId, author_id, ...message }, index) => ({
+          ...message,
+          canDelete: Boolean(
+            viewerId &&
+              canDeleteSupportMessage({
+                userId: viewerId,
+                authorId: author_id,
+                staff: false,
+                isInitial: index === 0,
+              }),
+          ),
+        })),
+    })),
+    page,
+    total: Number(total),
+    totalPages,
+  };
 }
 export async function addTicket(
   userId: string,
@@ -158,6 +276,109 @@ export async function replyToTicket(
       );
   });
 }
+export async function deleteSupportTicket(
+  userId: string,
+  ticketId: string,
+  staff: boolean,
+) {
+  await db.transaction(async (tx) => {
+    const [ticket] = await tx
+      .select()
+      .from(supportTickets)
+      .where(eq(supportTickets.id, ticketId))
+      .for("update");
+    if (!ticket || !canDeleteSupportTicket(userId, ticket.user_id, staff))
+      throw new Response("문의를 찾을 수 없어요.", { status: 404 });
+
+    await tx.delete(supportTickets).where(eq(supportTickets.id, ticketId));
+    const recipients = staff
+      ? ticket.user_id === userId
+        ? []
+        : [{ user_id: ticket.user_id }]
+      : await tx.select().from(adminMembers);
+    if (recipients.length)
+      await tx.insert(notifications).values(
+        recipients.map((recipient) => ({
+          user_id: recipient.user_id,
+          type: "support_deleted",
+          title: staff
+            ? "문의글이 운영팀에 의해 삭제됐어요"
+            : "문의글이 작성자에 의해 삭제됐어요",
+          message: ticket.title,
+          href: staff ? "/contact" : "/dashboard/admin?tab=inbox",
+        })),
+      );
+  });
+}
+export async function deleteSupportMessage(
+  userId: string,
+  ticketId: string,
+  messageId: string,
+  staff: boolean,
+) {
+  await db.transaction(async (tx) => {
+    const [ticket] = await tx
+      .select()
+      .from(supportTickets)
+      .where(eq(supportTickets.id, ticketId))
+      .for("update");
+    if (!ticket) throw new Response("문의를 찾을 수 없어요.", { status: 404 });
+
+    const messages = await tx
+      .select()
+      .from(supportMessages)
+      .where(eq(supportMessages.ticket_id, ticketId))
+      .orderBy(asc(supportMessages.created_at), asc(supportMessages.id));
+    const index = messages.findIndex((message) => message.id === messageId);
+    const message = messages[index];
+    if (
+      !message ||
+      !canDeleteSupportMessage({
+        userId,
+        authorId: message.author_id,
+        staff,
+        isInitial: index === 0,
+      })
+    )
+      throw new Response("댓글을 찾을 수 없어요.", { status: 404 });
+
+    await tx.delete(supportMessages).where(eq(supportMessages.id, messageId));
+    const remaining = messages.filter((item) => item.id !== messageId);
+    const lastMessage = remaining.at(-1);
+    await tx
+      .update(supportTickets)
+      .set({
+        status:
+          ticket.status === "closed"
+            ? "closed"
+            : lastMessage?.is_staff === "yes"
+              ? "answered"
+              : "open",
+        updated_at: new Date(),
+      })
+      .where(eq(supportTickets.id, ticketId));
+
+    const recipients = staff
+      ? ticket.user_id === userId
+        ? []
+        : [{ user_id: ticket.user_id }]
+      : await tx.select().from(adminMembers);
+    if (recipients.length)
+      await tx.insert(notifications).values(
+        recipients.map((recipient) => ({
+          user_id: recipient.user_id,
+          type: "support_deleted",
+          title: staff
+            ? "문의 댓글이 운영팀에 의해 삭제됐어요"
+            : "문의 댓글이 작성자에 의해 삭제됐어요",
+          message: ticket.title,
+          href: staff
+            ? `/contact?ticket=${ticket.id}`
+            : `/dashboard/admin?ticket=${ticket.id}`,
+        })),
+      );
+  });
+}
 export async function publishAnnouncement(
   userId: string,
   input: { id: string; title: string; body: string },
@@ -175,19 +396,41 @@ export async function publishAnnouncement(
 }
 export async function getAdminOverview(search: string, page: number) {
   const [tickets, announcements, users, counts] = await Promise.all([
-    db
-      .select({
-        id: supportTickets.id,
-        title: supportTickets.title,
-        status: supportTickets.status,
-        category: supportTickets.category,
-        updated_at: supportTickets.updated_at,
-        name: profiles.name,
-      })
-      .from(supportTickets)
-      .leftJoin(profiles, eq(profiles.profile_id, supportTickets.user_id))
-      .orderBy(desc(supportTickets.updated_at))
-      .limit(100),
+    db.execute<{
+      id: string;
+      title: string;
+      status: string;
+      category: string;
+      created_at: string;
+      updated_at: string;
+      user_id: string;
+      name: string;
+      email: string;
+      avatar_url: string | null;
+      joined_at: string;
+      last_active_on: string;
+      pro: boolean;
+      admin: boolean;
+      ticket_count: number;
+      messages: Array<{
+        id: string;
+        author_id: string | null;
+        is_staff: string;
+        body: string;
+        created_at: string;
+      }>;
+    }>(sql`select st.id, st.title, st.status, st.category, st.created_at, st.updated_at,
+      st.user_id, p.name, u.email, p.avatar_url, p.created_at as joined_at, p.last_active_on,
+      (p.pro_expires_at > now()) as pro, (a.user_id is not null) as admin,
+      (select count(*)::int from support_tickets own where own.user_id = st.user_id) as ticket_count,
+      coalesce((select json_agg(json_build_object(
+        'id', sm.id, 'author_id', sm.author_id, 'is_staff', sm.is_staff, 'body', sm.body, 'created_at', sm.created_at
+      ) order by sm.created_at, sm.id) from support_messages sm where sm.ticket_id = st.id), '[]'::json) as messages
+      from support_tickets st
+      join profiles p on p.profile_id = st.user_id
+      join auth.users u on u.id = st.user_id
+      left join admin_members a on a.user_id = st.user_id
+      order by st.created_at desc limit 100`),
     db
       .select()
       .from(siteAnnouncements)
@@ -197,12 +440,15 @@ export async function getAdminOverview(search: string, page: number) {
       id: string;
       name: string;
       email: string;
+      avatar_url: string | null;
       created_at: string;
       last_active_on: string;
       pro: boolean;
       admin: boolean;
-    }>(sql`select p.profile_id as id, p.name, u.email, p.created_at, p.last_active_on,
-      (p.pro_expires_at > now()) as pro, (a.user_id is not null) as admin
+      ticket_count: number;
+    }>(sql`select p.profile_id as id, p.name, u.email, p.avatar_url, p.created_at, p.last_active_on,
+      (p.pro_expires_at > now()) as pro, (a.user_id is not null) as admin,
+      (select count(*)::int from support_tickets own where own.user_id = p.profile_id) as ticket_count
       from profiles p join auth.users u on u.id = p.profile_id left join admin_members a on a.user_id = p.profile_id
       where p.name ilike ${`%${search}%`} or u.email ilike ${`%${search}%`}
       order by p.created_at desc limit 21 offset ${page * 20}`),
@@ -211,7 +457,7 @@ export async function getAdminOverview(search: string, page: number) {
     ),
   ]);
   return {
-    tickets,
+    tickets: Array.from(tickets),
     announcements,
     users: Array.from(users).slice(0, 20),
     hasMore: users.length > 20,

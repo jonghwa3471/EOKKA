@@ -2,7 +2,6 @@ import {
   BriefcaseBusinessIcon,
   CalendarDaysIcon,
   ChartNoAxesCombinedIcon,
-  MessageSquareIcon,
   MicroscopeIcon,
   ShieldCheckIcon,
   SparklesIcon,
@@ -106,7 +105,6 @@ export default function DashboardSidebar({
           <SidebarMenu>
             {[
               ...navigation,
-              { title: "문의하기", url: "/contact", icon: MessageSquareIcon },
               ...(isAdmin
                 ? [
                     {
