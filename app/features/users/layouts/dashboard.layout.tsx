@@ -21,6 +21,7 @@ import { getUserProfile } from "../queries";
 
 function DashboardRouteTransitionSkeleton() {
   const navigation = useNavigation();
+  const location = useLocation();
   const { state: sidebarState } = useSidebar();
   const [visible, setVisible] = useState(false);
   const targetPath = navigation.location?.pathname ?? "";
@@ -29,7 +30,8 @@ function DashboardRouteTransitionSkeleton() {
   const isRouteLoading =
     navigation.state === "loading" &&
     !navigation.formData &&
-    targetStaysInDashboard;
+    targetStaysInDashboard &&
+    targetPath !== location.pathname;
   const variant: RouteSkeletonVariant = targetPath.startsWith(
     "/dashboard/history",
   )
@@ -48,7 +50,9 @@ function DashboardRouteTransitionSkeleton() {
                 ? "payments"
                 : targetPath.startsWith("/dashboard/notifications")
                   ? "notifications"
-                  : "dashboard";
+                  : targetPath.startsWith("/dashboard/admin")
+                    ? "admin"
+                    : "dashboard";
 
   useEffect(() => {
     if (!isRouteLoading) {
@@ -56,7 +60,7 @@ function DashboardRouteTransitionSkeleton() {
       return;
     }
 
-    const timer = window.setTimeout(() => setVisible(true), 120);
+    const timer = window.setTimeout(() => setVisible(true), 250);
     return () => window.clearTimeout(timer);
   }, [isRouteLoading]);
 
@@ -103,12 +107,39 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+export function shouldRevalidate({
+  formMethod,
+  currentUrl,
+  nextUrl,
+  defaultShouldRevalidate,
+}: {
+  formMethod?: string;
+  currentUrl: URL;
+  nextUrl: URL;
+  defaultShouldRevalidate: boolean;
+}) {
+  const isDashboardShell = (pathname: string) =>
+    pathname.startsWith("/dashboard") || pathname.startsWith("/account/");
+  if (
+    !formMethod &&
+    isDashboardShell(currentUrl.pathname) &&
+    isDashboardShell(nextUrl.pathname)
+  )
+    return false;
+  return defaultShouldRevalidate;
+}
+
 export default function DashboardLayout({ loaderData }: Route.ComponentProps) {
   const user = loaderData.user!;
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(
     loaderData.unreadNotificationCount,
   );
-  const { pathname } = useLocation();
+  const { pathname: currentPathname } = useLocation();
+  const navigation = useNavigation();
+  const pathname =
+    navigation.state === "loading" && navigation.location
+      ? navigation.location.pathname
+      : currentPathname;
 
   useEffect(() => {
     setUnreadNotificationCount(loaderData.unreadNotificationCount);

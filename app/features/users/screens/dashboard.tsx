@@ -192,6 +192,25 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+type DashboardLoaderData = Awaited<ReturnType<typeof loader>>;
+let dashboardClientCache: {
+  version: string;
+  data: DashboardLoaderData;
+} | null = null;
+
+function dashboardCacheVersion() {
+  return window.sessionStorage.getItem("eokka:dashboard-cache-version") ?? "0";
+}
+
+export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
+  const version = dashboardCacheVersion();
+  if (dashboardClientCache?.version === version)
+    return dashboardClientCache.data;
+  const data = (await serverLoader()) as DashboardLoaderData;
+  dashboardClientCache = { version, data };
+  return data;
+}
+
 export async function action({ request }: Route.ActionArgs) {
   const [
     { default: makeServerClient },
@@ -2423,6 +2442,12 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
     isPro,
   } = loaderData;
   const [dimmedTrendSeries, setDimmedTrendSeries] = useState<TrendSeries[]>([]);
+  useEffect(() => {
+    dashboardClientCache = {
+      version: dashboardCacheVersion(),
+      data: loaderData,
+    };
+  }, [loaderData]);
   const toggleTrendSeries = (series: TrendSeries) =>
     setDimmedTrendSeries((current) =>
       current.includes(series)

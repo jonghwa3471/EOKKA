@@ -23,6 +23,13 @@ export type RouteSkeletonVariant =
   | "pro"
   | "payments"
   | "notifications"
+  | "admin"
+  | "home"
+  | "contact"
+  | "about"
+  | "methodology"
+  | "auth"
+  | "legal"
   | "coming-soon"
   | "generic";
 
@@ -41,7 +48,34 @@ const dashboardMenu = [
   [CalendarDaysIcon, "분석 기록"],
 ] as const;
 
-function ImmediateDashboardSidebar() {
+const dashboardShellTitles: Partial<Record<RouteSkeletonVariant, string>> = {
+  dashboard: "내 투자 대시보드",
+  history: "분석 기록",
+  portfolio: "내 포트폴리오",
+  "precise-analysis": "정밀 분석",
+  insights: "투자 인사이트",
+  account: "프로필 설정",
+  pro: "EOKKA Pro",
+  payments: "결제내역",
+  notifications: "알림",
+  admin: "운영 관리",
+};
+
+function ImmediateDashboardSidebar({
+  variant,
+}: {
+  variant: RouteSkeletonVariant;
+}) {
+  const activeIndex =
+    variant === "portfolio"
+      ? 1
+      : variant === "precise-analysis"
+        ? 2
+        : variant === "insights"
+          ? 3
+          : variant === "history"
+            ? 4
+            : 0;
   return (
     <aside className="text-sidebar-foreground hidden h-svh w-64 shrink-0 p-2 font-sans md:block">
       <div className="bg-sidebar/92 border-sidebar-border/70 flex h-full w-full flex-col overflow-hidden rounded-2xl border shadow-[0_20px_55px_-28px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:shadow-[0_24px_65px_-30px_rgba(0,0,0,0.9)]">
@@ -72,14 +106,14 @@ function ImmediateDashboardSidebar() {
                 key={label}
                 className={cn(
                   "flex h-10 items-center gap-3 overflow-hidden rounded-xl p-2 text-sm font-semibold tracking-[-0.012em]",
-                  index === 0
+                  index === activeIndex
                     ? "text-sidebar-accent-foreground bg-gradient-to-r from-emerald-500/15 to-violet-500/12 font-black shadow-[inset_3px_0_0_rgba(16,185,129,0.85)]"
                     : "text-sidebar-foreground",
                 )}
               >
                 <Icon
                   className={cn("size-[18px] shrink-0", {
-                    "text-emerald-500": index === 0,
+                    "text-emerald-500": index === activeIndex,
                   })}
                 />
                 <span className="truncate">{label}</span>
@@ -101,13 +135,126 @@ function ImmediateDashboardSidebar() {
   );
 }
 
-function PageHeading({ action = false }: { action?: boolean }) {
+const pageCopy: Partial<
+  Record<
+    RouteSkeletonVariant,
+    { eyebrow: string; title: string; description: string }
+  >
+> = {
+  dashboard: {
+    eyebrow: "투자 리포트",
+    title: "",
+    description: "",
+  },
+  history: {
+    eyebrow: "MY ANALYSIS",
+    title: "분석 기록",
+    description:
+      "날짜를 선택하면 해당일에 분석한 포트폴리오와 목표별 결과를 다시 볼 수 있어요.",
+  },
+  portfolio: {
+    eyebrow: "MANAGED PORTFOLIO",
+    title: "내 포트폴리오",
+    description:
+      "매수·매도 날짜와 당시 환율을 기록해 실제 원화 매입원금으로 분석해요.",
+  },
+  "precise-analysis": {
+    eyebrow: "PRECISE ANALYSIS",
+    title: "정밀 분석",
+    description:
+      "매매일지의 거래일과 당시 환율을 반영해 포트폴리오를 분석해요.",
+  },
+  insights: {
+    eyebrow: "PORTFOLIO INSIGHTS",
+    title: "기록 속에서 찾은 투자 인사이트",
+    description: "선택한 목표로 저장된 모든 기록을 함께 분석했어요.",
+  },
+  account: {
+    eyebrow: "PROFILE SETTINGS",
+    title: "프로필 설정",
+    description: "프로필과 로그인 계정, 서비스 데이터를 관리해요.",
+  },
+  payments: {
+    eyebrow: "PAYMENT HISTORY",
+    title: "결제내역",
+    description: "이용 중인 요금제와 결제 기록, 영수증을 한곳에서 확인하세요.",
+  },
+  notifications: {
+    eyebrow: "NOTIFICATIONS",
+    title: "알림",
+    description:
+      "분석 갱신과 기록 변경처럼 놓치면 안 되는 소식을 모아 보여드려요.",
+  },
+  admin: {
+    eyebrow: "ADMIN ONLY",
+    title: "EOKKA 운영 관리",
+    description: "사용자의 목소리를 확인하고 서비스 소식을 관리해요.",
+  },
+  pro: {
+    eyebrow: "EOKKA PRO",
+    title: "기록이 쌓일수록 더 선명해지는 투자 흐름",
+    description: "자동 분석과 장기 기록으로 포트폴리오 변화를 이어서 확인해요.",
+  },
+  home: {
+    eyebrow: "EOKKA",
+    title: "내 투자 목표를 더 쉽게 이해해요",
+    description: "포트폴리오를 분석하고 목표까지의 흐름을 한눈에 살펴보세요.",
+  },
+  contact: {
+    eyebrow: "SUPPORT",
+    title: "함께 만드는 EOKKA",
+    description: "불편했던 점이나 바라는 기능을 함께 나눠 주세요.",
+  },
+  about: {
+    eyebrow: "ABOUT EOKKA",
+    title: "투자 목표를 이해하기 쉽게",
+    description: "EOKKA가 어떤 방식으로 투자 여정을 보여주는지 소개해요.",
+  },
+  methodology: {
+    eyebrow: "METHODOLOGY",
+    title: "분석 방법",
+    description: "포트폴리오 분석과 시나리오 계산 기준을 알려드려요.",
+  },
+  auth: {
+    eyebrow: "WELCOME TO EOKKA",
+    title: "계정을 확인하고 있어요",
+    description: "안전한 로그인을 위한 화면을 준비하고 있어요.",
+  },
+  legal: {
+    eyebrow: "EOKKA POLICY",
+    title: "서비스 정책",
+    description: "안전한 서비스 이용을 위한 내용을 확인해요.",
+  },
+};
+
+function PageHeading({
+  variant,
+  action = false,
+}: {
+  variant: RouteSkeletonVariant;
+  action?: boolean;
+}) {
+  const copy = pageCopy[variant];
+  const hasDynamicHeading = variant === "dashboard";
   return (
     <div className="flex items-end justify-between gap-6">
-      <div className="w-full max-w-xl space-y-3">
-        <Skeleton className="h-4 w-28 rounded-full" />
-        <Skeleton className="h-9 w-64 max-w-full rounded-xl" />
-        <Skeleton className="h-4 w-full max-w-md rounded-full" />
+      <div className="w-full max-w-xl">
+        <p className="text-sm font-black text-emerald-500">{copy?.eyebrow}</p>
+        {hasDynamicHeading ? (
+          <>
+            <Skeleton className="mt-2 h-10 w-72 max-w-full rounded-xl" />
+            <Skeleton className="mt-3 h-4 w-64 max-w-full rounded-full" />
+          </>
+        ) : (
+          <>
+            <h1 className="mt-2 text-3xl font-black tracking-tight md:text-4xl">
+              {copy?.title}
+            </h1>
+            <p className="text-muted-foreground mt-2 text-sm leading-6">
+              {copy?.description}
+            </p>
+          </>
+        )}
       </div>
       {action && (
         <Skeleton className="hidden h-10 w-32 rounded-full sm:block" />
@@ -156,7 +303,7 @@ function ChartCard({ compact = false }: { compact?: boolean }) {
 function DashboardSkeleton() {
   return (
     <>
-      <PageHeading />
+      <PageHeading variant="dashboard" />
       <Skeleton className="mt-6 h-24 w-full rounded-2xl" />
       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[0, 1, 2, 3].map((item) => (
@@ -178,7 +325,7 @@ function DashboardSkeleton() {
 function HistorySkeleton() {
   return (
     <>
-      <PageHeading action />
+      <PageHeading variant="history" action />
       <div className="mt-7 grid items-start gap-5 xl:grid-cols-[380px_1fr]">
         <div className="bg-card rounded-3xl border p-5">
           <div className="flex items-center justify-between">
@@ -212,7 +359,7 @@ function HistorySkeleton() {
 function PortfolioSkeleton() {
   return (
     <>
-      <PageHeading action />
+      <PageHeading variant="portfolio" action />
       <div className="bg-card mt-7 rounded-3xl border p-6">
         <Skeleton className="h-6 w-36 rounded-lg" />
         <Skeleton className="mt-2 h-4 w-72 max-w-full rounded-full" />
@@ -244,7 +391,7 @@ function PortfolioSkeleton() {
 function PreciseAnalysisSkeleton() {
   return (
     <>
-      <PageHeading />
+      <PageHeading variant="precise-analysis" />
       <Skeleton className="mt-5 h-20 w-full max-w-3xl rounded-2xl" />
       <div className="bg-card mt-7 rounded-3xl border p-6">
         <div className="flex justify-between">
@@ -271,7 +418,7 @@ function PreciseAnalysisSkeleton() {
 function InsightsSkeleton() {
   return (
     <>
-      <PageHeading />
+      <PageHeading variant="insights" />
       <div className="mt-6 flex gap-2">
         <Skeleton className="h-10 w-32 rounded-full" />
         <Skeleton className="h-10 w-32 rounded-full" />
@@ -419,7 +566,7 @@ function ProSkeleton() {
 function PaymentsSkeleton() {
   return (
     <div className="mx-auto w-full max-w-6xl">
-      <PageHeading action />
+      <PageHeading variant="payments" action />
       <div className="mt-7 grid gap-4 md:grid-cols-3">
         {[0, 1, 2].map((item) => (
           <MetricCard key={item} />
@@ -443,7 +590,7 @@ function PaymentsSkeleton() {
 function NotificationsSkeleton() {
   return (
     <div className="mx-auto w-full max-w-5xl">
-      <PageHeading action />
+      <PageHeading variant="notifications" action />
       <div className="bg-card mt-7 overflow-hidden rounded-3xl border">
         <div className="flex items-center justify-between border-b px-6 py-5">
           <Skeleton className="h-5 w-24 rounded-full" />
@@ -463,6 +610,34 @@ function NotificationsSkeleton() {
         </div>
       </div>
     </div>
+  );
+}
+
+function AdminSkeleton() {
+  return (
+    <>
+      <PageHeading variant="admin" />
+      <div className="mt-7 grid grid-cols-2 gap-4">
+        <MetricCard />
+        <MetricCard />
+      </div>
+      <div className="mt-6 flex gap-2">
+        {[0, 1, 2].map((item) => (
+          <Skeleton key={item} className="h-10 w-28 rounded-full" />
+        ))}
+      </div>
+      <div className="bg-card mt-6 overflow-hidden rounded-3xl border">
+        <div className="flex items-center justify-between border-b px-6 py-5">
+          <Skeleton className="h-5 w-24 rounded-full" />
+          <Skeleton className="h-9 w-72 rounded-full" />
+        </div>
+        <div className="divide-y px-6">
+          {[0, 1, 2, 3, 4].map((item) => (
+            <Skeleton key={item} className="my-4 h-12 w-full rounded-xl" />
+          ))}
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -504,6 +679,15 @@ function SkeletonContent({ variant }: { variant: RouteSkeletonVariant }) {
       return <PaymentsSkeleton />;
     case "notifications":
       return <NotificationsSkeleton />;
+    case "admin":
+      return <AdminSkeleton />;
+    case "home":
+    case "contact":
+    case "about":
+    case "methodology":
+    case "auth":
+    case "legal":
+      return <GenericPageSkeleton />;
     case "coming-soon":
       return <ComingSoonSkeleton />;
     default:
@@ -543,14 +727,14 @@ export function RouteTransitionSkeleton({
       aria-live="polite"
       aria-label="대시보드 이동 중"
     >
-      <ImmediateDashboardSidebar />
+      <ImmediateDashboardSidebar variant={variant} />
       <div className="bg-background border-border/60 m-0 flex min-w-0 flex-1 flex-col overflow-hidden md:m-2 md:ml-0 md:rounded-2xl md:border md:shadow-[0_18px_50px_-30px_rgba(15,23,42,0.4)]">
         <div className="bg-background/80 border-border/60 relative flex h-16 shrink-0 items-center border-b px-5 shadow-[0_10px_30px_-26px_rgba(15,23,42,0.55)] backdrop-blur-xl">
           <span className="border-border/60 bg-background/70 -ml-1 flex size-8 items-center justify-center rounded-xl border shadow-sm">
             <PanelLeftIcon className="size-4" />
           </span>
           <span className="ml-3 text-sm font-black tracking-[-0.02em]">
-            내 투자 대시보드
+            {dashboardShellTitles[variant] ?? "내 투자 대시보드"}
           </span>
           <span className="ml-3 size-1.5 rounded-full bg-emerald-500" />
         </div>
@@ -565,12 +749,12 @@ export function RouteTransitionSkeleton({
         "bg-background overflow-hidden",
         withinDashboard
           ? cn(
-              "fixed inset-0 z-40",
+              "fixed inset-x-0 top-16 bottom-0 z-40",
               dashboardSidebarCollapsed
                 ? "md:left-[4.5rem]"
                 : "md:left-[17rem]",
             )
-          : "fixed inset-0 z-[9998] pt-16",
+          : "fixed inset-x-0 top-16 bottom-0 z-[9998]",
       )}
       role="status"
       aria-live="polite"

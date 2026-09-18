@@ -184,7 +184,13 @@ export default function Admin({
   const formRef = useRef<HTMLFormElement>(null);
   const requestId = useRef<string | null>(null);
   const submit = useSubmit();
-  const busy = useNavigation().state !== "idle";
+  const navigation = useNavigation();
+  const busy = navigation.state !== "idle";
+  const pendingTab =
+    navigation.location?.pathname === "/dashboard/admin"
+      ? (new URLSearchParams(navigation.location.search).get("tab") ?? "inbox")
+      : null;
+  const activeTab = pendingTab ?? d.tab;
   const selectedTicket = useMemo(
     () => d.tickets.find((ticket) => ticket.id === selectedTicketId) ?? null,
     [d.tickets, selectedTicketId],
@@ -270,7 +276,7 @@ export default function Admin({
           <Button
             key={item.key}
             asChild
-            variant={d.tab === item.key ? "default" : "outline"}
+            variant={activeTab === item.key ? "default" : "outline"}
           >
             <Link to={`/dashboard/admin?tab=${item.key}`}>
               <item.icon className="size-4" />
@@ -287,7 +293,7 @@ export default function Admin({
           {actionData.error}
         </p>
       )}
-      {d.tab === "inbox" && (
+      {activeTab === "inbox" && (
         <>
           <section className="bg-card overflow-hidden rounded-3xl border">
             <div className="flex flex-col gap-4 border-b px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
@@ -472,7 +478,7 @@ export default function Admin({
           </Dialog>
         </>
       )}
-      {d.tab === "users" && (
+      {activeTab === "users" && (
         <section className={panel}>
           <h2 className="mb-2 text-lg font-bold">사용자 현황</h2>
           <p className="text-muted-foreground mb-5 text-sm">
@@ -566,7 +572,7 @@ export default function Admin({
           </div>
         </section>
       )}
-      {d.tab === "announcements" && (
+      {activeTab === "announcements" && (
         <div className="grid items-start gap-6 lg:grid-cols-2">
           <Form
             ref={formRef}

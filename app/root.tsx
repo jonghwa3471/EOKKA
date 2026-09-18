@@ -17,7 +17,7 @@ import type { Route } from "./+types/root";
 import * as Sentry from "@sentry/react-router";
 import NProgress from "nprogress";
 import nProgressStyles from "nprogress/nprogress.css?url";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Links,
@@ -54,7 +54,12 @@ import { themeSessionResolver } from "./core/lib/theme-session.server";
 import { cn } from "./core/lib/utils";
 import NotFound from "./core/screens/404";
 
-const BACKGROUND_ACTION_INTENTS = new Set(["mark-read", "mark-all-read"]);
+const BACKGROUND_ACTION_INTENTS = new Set([
+  "mark-read",
+  "mark-all-read",
+  "delete",
+  "delete-all",
+]);
 
 function isBackgroundAction(formData?: FormData) {
   return BACKGROUND_ACTION_INTENTS.has(String(formData?.get("intent") ?? ""));
@@ -275,7 +280,11 @@ export default function App() {
     (navigation.state === "submitting" && Boolean(navigationFormData)) ||
     Boolean(activeFetcher) ||
     isAuthAction;
-  const isRouteBusy = navigation.state === "loading" && !isActionBusy;
+  const isRouteBusy =
+    navigation.state === "loading" &&
+    !isActionBusy &&
+    Boolean(targetPath) &&
+    targetPath !== location.pathname;
   const isInsideDashboardShell =
     location.pathname.startsWith("/dashboard") ||
     location.pathname.startsWith("/account/");
@@ -297,9 +306,26 @@ export default function App() {
                 ? "payments"
                 : targetPath.startsWith("/dashboard/notifications")
                   ? "notifications"
-                  : targetPath.startsWith("/dashboard")
-                    ? "dashboard"
-                    : "generic";
+                  : targetPath.startsWith("/dashboard/admin")
+                    ? "admin"
+                    : targetPath.startsWith("/dashboard")
+                      ? "dashboard"
+                      : targetPath === "/"
+                        ? "home"
+                        : targetPath.startsWith("/contact")
+                          ? "contact"
+                          : targetPath.startsWith("/about")
+                            ? "about"
+                            : targetPath.startsWith("/methodology")
+                              ? "methodology"
+                              : targetPath.startsWith("/legal")
+                                ? "legal"
+                                : targetPath.startsWith("/login") ||
+                                    targetPath.startsWith("/join") ||
+                                    targetPath.startsWith("/forgot-password") ||
+                                    targetPath.startsWith("/auth/")
+                                  ? "auth"
+                                  : "generic";
   const requestIntent = String(requestFormData?.get("intent") ?? "");
   const progressKey =
     requestIntent || (isAuthAction ? "authentication" : "action");
@@ -315,6 +341,7 @@ export default function App() {
   );
   const [showBlockingLoader, setShowBlockingLoader] = useState(false);
   const [showRouteSkeleton, setShowRouteSkeleton] = useState(false);
+  const actionInvalidationRef = useRef(false);
 
   // Initialize NProgress with spinner for better UX during navigation
   useEffect(() => {
@@ -341,6 +368,18 @@ export default function App() {
   }, [isActionBusy]);
 
   useEffect(() => {
+    if (!isActionBusy) {
+      actionInvalidationRef.current = false;
+      return;
+    }
+    if (actionInvalidationRef.current) return;
+    actionInvalidationRef.current = true;
+    const key = "eokka:dashboard-cache-version";
+    const nextVersion = Number(window.sessionStorage.getItem(key) ?? 0) + 1;
+    window.sessionStorage.setItem(key, String(nextVersion));
+  }, [isActionBusy]);
+
+  useEffect(() => {
     if (!isRouteBusy) {
       setShowRouteSkeleton(false);
       NProgress.done();
@@ -349,7 +388,7 @@ export default function App() {
     const timer = window.setTimeout(() => {
       setShowRouteSkeleton(true);
       NProgress.start();
-    }, 120);
+    }, 250);
     return () => window.clearTimeout(timer);
   }, [isRouteBusy]);
 
