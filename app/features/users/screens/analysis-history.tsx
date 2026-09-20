@@ -16,7 +16,7 @@ import {
   TrendingUpIcon,
 } from "lucide-react";
 import { useState } from "react";
-import { Form, Link, redirect, useNavigate } from "react-router";
+import { Form, Link, redirect, useLocation, useNavigate } from "react-router";
 
 import { DestructiveConfirmDialog } from "~/core/components/destructive-confirm-dialog";
 import { Button } from "~/core/components/ui/button";
@@ -32,6 +32,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/core/components/ui/tooltip";
+import {
+  loadCachedRouteData,
+  usePrimeRouteDataCache,
+} from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
 import { AnalysisResultView } from "~/features/stocks/components/analysis-result";
@@ -543,6 +547,17 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+type AnalysisHistoryLoaderData = Awaited<ReturnType<typeof loader>>;
+export async function clientLoader({
+  request,
+  serverLoader,
+}: Route.ClientLoaderArgs) {
+  return loadCachedRouteData<AnalysisHistoryLoaderData>(
+    `analysis-history:${new URL(request.url).search}`,
+    async () => (await serverLoader()) as AnalysisHistoryLoaderData,
+  );
+}
+
 export async function action({ request }: Route.ActionArgs) {
   const [client] = makeServerClient(request);
   const {
@@ -587,6 +602,8 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function AnalysisHistory({ loaderData }: Route.ComponentProps) {
+  const location = useLocation();
+  usePrimeRouteDataCache(`analysis-history:${location.search}`, loaderData);
   const {
     availableDates,
     selectedDate,

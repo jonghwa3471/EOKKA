@@ -11,6 +11,10 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "~/core/components/ui/sidebar";
+import {
+  loadCachedRouteData,
+  usePrimeRouteDataCache,
+} from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { isAdmin } from "~/features/admin/admin.server";
 import { getUnreadNotificationCount } from "~/features/notifications/notifications.server";
@@ -107,6 +111,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+type DashboardLayoutLoaderData = Awaited<ReturnType<typeof loader>>;
+export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
+  return loadCachedRouteData<DashboardLayoutLoaderData>(
+    "dashboard-layout",
+    async () => serverLoader() as Promise<DashboardLayoutLoaderData>,
+  );
+}
+
 export function shouldRevalidate({
   formMethod,
   currentUrl,
@@ -130,6 +142,7 @@ export function shouldRevalidate({
 }
 
 export default function DashboardLayout({ loaderData }: Route.ComponentProps) {
+  usePrimeRouteDataCache("dashboard-layout", loaderData);
   const user = loaderData.user!;
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(
     loaderData.unreadNotificationCount,

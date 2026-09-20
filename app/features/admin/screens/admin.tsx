@@ -15,6 +15,7 @@ import {
   Link,
   data,
   redirect,
+  useLocation,
   useNavigation,
   useSubmit,
 } from "react-router";
@@ -37,6 +38,10 @@ import {
 import { Input } from "~/core/components/ui/input";
 import { Textarea } from "~/core/components/ui/textarea";
 import db from "~/core/db/drizzle-client.server";
+import {
+  loadCachedRouteData,
+  usePrimeRouteDataCache,
+} from "~/core/lib/route-data-cache";
 
 import {
   deleteSupportMessage,
@@ -88,6 +93,17 @@ export async function loader({ request }: Route.LoaderArgs) {
     statusFilter,
     tab: url.searchParams.get("tab") ?? "inbox",
   };
+}
+
+type AdminLoaderData = Awaited<ReturnType<typeof loader>>;
+export async function clientLoader({
+  request,
+  serverLoader,
+}: Route.ClientLoaderArgs) {
+  return loadCachedRouteData<AdminLoaderData>(
+    `admin:${new URL(request.url).search}`,
+    async () => serverLoader() as Promise<AdminLoaderData>,
+  );
 }
 export async function action({ request }: Route.ActionArgs) {
   assertSameOrigin(request);
@@ -176,6 +192,8 @@ export default function Admin({
   loaderData: d,
   actionData,
 }: Route.ComponentProps) {
+  const location = useLocation();
+  usePrimeRouteDataCache(`admin:${location.search}`, d);
   const [confirm, setConfirm] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(
     d.initialTicketId,

@@ -15,6 +15,11 @@ import { toast } from "sonner";
 
 import ConfirmDialog from "~/core/components/confirm-dialog";
 import { Button } from "~/core/components/ui/button";
+import {
+  invalidateRouteDataCache,
+  loadCachedRouteData,
+  usePrimeRouteDataCache,
+} from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
 import { assertSameOrigin } from "~/features/admin/validation";
@@ -37,6 +42,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   } = await client.auth.getUser();
   if (!user) throw redirect("/login");
   return { notifications: await getNotifications(user.id) };
+}
+
+type NotificationsLoaderData = Awaited<ReturnType<typeof loader>>;
+export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
+  return loadCachedRouteData<NotificationsLoaderData>(
+    "notifications",
+    async () => (await serverLoader()) as NotificationsLoaderData,
+  );
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -187,6 +200,8 @@ function NotificationRow({
           <fetcher.Form
             method="post"
             onSubmit={() => {
+              invalidateRouteDataCache("notifications");
+              invalidateRouteDataCache("dashboard-layout");
               submittedRef.current = true;
               onOptimisticRead(notification.id);
               updateUnreadBadge(-1);
@@ -245,6 +260,7 @@ function dateTime(value: string | Date) {
 }
 
 export default function Notifications({ loaderData }: Route.ComponentProps) {
+  usePrimeRouteDataCache("notifications", loaderData);
   const [notifications, setNotifications] = useState(loaderData.notifications);
   const markAllFetcher = useFetcher<typeof action>();
   const deleteFetcher = useFetcher<typeof action>();
@@ -347,6 +363,8 @@ export default function Notifications({ loaderData }: Route.ComponentProps) {
     if (removedUnread) updateUnreadBadge(-removedUnread);
     deleteSubmittedRef.current = true;
     deleteRequestStartedRef.current = false;
+    invalidateRouteDataCache("notifications");
+    invalidateRouteDataCache("dashboard-layout");
     const form = new FormData();
     form.set("intent", deleteTarget === "all" ? "delete-all" : "delete");
     if (deleteTarget !== "all")
@@ -376,6 +394,8 @@ export default function Notifications({ loaderData }: Route.ComponentProps) {
                 <markAllFetcher.Form
                   method="post"
                   onSubmit={() => {
+                    invalidateRouteDataCache("notifications");
+                    invalidateRouteDataCache("dashboard-layout");
                     previousNotificationsRef.current = notifications;
                     markAllSubmittedRef.current = true;
                     updateUnreadBadge(-unreadCount);

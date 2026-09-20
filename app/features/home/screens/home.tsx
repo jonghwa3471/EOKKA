@@ -44,6 +44,11 @@ import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
 import { useAdaptiveProgress } from "~/core/hooks/use-adaptive-progress";
 import i18next from "~/core/lib/i18next.server";
+import {
+  invalidateRouteDataCache,
+  loadCachedRouteData,
+  usePrimeRouteDataCache,
+} from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
 import type { AnalysisResult } from "~/features/stocks/analysis.types";
@@ -263,6 +268,14 @@ export async function loader({ request }: Route.LoaderArgs) {
           }
         : null,
   };
+}
+
+type HomeLoaderData = Awaited<ReturnType<typeof loader>>;
+export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
+  return loadCachedRouteData<HomeLoaderData>(
+    "home",
+    async () => serverLoader() as Promise<HomeLoaderData>,
+  );
 }
 
 type Holding = {
@@ -1232,6 +1245,8 @@ function JackpotGoal() {
 }
 
 export default function Home() {
+  const loaderData = useLoaderData<typeof loader>();
+  usePrimeRouteDataCache("home", loaderData);
   const {
     marketMode,
     analysisAsOfPreview,
@@ -1240,7 +1255,7 @@ export default function Home() {
     savedGoalCount,
     managedAnalysisActive,
     moneyInsights,
-  } = useLoaderData<typeof loader>();
+  } = loaderData;
   const location = useLocation();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
@@ -1671,7 +1686,10 @@ export default function Home() {
         throw new Error("error" in body ? body.error : "분석에 실패했습니다.");
       setAnalysis(body);
       window.sessionStorage.setItem(ANALYSIS_STORAGE_KEY, JSON.stringify(body));
-      if (isAuthenticated) void revalidator.revalidate();
+      if (isAuthenticated) {
+        invalidateRouteDataCache("home");
+        void revalidator.revalidate();
+      }
     } catch (error) {
       setAnalysisError(
         error instanceof Error ? error.message : "분석에 실패했습니다.",

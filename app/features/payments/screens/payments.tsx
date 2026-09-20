@@ -12,6 +12,10 @@ import {
 import { Link, redirect } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
+import {
+  loadCachedRouteData,
+  usePrimeRouteDataCache,
+} from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
 import { getAutomaticAnalysisSettings } from "~/features/users/automatic-analysis-settings.server";
@@ -46,6 +50,14 @@ export async function loader({ request }: Route.LoaderArgs) {
       receiptUrl: payment.receipt_url,
     })),
   };
+}
+
+type PaymentsLoaderData = Awaited<ReturnType<typeof loader>>;
+export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
+  return loadCachedRouteData<PaymentsLoaderData>(
+    "payments",
+    async () => serverLoader() as Promise<PaymentsLoaderData>,
+  );
 }
 
 function won(value: number) {
@@ -90,6 +102,7 @@ function statusInfo(status: string) {
 }
 
 export default function Payments({ loaderData }: Route.ComponentProps) {
+  usePrimeRouteDataCache("payments", loaderData);
   const completed = loaderData.payments.filter((payment) =>
     ["DONE", "PAID", "APPROVED"].includes(payment.status),
   );

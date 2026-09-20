@@ -19,6 +19,10 @@ import {
   consumeManualAnalysisLimit,
   manualAnalysisLimitResponse,
 } from "~/core/lib/rate-limit.server";
+import {
+  loadCachedRouteData,
+  usePrimeRouteDataCache,
+} from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
 import { generateAiStrategy } from "~/features/stocks/ai-strategy.server";
@@ -137,6 +141,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+type PreciseAnalysisLoaderData = Awaited<ReturnType<typeof loader>>;
+export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
+  return loadCachedRouteData<PreciseAnalysisLoaderData>(
+    "precise-analysis",
+    async () => (await serverLoader()) as PreciseAnalysisLoaderData,
+  );
+}
+
 export async function action({ request }: Route.ActionArgs) {
   const [client] = makeServerClient(request);
   const {
@@ -253,6 +265,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
+  usePrimeRouteDataCache("precise-analysis", loaderData);
   const actionData = useActionData<typeof action>();
   const { managed, holdings, defaultGoalAmount, defaultMonthlyContribution } =
     loaderData;

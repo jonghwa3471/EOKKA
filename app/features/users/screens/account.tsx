@@ -3,6 +3,10 @@ import type { Route } from "./+types/account";
 import { Suspense, useLayoutEffect } from "react";
 import { Await } from "react-router";
 
+import {
+  loadCachedRouteData,
+  usePrimeRouteDataCache,
+} from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
 
 import ChangeEmailForm from "../components/forms/change-email-form";
@@ -59,7 +63,16 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+type AccountLoaderData = Awaited<ReturnType<typeof loader>>;
+export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
+  return loadCachedRouteData<AccountLoaderData>(
+    "account",
+    async () => serverLoader() as Promise<AccountLoaderData>,
+  );
+}
+
 export default function Account({ loaderData }: Route.ComponentProps) {
+  usePrimeRouteDataCache("account", loaderData);
   const { user, identities, profile, socialStatus, socialProvider } =
     loaderData;
 

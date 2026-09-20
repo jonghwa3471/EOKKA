@@ -39,6 +39,10 @@ import {
   SelectValue,
 } from "~/core/components/ui/select";
 import db from "~/core/db/drizzle-client.server";
+import {
+  loadCachedRouteData,
+  usePrimeRouteDataCache,
+} from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
 import { StockAutocomplete } from "~/features/stocks/components/stock-autocomplete";
@@ -225,6 +229,17 @@ export async function loader({ request }: Route.LoaderArgs) {
     hasUnappliedChanges,
     holdingLimit: accountSettings.isPro ? 20 : 10,
   };
+}
+
+type ManagedPortfolioLoaderData = Awaited<ReturnType<typeof loader>>;
+export async function clientLoader({
+  request,
+  serverLoader,
+}: Route.ClientLoaderArgs) {
+  return loadCachedRouteData<ManagedPortfolioLoaderData>(
+    `managed-portfolio:${new URL(request.url).search}`,
+    async () => (await serverLoader()) as ManagedPortfolioLoaderData,
+  );
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -478,6 +493,8 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
+  const location = useLocation();
+  usePrimeRouteDataCache(`managed-portfolio:${location.search}`, loaderData);
   const {
     today,
     managed,
@@ -486,7 +503,6 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
     hasUnappliedChanges,
   } = loaderData;
   const actionData = useActionData<typeof action>();
-  const location = useLocation();
   const quickDraft = (
     location.state as { quickPortfolioDraft?: QuickPortfolioDraft } | null
   )?.quickPortfolioDraft;

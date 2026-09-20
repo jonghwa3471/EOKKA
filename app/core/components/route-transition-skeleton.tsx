@@ -1,7 +1,10 @@
 import {
+  BookOpenIcon,
   BriefcaseBusinessIcon,
   CalendarDaysIcon,
   ChartNoAxesCombinedIcon,
+  CheckIcon,
+  CrownIcon,
   MicroscopeIcon,
   PanelLeftIcon,
   SparklesIcon,
@@ -361,22 +364,35 @@ function PortfolioSkeleton() {
     <>
       <PageHeading variant="portfolio" action />
       <div className="bg-card mt-7 rounded-3xl border p-6">
-        <Skeleton className="h-6 w-36 rounded-lg" />
-        <Skeleton className="mt-2 h-4 w-72 max-w-full rounded-full" />
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {[0, 1, 2, 3].map((item) => (
-            <div key={item} className="space-y-2">
-              <Skeleton className="h-3 w-20 rounded-full" />
+        <h2 className="text-xl font-black">매매일지 추가</h2>
+        <p className="text-muted-foreground mt-2 text-sm leading-6">
+          해외주식 환율은 거래 날짜를 기준으로 자동 적용해요. 주말과 휴장일은
+          직전 기준 환율을 사용해요.
+        </p>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          {[
+            "종목명 또는 티커",
+            "거래 유형",
+            "거래 날짜",
+            "수량",
+            "주당 체결 가격",
+            "메모",
+          ].map((label) => (
+            <div key={label} className="space-y-2">
+              <p className="text-sm font-medium">{label}</p>
               <Skeleton className="h-12 w-full rounded-xl" />
             </div>
           ))}
         </div>
-        <Skeleton className="mt-5 h-11 w-32 rounded-full" />
+        <Skeleton className="mt-5 h-11 w-full rounded-xl" />
       </div>
       <div className="bg-card mt-5 rounded-3xl border p-6">
         <div className="flex justify-between">
-          <Skeleton className="h-6 w-32 rounded-lg" />
-          <Skeleton className="h-9 w-28 rounded-full" />
+          <div>
+            <h2 className="text-xl font-black">현재 보유 현황</h2>
+            <Skeleton className="mt-2 h-3 w-28 rounded-full" />
+          </div>
+          <BookOpenIcon className="size-5 text-violet-500" />
         </div>
         <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {[0, 1, 2].map((item) => (
@@ -396,10 +412,20 @@ function PreciseAnalysisSkeleton() {
       <div className="bg-card mt-7 rounded-3xl border p-6">
         <div className="flex justify-between">
           <div className="space-y-2">
-            <Skeleton className="h-6 w-28 rounded-lg" />
-            <Skeleton className="h-3 w-60 rounded-full" />
+            <h2 className="text-xl font-black">분석 설정</h2>
+            <p className="text-muted-foreground text-sm">
+              현재 매매일지에서 계산된 보유 종목을 사용해요.
+            </p>
           </div>
-          <Skeleton className="h-9 w-28 rounded-full" />
+          <span className="rounded-full border px-4 py-2 text-sm font-semibold">
+            매매일지 확인
+          </span>
+        </div>
+        <div className="mt-6 border-t pt-5">
+          <h3 className="font-black">이번 분석에 사용할 보유 종목</h3>
+          <p className="text-muted-foreground mt-1 text-xs">
+            매매일지의 매수·매도를 반영해 계산한 현재 보유 정보예요.
+          </p>
         </div>
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
           {[0, 1, 2, 3].map((item) => (
@@ -419,9 +445,25 @@ function InsightsSkeleton() {
   return (
     <>
       <PageHeading variant="insights" />
-      <div className="mt-6 flex gap-2">
-        <Skeleton className="h-10 w-32 rounded-full" />
-        <Skeleton className="h-10 w-32 rounded-full" />
+      <div className="bg-card mt-7 grid grid-cols-3 gap-2 rounded-3xl border p-2">
+        {[
+          ["주간 인사이트", "월요일부터 일요일"],
+          ["월간 인사이트", "매월 1일부터 마지막 날"],
+          ["연간 인사이트", "매년 1월부터 12월"],
+        ].map(([label, description], index) => (
+          <div
+            key={label}
+            className={cn(
+              "rounded-2xl px-4 py-3",
+              index === 0 && "bg-foreground text-background",
+            )}
+          >
+            <strong className="block text-sm sm:text-base">{label}</strong>
+            <span className="mt-0.5 block text-[11px] opacity-70">
+              {description}
+            </span>
+          </div>
+        ))}
       </div>
       <Skeleton className="mt-5 h-16 w-full rounded-2xl" />
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
@@ -525,23 +567,46 @@ function ComingSoonSkeleton() {
 function ProSkeleton() {
   return (
     <div className="mx-auto w-full max-w-6xl">
-      <div className="bg-card grid gap-8 rounded-[2rem] border p-7 md:p-10 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="via-background grid gap-8 rounded-[2rem] border border-amber-500/20 bg-gradient-to-br from-amber-500/[0.12] to-violet-500/[0.08] p-7 md:p-10 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div>
-          <Skeleton className="h-7 w-32 rounded-full" />
-          <Skeleton className="mt-6 h-12 w-full max-w-lg rounded-xl" />
-          <Skeleton className="mt-3 h-12 w-3/4 max-w-md rounded-xl" />
-          <Skeleton className="mt-5 h-4 w-full max-w-xl rounded-full" />
-          <Skeleton className="mt-2 h-4 w-4/5 max-w-lg rounded-full" />
-          <div className="mt-6 flex gap-2">
-            <Skeleton className="h-8 w-24 rounded-full" />
-            <Skeleton className="h-8 w-32 rounded-full" />
+          <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/25 bg-amber-500/10 px-3 py-1.5 text-xs font-black text-amber-700 dark:text-amber-300">
+            <CrownIcon className="size-3.5" /> EOKKA Pro 베타
+          </div>
+          <h1 className="mt-5 max-w-2xl text-3xl leading-tight font-black tracking-tight text-balance md:text-5xl">
+            기록은 자동으로,
+            <br />
+            투자 판단은 더 차분하게
+          </h1>
+          <p className="text-muted-foreground mt-4 max-w-2xl text-sm leading-7 break-keep md:text-base">
+            거래일마다 최신 종가로 포트폴리오를 기록하고, 쌓인 변화를 주간과
+            월간 인사이트로 확인하세요. 아직 성장 중인 베타 서비스라 부담 없는
+            가격으로 시작해요.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-2">
+            {["자동 분석", "기간 제한 없음"].map((benefit) => (
+              <span
+                key={benefit}
+                className="bg-background/70 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold"
+              >
+                <CheckIcon className="size-3.5 text-emerald-500" />
+                {benefit}
+              </span>
+            ))}
           </div>
         </div>
         <Skeleton className="h-64 rounded-3xl" />
       </div>
       <div className="mt-8 text-center">
-        <Skeleton className="mx-auto h-4 w-28 rounded-full" />
-        <Skeleton className="mx-auto mt-3 h-8 w-72 max-w-full rounded-xl" />
+        <p className="text-xs font-black tracking-[0.14em] text-violet-600 uppercase dark:text-violet-400">
+          Plan comparison
+        </p>
+        <h2 className="mt-2 text-2xl font-black md:text-3xl">
+          무료와 Pro, 무엇이 다른가요?
+        </h2>
+        <p className="text-muted-foreground mt-2 text-sm">
+          무료로 분석 결과를 바로 확인하고, Pro에서는 결과를 저장해 시간에 따른
+          변화까지 이어서 확인할 수 있어요.
+        </p>
       </div>
       <div className="bg-card mt-6 rounded-3xl border p-6">
         <div className="grid grid-cols-3 gap-4 border-b pb-4">

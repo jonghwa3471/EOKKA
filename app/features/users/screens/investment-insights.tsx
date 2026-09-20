@@ -8,10 +8,14 @@ import {
   MinusIcon,
   SparklesIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Form, Link, redirect } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
+import {
+  loadCachedRouteData,
+  usePrimeRouteDataCache,
+} from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
 import {
   getActiveAnalysisHistory,
@@ -22,7 +26,6 @@ import {
 import { HistoricalInsights } from "./dashboard";
 
 type InsightPeriod = "weekly" | "monthly" | "annual";
-const INSIGHT_PERIOD_STORAGE_KEY = "eokka:investment-insight-period";
 
 function koreanToday() {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -279,6 +282,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+type InvestmentInsightsLoaderData = Awaited<ReturnType<typeof loader>>;
+export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
+  return loadCachedRouteData<InvestmentInsightsLoaderData>(
+    "investment-insights",
+    async () => (await serverLoader()) as InvestmentInsightsLoaderData,
+  );
+}
+
 export async function action({ request }: Route.ActionArgs) {
   const [client] = makeServerClient(request);
   const {
@@ -301,24 +312,11 @@ export async function action({ request }: Route.ActionArgs) {
 export default function InvestmentInsights({
   loaderData,
 }: Route.ComponentProps) {
+  usePrimeRouteDataCache("investment-insights", loaderData);
   const { history, goalOptions, preferredGoal, today } = loaderData;
   const [period, setPeriod] = useState<InsightPeriod>("weekly");
 
-  useEffect(() => {
-    const savedPeriod = window.localStorage.getItem(INSIGHT_PERIOD_STORAGE_KEY);
-    if (
-      savedPeriod === "weekly" ||
-      savedPeriod === "monthly" ||
-      savedPeriod === "annual"
-    ) {
-      setPeriod(savedPeriod);
-    }
-  }, []);
-
-  const selectPeriod = (nextPeriod: InsightPeriod) => {
-    setPeriod(nextPeriod);
-    window.localStorage.setItem(INSIGHT_PERIOD_STORAGE_KEY, nextPeriod);
-  };
+  const selectPeriod = (nextPeriod: InsightPeriod) => setPeriod(nextPeriod);
   const range = calendarRange(today, period);
   const periodHistory = history.filter(
     (item) => item.savedOn >= range.start && item.savedOn <= range.end,

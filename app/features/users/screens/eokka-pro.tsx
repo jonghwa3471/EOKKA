@@ -14,6 +14,10 @@ import {
 import { Link } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
+import {
+  loadCachedRouteData,
+  usePrimeRouteDataCache,
+} from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
 
 import { getAutomaticAnalysisSettings } from "../automatic-analysis-settings.server";
@@ -31,6 +35,14 @@ export async function loader({ request }: Route.LoaderArgs) {
     ? await getAutomaticAnalysisSettings(user.id)
     : { isPro: false };
   return { isPro: settings.isPro };
+}
+
+type EokkaProLoaderData = Awaited<ReturnType<typeof loader>>;
+export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
+  return loadCachedRouteData<EokkaProLoaderData>(
+    "eokka-pro",
+    async () => serverLoader() as Promise<EokkaProLoaderData>,
+  );
 }
 
 const comparison = [
@@ -77,6 +89,7 @@ const comparison = [
 ] as const;
 
 export default function EokkaPro({ loaderData }: Route.ComponentProps) {
+  usePrimeRouteDataCache("eokka-pro", loaderData);
   return (
     <main className="flex flex-1 flex-col px-5 pt-8 pb-12 md:px-8 md:pt-12">
       <div className="mx-auto w-full max-w-6xl">
