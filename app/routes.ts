@@ -45,6 +45,7 @@ export default [
     ...prefix("/cron", [
       route("/mailer", "features/cron/api/mailer.tsx"),
       route("/analyze-portfolios", "features/cron/api/analyze-portfolios.ts"),
+      route("/notification-emails", "features/cron/api/notification-emails.ts"),
     ]),
     ...prefix("/blog", [route("/og", "features/blog/api/og.tsx")]),
     ...prefix("/stocks", [

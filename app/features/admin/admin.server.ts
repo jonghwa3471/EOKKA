@@ -3,11 +3,14 @@ import { redirect } from "react-router";
 
 import db from "~/core/db/drizzle-client.server";
 import makeServerClient from "~/core/lib/supa-client.server";
+import { sendNotificationEmail } from "~/features/notifications/notification-email.server";
+import { createNotification } from "~/features/notifications/notifications.server";
 import { notifications } from "~/features/notifications/schema";
 import { profiles } from "~/features/users/schema";
 
 import {
   adminMembers,
+  siteAnnouncementRecipients,
   siteAnnouncements,
   supportMessages,
   supportTickets,
@@ -179,7 +182,7 @@ export async function addTicket(
   userId: string,
   input: { category: string; title: string; body: string },
 ) {
-  return db.transaction(async (tx) => {
+  const ticketId = await db.transaction(async (tx) => {
     // Serialize per-user submissions to enforce the daily limit across instances.
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${userId}))`);
     const recent = await tx
@@ -214,6 +217,7 @@ export async function addTicket(
       );
     return ticket.id;
   });
+  return ticketId;
 }
 export async function replyToTicket(
   userId: string,
@@ -221,7 +225,7 @@ export async function replyToTicket(
   body: string,
   staff: boolean,
 ) {
-  await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${userId}))`);
     const [ticket] = await tx
       .select()
@@ -274,7 +278,55 @@ export async function replyToTicket(
             : `/dashboard/admin?ticket=${ticket.id}`,
         })),
       );
+    return {
+      title: ticket.title,
+      recipientIds: recipients.map((recipient) => recipient.user_id),
+    };
   });
+  if (staff)
+    await Promise.allSettled(
+      result.recipientIds.map((recipientId) =>
+        sendNotificationEmail({
+          userId: recipientId,
+          type: "support_reply",
+          title: "문의에 답변이 도착했어요",
+          message: result.title,
+          href: `/contact?ticket=${ticketId}`,
+        }),
+      ),
+    );
+}
+
+export async function setSupportTicketStatus(
+  ticketId: string,
+  status: "open" | "closed",
+) {
+  const [ticket] = await db
+    .select({
+      id: supportTickets.id,
+      userId: supportTickets.user_id,
+      title: supportTickets.title,
+      status: supportTickets.status,
+    })
+    .from(supportTickets)
+    .where(eq(supportTickets.id, ticketId))
+    .limit(1);
+  if (!ticket) throw new Response("문의를 찾을 수 없어요.", { status: 404 });
+  if (ticket.status === status) return;
+
+  await db
+    .update(supportTickets)
+    .set({ status, updated_at: new Date() })
+    .where(eq(supportTickets.id, ticketId));
+
+  if (status === "closed")
+    await createNotification({
+      userId: ticket.userId,
+      type: "support_closed",
+      title: "문의가 종료됐어요",
+      message: ticket.title,
+      href: `/contact?ticket=${ticket.id}`,
+    });
 }
 export async function deleteSupportTicket(
   userId: string,
@@ -381,45 +433,108 @@ export async function deleteSupportMessage(
 }
 export async function publishAnnouncement(
   userId: string,
-  input: { id: string; title: string; body: string },
+  input: {
+    id: string;
+    title: string;
+    body: string;
+    audience: "all" | "user";
+    recipientIds: string[];
+  },
 ) {
-  await db.transaction(async (tx) => {
+  const targetUserIds =
+    input.audience === "user" ? [...new Set(input.recipientIds)] : [];
+  if (input.audience === "user") {
+    const recipients = await db
+      .select({ id: profiles.profile_id })
+      .from(profiles)
+      .where(inArray(profiles.profile_id, targetUserIds));
+    if (recipients.length !== targetUserIds.length)
+      throw new Error("공지받을 사용자 중 일부를 찾을 수 없어요.");
+  }
+  const published = await db.transaction(async (tx) => {
     const inserted = await tx
       .insert(siteAnnouncements)
-      .values({ ...input, author_id: userId })
+      .values({
+        id: input.id,
+        author_id: userId,
+        recipient_user_id: targetUserIds.length === 1 ? targetUserIds[0] : null,
+        title: input.title,
+        body: input.body,
+      })
       .onConflictDoNothing()
       .returning({ id: siteAnnouncements.id });
-    if (!inserted.length) return; // A retried request must not notify everyone again.
-    await tx.execute(sql`insert into notifications (user_id, type, title, message, href)
-      select profile_id, 'site_announcement', ${input.title}, ${input.body}, '/dashboard/notifications' from profiles`);
+    if (!inserted.length) return false; // A retried request must not notify everyone again.
+    if (targetUserIds.length) {
+      await tx.insert(siteAnnouncementRecipients).values(
+        targetUserIds.map((targetUserId) => ({
+          announcement_id: input.id,
+          user_id: targetUserId,
+        })),
+      );
+      await tx.insert(notifications).values(
+        targetUserIds.map((targetUserId) => ({
+          user_id: targetUserId,
+          type: "site_announcement",
+          title: input.title,
+          message: input.body,
+          href: "/dashboard/notifications",
+        })),
+      );
+    } else
+      await tx.execute(sql`insert into notifications (user_id, type, title, message, href)
+        select profile_id, 'site_announcement', ${input.title}, ${input.body}, '/dashboard/notifications' from profiles`);
+    return true;
   });
+  if (!published) return;
+  const recipients = await db
+    .select({ userId: profiles.profile_id })
+    .from(profiles)
+    .where(
+      targetUserIds.length
+        ? inArray(profiles.profile_id, targetUserIds)
+        : undefined,
+    );
+  for (let index = 0; index < recipients.length; index += 10) {
+    await Promise.allSettled(
+      recipients.slice(index, index + 10).map(({ userId }) =>
+        sendNotificationEmail({
+          userId,
+          type: "site_announcement",
+          title: input.title,
+          message: input.body,
+          href: "/dashboard/notifications",
+        }),
+      ),
+    );
+  }
 }
 export async function getAdminOverview(search: string, page: number) {
-  const [tickets, announcements, users, counts] = await Promise.all([
-    db.execute<{
-      id: string;
-      title: string;
-      status: string;
-      category: string;
-      created_at: string;
-      updated_at: string;
-      user_id: string;
-      name: string;
-      email: string;
-      avatar_url: string | null;
-      joined_at: string;
-      last_active_on: string;
-      pro: boolean;
-      admin: boolean;
-      ticket_count: number;
-      messages: Array<{
+  const [tickets, announcements, users, counts, announcementRecipients] =
+    await Promise.all([
+      db.execute<{
         id: string;
-        author_id: string | null;
-        is_staff: string;
-        body: string;
+        title: string;
+        status: string;
+        category: string;
         created_at: string;
-      }>;
-    }>(sql`select st.id, st.title, st.status, st.category, st.created_at, st.updated_at,
+        updated_at: string;
+        user_id: string;
+        name: string;
+        email: string;
+        avatar_url: string | null;
+        joined_at: string;
+        last_active_on: string;
+        pro: boolean;
+        admin: boolean;
+        ticket_count: number;
+        messages: Array<{
+          id: string;
+          author_id: string | null;
+          is_staff: string;
+          body: string;
+          created_at: string;
+        }>;
+      }>(sql`select st.id, st.title, st.status, st.category, st.created_at, st.updated_at,
       st.user_id, p.name, u.email, p.avatar_url, p.created_at as joined_at, p.last_active_on,
       (p.pro_expires_at > now()) as pro, (a.user_id is not null) as admin,
       (select count(*)::int from support_tickets own where own.user_id = st.user_id) as ticket_count,
@@ -431,36 +546,72 @@ export async function getAdminOverview(search: string, page: number) {
       join auth.users u on u.id = st.user_id
       left join admin_members a on a.user_id = st.user_id
       order by st.created_at desc limit 100`),
-    db
-      .select()
-      .from(siteAnnouncements)
-      .orderBy(desc(siteAnnouncements.created_at))
-      .limit(20),
-    db.execute<{
-      id: string;
-      name: string;
-      email: string;
-      avatar_url: string | null;
-      created_at: string;
-      last_active_on: string;
-      pro: boolean;
-      admin: boolean;
-      ticket_count: number;
-    }>(sql`select p.profile_id as id, p.name, u.email, p.avatar_url, p.created_at, p.last_active_on,
+      db
+        .select()
+        .from(siteAnnouncements)
+        .orderBy(desc(siteAnnouncements.created_at))
+        .limit(20),
+      db.execute<{
+        id: string;
+        name: string;
+        email: string;
+        avatar_url: string | null;
+        created_at: string;
+        last_active_on: string;
+        pro: boolean;
+        admin: boolean;
+        ticket_count: number;
+      }>(sql`select p.profile_id as id, p.name, u.email, p.avatar_url, p.created_at, p.last_active_on,
       (p.pro_expires_at > now()) as pro, (a.user_id is not null) as admin,
       (select count(*)::int from support_tickets own where own.user_id = p.profile_id) as ticket_count
       from profiles p join auth.users u on u.id = p.profile_id left join admin_members a on a.user_id = p.profile_id
       where p.name ilike ${`%${search}%`} or u.email ilike ${`%${search}%`}
       order by p.created_at desc limit 21 offset ${page * 20}`),
-    db.execute<{ users: number; open: number }>(
-      sql`select (select count(*)::int from profiles) as users, (select count(*)::int from support_tickets where status = 'open') as open`,
-    ),
-  ]);
+      db.execute<{ users: number; open: number }>(
+        sql`select (select count(*)::int from profiles) as users, (select count(*)::int from support_tickets where status = 'open') as open`,
+      ),
+      db.execute<{
+        id: string;
+        name: string;
+        email: string;
+        avatar_url: string | null;
+      }>(sql`select p.profile_id as id, p.name, u.email, p.avatar_url
+      from profiles p join auth.users u on u.id = p.profile_id
+      order by p.name, u.email limit 500`),
+    ]);
+  const announcementRecipientRows = announcements.length
+    ? await db
+        .select({
+          announcementId: siteAnnouncementRecipients.announcement_id,
+          userId: siteAnnouncementRecipients.user_id,
+        })
+        .from(siteAnnouncementRecipients)
+        .where(
+          inArray(
+            siteAnnouncementRecipients.announcement_id,
+            announcements.map((announcement) => announcement.id),
+          ),
+        )
+    : [];
+  const recipientIdsByAnnouncement = new Map<string, string[]>();
+  for (const row of announcementRecipientRows) {
+    const recipients = recipientIdsByAnnouncement.get(row.announcementId) ?? [];
+    recipients.push(row.userId);
+    recipientIdsByAnnouncement.set(row.announcementId, recipients);
+  }
   return {
     tickets: Array.from(tickets),
-    announcements,
+    announcements: announcements.map((announcement) => ({
+      ...announcement,
+      recipient_user_ids:
+        recipientIdsByAnnouncement.get(announcement.id) ??
+        (announcement.recipient_user_id
+          ? [announcement.recipient_user_id]
+          : []),
+    })),
     users: Array.from(users).slice(0, 20),
     hasMore: users.length > 20,
     counts: counts[0],
+    announcementRecipients: Array.from(announcementRecipients),
   };
 }

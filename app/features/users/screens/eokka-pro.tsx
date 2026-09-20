@@ -34,7 +34,18 @@ export async function loader({ request }: Route.LoaderArgs) {
   const settings = user
     ? await getAutomaticAnalysisSettings(user.id)
     : { isPro: false };
-  return { isPro: settings.isPro };
+  const now = new Date();
+  const nextBillingDate = new Date(now);
+  nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+  return {
+    isPro: settings.isPro,
+    proExpiresAt:
+      "proExpiresAt" in settings && settings.proExpiresAt
+        ? settings.proExpiresAt.toISOString()
+        : null,
+    checkoutStartsAt: now.toISOString(),
+    checkoutRenewsAt: nextBillingDate.toISOString(),
+  };
 }
 
 type EokkaProLoaderData = Awaited<ReturnType<typeof loader>>;
@@ -88,6 +99,15 @@ const comparison = [
   },
 ] as const;
 
+function koreanDate(value: string) {
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(new Date(value));
+}
+
 export default function EokkaPro({ loaderData }: Route.ComponentProps) {
   usePrimeRouteDataCache("eokka-pro", loaderData);
   return (
@@ -134,23 +154,90 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
                 <span className="text-muted-foreground pb-1 text-sm">/ 월</span>
               </div>
               <p className="text-muted-foreground mt-3 text-xs leading-5 break-keep">
-                매월 자동 결제되며 언제든 해지할 수 있어요. 베타 가격의 유지
-                조건과 정식 출시 후 가격 변경 여부는 결제 전에 다시 명확히
-                안내할게요.
+                매월 자동 결제되는 구독 상품이에요. 결제가 완료된 이용 기간은
+                환불되지 않으며, 구독을 해지하면 다음 결제부터 자동 결제가
+                중단돼요. 이미 결제한 기간까지는 Pro를 계속 이용할 수 있어요.
               </p>
+              <div className="mt-4 rounded-2xl border border-amber-500/20 bg-amber-500/[0.07] p-4">
+                <p className="text-xs font-black text-amber-700 dark:text-amber-300">
+                  결제 및 구독 해지 안내
+                </p>
+                <p className="text-muted-foreground mt-1.5 text-[11px] leading-5 break-keep">
+                  결제 후 환불은 제공되지 않으며, 해지 신청은 다음 결제부터
+                  적용돼요.
+                </p>
+              </div>
               {loaderData.isPro ? (
-                <div className="mt-5 rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-4 text-sm font-black text-emerald-700 dark:text-emerald-300">
-                  현재 EOKKA Pro를 이용하고 있어요
+                <div className="mt-5 space-y-3">
+                  <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-4">
+                    <p className="text-sm font-black text-emerald-700 dark:text-emerald-300">
+                      현재 EOKKA Pro를 이용하고 있어요
+                    </p>
+                    {loaderData.proExpiresAt ? (
+                      <dl className="mt-3 grid gap-2 text-xs">
+                        <div className="flex items-center justify-between gap-4">
+                          <dt className="text-muted-foreground">
+                            다음 결제 예정일
+                          </dt>
+                          <dd className="font-black tabular-nums">
+                            {koreanDate(loaderData.proExpiresAt)}
+                          </dd>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <dt className="text-muted-foreground">
+                            이용 가능 기간
+                          </dt>
+                          <dd className="font-black tabular-nums">
+                            {koreanDate(loaderData.proExpiresAt)}까지
+                          </dd>
+                        </div>
+                      </dl>
+                    ) : null}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full cursor-not-allowed rounded-2xl"
+                    disabled
+                  >
+                    구독 해지 준비 중
+                  </Button>
+                  <p className="text-muted-foreground text-center text-[11px] leading-5 break-keep">
+                    자동결제 연동이 완료되면 여기에서 다음 결제 전까지 구독을
+                    해지할 수 있어요.
+                  </p>
                 </div>
               ) : (
-                <Button
-                  type="button"
-                  size="lg"
-                  className="mt-5 w-full cursor-not-allowed rounded-2xl bg-amber-500 text-black opacity-80 hover:bg-amber-500"
-                  disabled
-                >
-                  <Clock3Icon /> 자동결제 준비 중
-                </Button>
+                <div className="mt-5 space-y-3">
+                  <div className="bg-muted/35 rounded-2xl border p-4">
+                    <p className="text-xs font-black">오늘 구독을 시작한다면</p>
+                    <dl className="mt-3 grid gap-2 text-xs">
+                      <div className="flex items-center justify-between gap-4">
+                        <dt className="text-muted-foreground">첫 이용 기간</dt>
+                        <dd className="font-black tabular-nums">
+                          {koreanDate(loaderData.checkoutStartsAt)} ~{" "}
+                          {koreanDate(loaderData.checkoutRenewsAt)}
+                        </dd>
+                      </div>
+                      <div className="flex items-center justify-between gap-4">
+                        <dt className="text-muted-foreground">
+                          다음 결제 예정일
+                        </dt>
+                        <dd className="font-black tabular-nums">
+                          {koreanDate(loaderData.checkoutRenewsAt)}
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                  <Button
+                    type="button"
+                    size="lg"
+                    className="w-full cursor-not-allowed rounded-2xl bg-amber-500 text-black opacity-80 hover:bg-amber-500"
+                    disabled
+                  >
+                    <Clock3Icon /> 자동결제 준비 중
+                  </Button>
+                </div>
               )}
               <p className="text-muted-foreground mt-3 text-center text-[11px] leading-5">
                 토스페이먼츠 자동결제 계약이 완료되면 이곳에서 바로 구독할 수

@@ -50,6 +50,7 @@ import { Dialog } from "./core/components/ui/dialog";
 import { Sheet } from "./core/components/ui/sheet";
 import { useAdaptiveProgress } from "./core/hooks/use-adaptive-progress";
 import i18next from "./core/lib/i18next.server";
+import { hasCachedRouteData } from "./core/lib/route-data-cache";
 import { themeSessionResolver } from "./core/lib/theme-session.server";
 import { cn } from "./core/lib/utils";
 import NotFound from "./core/screens/404";
@@ -385,12 +386,19 @@ export default function App() {
       NProgress.done();
       return;
     }
+    const isUncachedHomeNavigation =
+      targetPath === "/" && !hasCachedRouteData("home");
+    if (isUncachedHomeNavigation) {
+      setShowRouteSkeleton(true);
+      NProgress.start();
+      return;
+    }
     const timer = window.setTimeout(() => {
       setShowRouteSkeleton(true);
       NProgress.start();
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [isRouteBusy]);
+  }, [isRouteBusy, targetPath]);
 
   useEffect(() => {
     if (!showBlockingLoader) return;

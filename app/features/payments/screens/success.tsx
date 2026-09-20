@@ -21,6 +21,7 @@ import { z } from "zod";
 import { requireAuthentication } from "~/core/lib/guards.server";
 import adminClient from "~/core/lib/supa-admin-client.server";
 import makeServerClient from "~/core/lib/supa-client.server";
+import { createNotification } from "~/features/notifications/notifications.server";
 
 /**
  * Meta function for setting page metadata
@@ -199,6 +200,14 @@ export async function loader({ request }: Route.LoaderArgs) {
       `/payments/failure?code=${encodeURIComponent("payment-record-error")}&message=${encodeURIComponent(message)}`,
     );
   }
+
+  await createNotification({
+    userId: user!.id,
+    type: "payment_completed",
+    title: "결제가 완료됐어요",
+    message: `${paymentResponse.data.orderName} ${paymentResponse.data.totalAmount.toLocaleString("ko-KR")}원 결제가 정상적으로 완료됐어요.`,
+    href: "/dashboard/payments",
+  });
 
   // Return payment data for the success page
   return { data };

@@ -15,11 +15,27 @@ export const deleteTicketSchema = z.object({
 export const deleteMessageSchema = deleteTicketSchema.extend({
   message: z.string().uuid(),
 });
-export const announcementSchema = z.object({
-  id: z.string().uuid(),
-  title: z.string().trim().min(2).max(100),
-  body: z.string().trim().min(5).max(5000),
-});
+export const announcementSchema = z
+  .object({
+    id: z.string().uuid(),
+    audience: z.enum(["all", "user"]),
+    recipientIds: z
+      .string()
+      .transform((value) =>
+        [...new Set(value.split(",").filter(Boolean))].slice(0, 50),
+      )
+      .pipe(z.array(z.string().uuid()).max(50)),
+    title: z.string().trim().min(2).max(100),
+    body: z.string().trim().min(5).max(5000),
+  })
+  .superRefine((value, context) => {
+    if (value.audience === "user" && value.recipientIds.length === 0)
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["recipientIds"],
+        message: "공지받을 사용자를 한 명 이상 선택해 주세요.",
+      });
+  });
 export const categoryLabels = {
   bug: "버그 신고",
   feature: "기능 제안",

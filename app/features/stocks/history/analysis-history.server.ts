@@ -236,19 +236,16 @@ export async function saveDailyAnalysisSnapshot({
     `);
   }
 
-  const href = `/dashboard/history?month=${savedOn.slice(0, 7)}&date=${savedOn}&analysis=${snapshotId.id}`;
-  await createNotification({
-    userId,
-    type: snapshotId.wasUpdated ? "analysis_updated" : "analysis_created",
-    title:
-      updateSource === "automatic"
-        ? "자동 분석이 갱신됐어요"
-        : snapshotId.wasUpdated
-          ? "분석이 업데이트됐어요"
-          : "새 분석이 저장됐어요",
-    message: `${savedOn.replaceAll("-", ".")} 종가로 ${notificationGoalLabel(values.goal_amount)} 목표 분석을 ${snapshotId.wasUpdated ? "갱신했어요" : "저장했어요"}.`,
-    href,
-  });
+  if (updateSource === "automatic") {
+    const href = `/dashboard/history?month=${savedOn.slice(0, 7)}&date=${savedOn}&analysis=${snapshotId.id}`;
+    await createNotification({
+      userId,
+      type: snapshotId.wasUpdated ? "analysis_updated" : "analysis_created",
+      title: "자동 분석이 갱신됐어요",
+      message: `${savedOn.replaceAll("-", ".")} 종가로 ${notificationGoalLabel(values.goal_amount)} 목표 분석을 ${snapshotId.wasUpdated ? "갱신했어요" : "저장했어요"}.`,
+      href,
+    });
+  }
 
   return { id: snapshotId.id, savedOn };
 }
@@ -316,14 +313,6 @@ export async function startManagedAnalysisHistory({
         ),
       );
     return inserted.id;
-  });
-
-  await createNotification({
-    userId,
-    type: "analysis_created",
-    title: "정밀 분석 기록을 시작했어요",
-    message: `${savedOn.replaceAll("-", ".")} 종가로 ${notificationGoalLabel(snapshot.goal_amount)} 목표의 첫 정밀 분석을 저장했어요.`,
-    href: `/dashboard/history?month=${savedOn.slice(0, 7)}&date=${savedOn}&analysis=${snapshotId}`,
   });
 
   return { id: snapshotId, savedOn };

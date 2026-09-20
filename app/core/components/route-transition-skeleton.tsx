@@ -724,6 +724,39 @@ function GenericPageSkeleton() {
   );
 }
 
+function HomeSkeleton() {
+  return (
+    <div className="min-h-svh">
+      <div className="border-border/60 flex h-16 items-center border-b px-5 md:px-8">
+        <Skeleton className="h-9 w-32 rounded-xl" />
+        <div className="ml-auto flex items-center gap-3">
+          <Skeleton className="hidden h-9 w-20 rounded-full sm:block" />
+          <Skeleton className="size-9 rounded-full" />
+        </div>
+      </div>
+      <div className="mx-auto w-full max-w-7xl px-5 py-10 md:px-8 md:py-16">
+        <div className="mx-auto max-w-4xl text-center">
+          <Skeleton className="mx-auto h-7 w-36 rounded-full" />
+          <Skeleton className="mx-auto mt-6 h-14 w-4/5 rounded-2xl md:h-20" />
+          <Skeleton className="mx-auto mt-4 h-5 w-full max-w-2xl rounded-full" />
+          <Skeleton className="mx-auto mt-2 h-5 w-3/5 rounded-full" />
+          <div className="mt-8 flex justify-center gap-3">
+            <Skeleton className="h-12 w-36 rounded-full" />
+            <Skeleton className="h-12 w-32 rounded-full" />
+          </div>
+        </div>
+        <div className="mt-14 grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
+          <Skeleton className="h-[25rem] rounded-[2rem]" />
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
+            <Skeleton className="h-[12rem] rounded-[2rem]" />
+            <Skeleton className="h-[12rem] rounded-[2rem]" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SkeletonContent({ variant }: { variant: RouteSkeletonVariant }) {
   switch (variant) {
     case "dashboard":
@@ -747,6 +780,7 @@ function SkeletonContent({ variant }: { variant: RouteSkeletonVariant }) {
     case "admin":
       return <AdminSkeleton />;
     case "home":
+      return <HomeSkeleton />;
     case "contact":
     case "about":
     case "methodology":
@@ -812,14 +846,16 @@ export function RouteTransitionSkeleton({
     <div
       className={cn(
         "bg-background overflow-hidden",
-        withinDashboard
-          ? cn(
-              "fixed inset-x-0 top-16 bottom-0 z-40",
-              dashboardSidebarCollapsed
-                ? "md:left-[4.5rem]"
-                : "md:left-[17rem]",
-            )
-          : "fixed inset-x-0 top-16 bottom-0 z-[9998]",
+        variant === "home"
+          ? "fixed inset-0 z-[9998]"
+          : withinDashboard
+            ? cn(
+                "fixed inset-x-0 top-16 bottom-0 z-40",
+                dashboardSidebarCollapsed
+                  ? "md:left-[4.5rem]"
+                  : "md:left-[17rem]",
+              )
+            : "fixed inset-x-0 top-16 bottom-0 z-[9998]",
       )}
       role="status"
       aria-live="polite"
@@ -828,8 +864,14 @@ export function RouteTransitionSkeleton({
       <span className="sr-only">페이지를 불러오고 있어요.</span>
       <div
         className={cn(
-          "mx-auto w-full px-5 py-8 md:px-8 md:py-12",
-          variant === "precise-analysis" ? "max-w-5xl" : "max-w-7xl",
+          variant === "home"
+            ? "w-full"
+            : "mx-auto w-full px-5 py-8 md:px-8 md:py-12",
+          variant === "home"
+            ? null
+            : variant === "precise-analysis"
+              ? "max-w-5xl"
+              : "max-w-7xl",
         )}
       >
         <SkeletonContent variant={variant} />

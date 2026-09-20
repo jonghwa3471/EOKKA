@@ -1,9 +1,10 @@
 import type { Route } from "./+types/admin";
 
-import { eq } from "drizzle-orm";
 import {
+  BellIcon,
   ChevronRightIcon,
   ExternalLinkIcon,
+  MailIcon,
   MegaphoneIcon,
   MessagesSquareIcon,
   ShieldCheckIcon,
@@ -21,7 +22,6 @@ import {
 } from "react-router";
 import { z } from "zod";
 
-import ConfirmDialog from "~/core/components/confirm-dialog";
 import {
   Avatar,
   AvatarFallback,
@@ -37,7 +37,6 @@ import {
 } from "~/core/components/ui/dialog";
 import { Input } from "~/core/components/ui/input";
 import { Textarea } from "~/core/components/ui/textarea";
-import db from "~/core/db/drizzle-client.server";
 import {
   loadCachedRouteData,
   usePrimeRouteDataCache,
@@ -50,8 +49,8 @@ import {
   publishAnnouncement,
   replyToTicket,
   requireAdmin,
+  setSupportTicketStatus,
 } from "../admin.server";
-import { supportTickets } from "../schema";
 import SupportThread, {
   statusBadgeClass,
   statusLabels,
@@ -67,6 +66,29 @@ import {
 
 export const meta = () => [{ title: "운영 관리 | EOKKA" }];
 export const headers = () => ({ "Cache-Control": "private, no-store" });
+
+const announcementTemplates = [
+  {
+    label: "일반 공지",
+    title: "EOKKA에서 안내해 드려요",
+    body: "[안내 내용]\n• 사용자에게 전달할 내용을 적어 주세요.\n\n[확인해 주세요]\n• 함께 확인해야 할 내용이나 유의사항을 적어 주세요.",
+  },
+  {
+    label: "서비스 업데이트",
+    title: "EOKKA 업데이트 소식을 알려드려요",
+    body: "[무엇이 바뀌었나요?]\n• 변경된 기능을 적어 주세요.\n\n[언제 적용되나요?]\n• 적용 날짜와 시간을 적어 주세요.\n\n[확인해 주세요]\n• 사용자가 알아야 할 내용을 적어 주세요.",
+  },
+  {
+    label: "서비스 점검",
+    title: "EOKKA 서비스 점검을 안내해 드려요",
+    body: "[점검 일시]\n• 시작 시간과 종료 예정 시간을 적어 주세요.\n\n[점검 내용]\n• 점검하는 기능을 적어 주세요.\n\n[이용 안내]\n• 점검 중 이용할 수 없는 기능을 적어 주세요.",
+  },
+  {
+    label: "이벤트 안내",
+    title: "EOKKA 이벤트가 시작됐어요",
+    body: "[이벤트 내용]\n• 혜택을 알기 쉽게 적어 주세요.\n\n[참여 기간]\n• 시작일과 종료일을 적어 주세요.\n\n[참여 방법]\n• 사용자가 따라 할 순서와 주의사항을 적어 주세요.",
+  },
+] as const;
 export async function loader({ request }: Route.LoaderArgs) {
   await requireAdmin(request);
   const url = new URL(request.url);
@@ -156,17 +178,18 @@ export async function action({ request }: Route.ActionArgs) {
         .safeParse(form);
       if (!parsed.success)
         return data({ error: "문의 상태를 확인해 주세요." }, { status: 400 });
-      await db
-        .update(supportTickets)
-        .set({ status: parsed.data.status, updated_at: new Date() })
-        .where(eq(supportTickets.id, parsed.data.ticket));
+      await setSupportTicketStatus(parsed.data.ticket, parsed.data.status);
       return redirect(inboxUrl(parsed.data.ticket));
     }
     if (form.intent === "announce") {
       const parsed = announcementSchema.safeParse(form);
       if (!parsed.success)
         return data(
-          { error: "제목은 2~100자, 내용은 5~5,000자로 입력해 주세요." },
+          {
+            error:
+              parsed.error.issues[0]?.message ??
+              "공지 대상과 내용을 확인해 주세요.",
+          },
           { status: 400 },
         );
       await publishAnnouncement(user.id, parsed.data);
@@ -195,6 +218,18 @@ export default function Admin({
   const location = useLocation();
   usePrimeRouteDataCache(`admin:${location.search}`, d);
   const [confirm, setConfirm] = useState(false);
+  const [announcementAudience, setAnnouncementAudience] = useState<
+    "all" | "user"
+  >("all");
+  const [announcementRecipientIds, setAnnouncementRecipientIds] = useState<
+    string[]
+  >([]);
+  const [announcementRecipientSearch, setAnnouncementRecipientSearch] =
+    useState("");
+  const [announcementTitle, setAnnouncementTitle] = useState("");
+  const [announcementBody, setAnnouncementBody] = useState("");
+  const [selectedAnnouncementTemplate, setSelectedAnnouncementTemplate] =
+    useState<string | null>(null);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(
     d.initialTicketId,
   );
@@ -249,9 +284,34 @@ export default function Admin({
         }
       : null;
   }, [d.tickets, d.users, selectedUserId]);
+  const selectedAnnouncementRecipients = d.announcementRecipients.filter(
+    (user) => announcementRecipientIds.includes(user.id),
+  );
+  const filteredAnnouncementRecipients = useMemo(() => {
+    const query = announcementRecipientSearch.trim().toLocaleLowerCase("ko");
+    return d.announcementRecipients
+      .filter(
+        (user) =>
+          !announcementRecipientIds.includes(user.id) &&
+          (!query ||
+            user.name.toLocaleLowerCase("ko").includes(query) ||
+            user.email.toLocaleLowerCase("ko").includes(query)),
+      )
+      .slice(0, 6);
+  }, [
+    announcementRecipientIds,
+    announcementRecipientSearch,
+    d.announcementRecipients,
+  ]);
   useEffect(() => {
     requestId.current = null;
     formRef.current?.reset();
+    setAnnouncementAudience("all");
+    setAnnouncementRecipientIds([]);
+    setAnnouncementRecipientSearch("");
+    setAnnouncementTitle("");
+    setAnnouncementBody("");
+    setSelectedAnnouncementTemplate(null);
   }, [d.announcements[0]?.id]);
   useEffect(() => {
     setSelectedTicketId(d.initialTicketId);
@@ -591,22 +651,180 @@ export default function Admin({
         </section>
       )}
       {activeTab === "announcements" && (
-        <div className="grid items-start gap-6 lg:grid-cols-2">
+        <div className="flex flex-col gap-6">
           <Form
             ref={formRef}
             method="post"
-            className={`${panel} space-y-4`}
+            className={`${panel} order-2 space-y-4`}
             onSubmit={(event) => {
               event.preventDefault();
               setConfirm(true);
             }}
           >
-            <h2 className="text-lg font-bold">전체 사용자에게 공지</h2>
+            <h2 className="text-lg font-bold">사용자에게 공지 보내기</h2>
             <p className="text-muted-foreground text-sm">
-              패치 내용과 서비스 안내를 모든 기존 사용자의 알림함에 보내요.
-              이메일은 발송하지 않아요.
+              전체 사용자에게 보내거나 여러 명을 선택해 개별 공지를 보낼 수
+              있어요. 공지는 앱 알림과 가입 이메일로 함께 전달돼요.
             </p>
             <input type="hidden" name="intent" value="announce" />
+            <input type="hidden" name="audience" value={announcementAudience} />
+            <input
+              type="hidden"
+              name="recipientIds"
+              value={announcementRecipientIds.join(",")}
+            />
+            <div>
+              <p className="mb-2 text-sm font-semibold">발송 대상</p>
+              <div className="bg-muted/45 grid grid-cols-2 gap-2 rounded-2xl p-1.5">
+                {[
+                  ["all", "전체 사용자"],
+                  ["user", "특정 사용자"],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() =>
+                      setAnnouncementAudience(value as "all" | "user")
+                    }
+                    className={
+                      "rounded-xl px-4 py-2.5 text-sm font-bold transition " +
+                      (announcementAudience === value
+                        ? "bg-card text-foreground shadow-sm ring-1 ring-emerald-500/20"
+                        : "text-muted-foreground hover:text-foreground")
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {announcementAudience === "user" && (
+              <div className="space-y-2">
+                <label
+                  className="block text-sm font-semibold"
+                  htmlFor="notice-recipient"
+                >
+                  공지받을 사용자
+                </label>
+                <Input
+                  id="notice-recipient"
+                  value={announcementRecipientSearch}
+                  onChange={(event) =>
+                    setAnnouncementRecipientSearch(event.target.value)
+                  }
+                  placeholder="이름 또는 이메일로 검색"
+                />
+                {selectedAnnouncementRecipients.length > 0 && (
+                  <div className="space-y-2 rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.06] p-2">
+                    <p className="px-2 pt-1 text-xs font-black text-emerald-600 dark:text-emerald-300">
+                      선택한 사용자 {selectedAnnouncementRecipients.length}명
+                    </p>
+                    {selectedAnnouncementRecipients.map((user) => (
+                      <div
+                        key={user.id}
+                        className="bg-card/75 flex items-center gap-3 rounded-xl p-2"
+                      >
+                        <Avatar className="size-8">
+                          <AvatarImage src={user.avatar_url ?? undefined} />
+                          <AvatarFallback className="text-xs font-black">
+                            {user.name.slice(0, 1)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-black">
+                            {user.name}
+                          </p>
+                          <p className="text-muted-foreground truncate text-xs">
+                            {user.email}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            setAnnouncementRecipientIds((current) =>
+                              current.filter((id) => id !== user.id),
+                            )
+                          }
+                        >
+                          제외
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="max-h-56 overflow-y-auto rounded-2xl border p-1.5">
+                  {filteredAnnouncementRecipients.map((user) => (
+                    <button
+                      key={user.id}
+                      type="button"
+                      className="hover:bg-muted flex w-full items-center gap-3 rounded-xl p-2.5 text-left transition"
+                      onClick={() => {
+                        setAnnouncementRecipientIds((current) =>
+                          current.includes(user.id)
+                            ? current
+                            : [...current, user.id],
+                        );
+                        setAnnouncementRecipientSearch("");
+                      }}
+                    >
+                      <Avatar className="size-8">
+                        <AvatarImage src={user.avatar_url ?? undefined} />
+                        <AvatarFallback className="text-xs font-black">
+                          {user.name.slice(0, 1)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-bold">
+                          {user.name}
+                        </span>
+                        <span className="text-muted-foreground block truncate text-xs">
+                          {user.email}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                  {!filteredAnnouncementRecipients.length && (
+                    <p className="text-muted-foreground px-3 py-8 text-center text-sm">
+                      일치하는 사용자가 없어요.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+            <div>
+              <p className="mb-2 text-sm font-semibold">작성 틀 불러오기</p>
+              <div className="flex flex-wrap gap-2">
+                {announcementTemplates.map((template) => (
+                  <Button
+                    key={template.label}
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedAnnouncementTemplate(template.label);
+                      setAnnouncementTitle(template.title);
+                      setAnnouncementBody(template.body);
+                    }}
+                    aria-pressed={
+                      selectedAnnouncementTemplate === template.label
+                    }
+                    className={
+                      selectedAnnouncementTemplate === template.label
+                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 ring-2 ring-emerald-500/15 hover:bg-emerald-500/15 dark:text-emerald-300"
+                        : undefined
+                    }
+                  >
+                    {template.label}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-muted-foreground mt-2 text-xs leading-5">
+                용도에 맞는 틀을 불러온 뒤 예시 문장을 실제 안내 내용으로 바꿔
+                주세요.
+              </p>
+            </div>
             <label
               className="block text-sm font-semibold"
               htmlFor="notice-title"
@@ -616,6 +834,8 @@ export default function Admin({
             <Input
               id="notice-title"
               name="title"
+              value={announcementTitle}
+              onChange={(event) => setAnnouncementTitle(event.target.value)}
               required
               minLength={2}
               maxLength={100}
@@ -630,15 +850,27 @@ export default function Admin({
             <Textarea
               id="notice-body"
               name="body"
+              value={announcementBody}
+              onChange={(event) => setAnnouncementBody(event.target.value)}
               required
               minLength={5}
               maxLength={5000}
-              rows={8}
+              rows={10}
               placeholder="어떤 점이 달라졌는지 알기 쉽게 적어 주세요."
             />
-            <Button disabled={busy}>전체 공지 보내기</Button>
+            <Button
+              disabled={
+                busy ||
+                (announcementAudience === "user" &&
+                  announcementRecipientIds.length === 0)
+              }
+            >
+              {announcementAudience === "all"
+                ? "전체 공지 보내기"
+                : "개별 공지 보내기"}
+            </Button>
           </Form>
-          <section className={`${panel} space-y-5`}>
+          <section className={`${panel} order-1 space-y-5`}>
             <h2 className="text-lg font-bold">발송한 공지 · 최근 20건</h2>
             {!d.announcements.length && (
               <p className="text-muted-foreground text-sm">
@@ -647,7 +879,18 @@ export default function Admin({
             )}
             {d.announcements.map((a) => (
               <article key={a.id} className="border-b pb-5 last:border-0">
-                <h3 className="font-bold break-words">{a.title}</h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="font-bold break-words">{a.title}</h3>
+                  <span className="rounded-full bg-violet-500/10 px-2.5 py-1 text-[11px] font-black text-violet-600 dark:text-violet-300">
+                    {a.recipient_user_ids.length
+                      ? a.recipient_user_ids.length === 1
+                        ? (d.announcementRecipients.find(
+                            (user) => user.id === a.recipient_user_ids[0],
+                          )?.name ?? "특정 사용자")
+                        : "특정 사용자 " + a.recipient_user_ids.length + "명"
+                      : "전체 사용자"}
+                  </span>
+                </div>
                 <p className="text-muted-foreground my-2 text-xs">
                   {new Date(a.created_at).toLocaleString("ko-KR", {
                     timeZone: "Asia/Seoul",
@@ -718,27 +961,100 @@ export default function Admin({
           )}
         </DialogContent>
       </Dialog>
-      <ConfirmDialog
-        open={confirm}
-        onOpenChange={setConfirm}
-        title="전체 공지를 발송할까요?"
-        description={
-          <>
-            <strong>{d.counts?.users ?? 0}명의 사용자</strong>에게 사이트 알림이
-            전달돼요. 발송한 알림은 회수할 수 없으니 내용을 확인해 주세요.
-          </>
-        }
-        confirmLabel="모든 사용자에게 보내기"
-        busy={busy}
-        onConfirm={() => {
-          if (!formRef.current) return;
-          const form = new FormData(formRef.current);
-          requestId.current ??= crypto.randomUUID();
-          form.set("id", requestId.current);
-          submit(form, { method: "post" });
-          setConfirm(false);
-        }}
-      />
+      <Dialog open={confirm} onOpenChange={setConfirm}>
+        <DialogContent className="max-h-[92vh] overflow-y-auto rounded-3xl p-0 sm:max-w-5xl">
+          <DialogHeader className="border-b px-6 py-5 text-left sm:px-8">
+            <DialogTitle className="text-xl font-black">
+              공지 발송 전 미리보기
+            </DialogTitle>
+            <DialogDescription>
+              {announcementAudience === "all"
+                ? (d.counts?.users ?? 0) + "명의 사용자에게 전달돼요."
+                : "선택한 " +
+                  selectedAnnouncementRecipients.length +
+                  "명에게만 전달돼요."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-6 p-6 lg:grid-cols-2 lg:p-8">
+            <section>
+              <div className="mb-3 flex items-center gap-2 text-sm font-black">
+                <BellIcon className="size-4 text-emerald-500" />앱 알림 미리보기
+              </div>
+              <div className="bg-card rounded-3xl border p-5 shadow-sm">
+                <div className="flex items-start gap-4">
+                  <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-500">
+                    <MegaphoneIcon className="size-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-black break-words">
+                      {announcementTitle}
+                    </p>
+                    <p className="text-muted-foreground mt-2 line-clamp-5 text-sm leading-6 whitespace-pre-wrap">
+                      {announcementBody}
+                    </p>
+                    <p className="text-muted-foreground mt-3 text-xs">
+                      방금 전
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <p className="text-muted-foreground mt-2 text-xs">
+                알림 목록에서는 긴 내용이 일부만 보이고, 알림을 열면 전체 내용을
+                확인할 수 있어요.
+              </p>
+            </section>
+
+            <section>
+              <div className="mb-3 flex items-center gap-2 text-sm font-black">
+                <MailIcon className="size-4 text-violet-500" />
+                이메일 미리보기
+              </div>
+              <div className="overflow-hidden rounded-3xl border bg-[#f2f5f1] p-5 text-[#1d2922] shadow-sm sm:p-7">
+                <p className="mb-4 text-xs font-black tracking-[0.12em] text-emerald-600">
+                  EOKKA
+                </p>
+                <div className="rounded-3xl border border-[#d8e0da] bg-[#fbfcfa] p-6">
+                  <h3 className="text-xl font-black break-words">
+                    {announcementTitle}
+                  </h3>
+                  <p className="mt-4 text-sm leading-7 whitespace-pre-wrap text-[#59655e]">
+                    {announcementBody}
+                  </p>
+                  <span className="mt-6 inline-flex rounded-full bg-[#111827] px-5 py-3 text-sm font-black text-white">
+                    EOKKA에서 확인하기
+                  </span>
+                </div>
+              </div>
+            </section>
+          </div>
+          <div className="flex flex-col-reverse gap-2 border-t px-6 py-5 sm:flex-row sm:justify-end sm:px-8">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => setConfirm(false)}
+            >
+              다시 수정하기
+            </Button>
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                if (!formRef.current) return;
+                const form = new FormData(formRef.current);
+                requestId.current ??= crypto.randomUUID();
+                form.set("id", requestId.current);
+                submit(form, { method: "post" });
+                setConfirm(false);
+              }}
+            >
+              {announcementAudience === "all"
+                ? "모든 사용자에게 발송하기"
+                : selectedAnnouncementRecipients.length + "명에게 발송하기"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

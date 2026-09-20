@@ -25,6 +25,11 @@ export async function loadCachedRouteData<T>(
   return data;
 }
 
+export function hasCachedRouteData(key: string) {
+  const cached = routeDataCache.get(key);
+  return cached?.version === currentVersion();
+}
+
 export function usePrimeRouteDataCache<T>(key: string, data: T) {
   useEffect(() => {
     routeDataCache.set(key, { version: currentVersion(), data });

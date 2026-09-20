@@ -176,6 +176,20 @@
       "when": 1789536011281,
       "tag": "0024_moaning_thunderball",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1789888690002,
+      "tag": "0025_chubby_terrax",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1789889266525,
+      "tag": "0026_yellow_bloodaxe",
+      "breakpoints": true
     }
   ]
 }
