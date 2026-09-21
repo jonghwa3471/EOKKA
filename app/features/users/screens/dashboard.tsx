@@ -226,7 +226,6 @@ export async function action({ request }: Route.ActionArgs) {
   if (!user) throw new Response("Unauthorized", { status: 401 });
 
   const formData = await request.formData();
-  const intent = String(formData.get("intent") ?? "set-preferred-goal");
   const goalAmount = Number(formData.get("goalAmount"));
   const history = await getActiveAnalysisHistory(user.id);
   const validGoals = new Set(history.map((item) => item.goalAmount));
@@ -2874,7 +2873,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                 선택한 목표의 최근 기록을 대시보드에서 우선 표시해요.
               </p>
             </div>
-            <Form method="post" className="flex flex-wrap gap-2">
+            <Form method="post" className="flex flex-wrap justify-end gap-2">
               {goalOptions.map((goal) => (
                 <Button
                   key={goal}

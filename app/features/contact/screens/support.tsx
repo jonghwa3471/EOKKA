@@ -213,7 +213,7 @@ export default function Support({
           <MessageSquareHeartIcon className="mb-4 size-9 text-emerald-500" />
           <h1 className="text-3xl font-black">함께 만드는 EOKKA</h1>
           <p className="text-muted-foreground mt-3">
-            불편했던 점이나 바라는 기능을 함께 나눠 주세요. 문의와 운영팀의
+            불편했던 점이나 바라는 기능을 함께 나눠 주세요. 문의와 운영자의
             답변은 모든 사용자가 볼 수 있어요.
           </p>
         </div>
@@ -362,7 +362,7 @@ export default function Support({
         <DialogContent className="max-h-[88vh] overflow-y-auto rounded-3xl p-0 sm:max-w-2xl">
           <DialogTitle className="sr-only">문의 상세</DialogTitle>
           <DialogDescription className="sr-only">
-            선택한 문의와 EOKKA 운영팀의 답변입니다.
+            선택한 문의와 EOKKA 운영자의 답변입니다.
           </DialogDescription>
           {selectedTicket && (
             <SupportThread
@@ -390,7 +390,7 @@ export default function Support({
               새 문의 작성
             </DialogTitle>
             <DialogDescription className="leading-6">
-              작성한 내용과 운영팀 답변은 모든 사용자에게 공개돼요.
+              작성한 내용과 운영자 답변은 모든 사용자에게 공개돼요.
             </DialogDescription>
           </DialogHeader>
           {actionData?.error && actionData.intent === "create" && (

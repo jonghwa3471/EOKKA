@@ -394,7 +394,7 @@ export default function InvestmentInsights({
                 선택한 목표와 연결된 기록만 모아서 분석해요.
               </p>
             </div>
-            <Form method="post" className="flex flex-wrap gap-2">
+            <Form method="post" className="flex flex-wrap justify-end gap-2">
               {goalOptions.map((goal) => (
                 <Button
                   key={goal}

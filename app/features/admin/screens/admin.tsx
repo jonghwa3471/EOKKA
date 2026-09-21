@@ -136,7 +136,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     .parse(url.searchParams.get("status") ?? "all");
   if (ticket && !z.string().uuid().safeParse(ticket).success)
     throw new Response("잘못된 문의 주소예요.", { status: 400 });
-  const overview = await getAdminOverview(search, page);
+  const overview = await getAdminOverview(search, page, statusFilter);
   if (ticket && !overview.tickets.some((item) => item.id === ticket))
     throw new Response("문의를 찾을 수 없어요.", { status: 404 });
   return {
@@ -397,20 +397,57 @@ export default function Admin({
           사용자의 목소리를 듣고, 달라진 EOKKA를 알려 주세요.
         </p>
       </header>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <div className={panel}>
           <p className="text-muted-foreground text-sm">전체 사용자</p>
-          <strong className="mt-2 block text-3xl">
+          <Link
+            to="/dashboard/admin?tab=users"
+            className="mt-2 inline-flex items-baseline text-3xl font-black text-sky-500 transition hover:translate-x-0.5 hover:text-sky-400"
+            aria-label={`전체 사용자 ${d.counts?.users ?? 0}명 보기`}
+          >
             {d.counts?.users ?? 0}
             <span className="ml-1 text-sm">명</span>
-          </strong>
+            <ChevronRightIcon className="ml-1 size-5 self-center" />
+          </Link>
         </div>
-        <div className={panel}>
-          <p className="text-muted-foreground text-sm">답변을 기다리는 문의</p>
-          <strong className="mt-2 block text-3xl text-emerald-500">
+        <div className="rounded-3xl border border-amber-500/20 bg-amber-500/[0.06] p-5 sm:p-7">
+          <p className="text-muted-foreground text-sm">답변 대기</p>
+          <Link
+            to="/dashboard/admin?tab=inbox&status=open"
+            preventScrollReset
+            className="mt-2 inline-flex items-baseline text-3xl font-black text-amber-500 transition hover:translate-x-0.5 hover:text-amber-400"
+            aria-label={`답변 대기 문의 ${d.counts?.open ?? 0}건 보기`}
+          >
             {d.counts?.open ?? 0}
             <span className="ml-1 text-sm">건</span>
-          </strong>
+            <ChevronRightIcon className="ml-1 size-5 self-center" />
+          </Link>
+        </div>
+        <div className="rounded-3xl border border-emerald-500/20 bg-emerald-500/[0.06] p-5 sm:p-7">
+          <p className="text-muted-foreground text-sm">답변 완료</p>
+          <Link
+            to="/dashboard/admin?tab=inbox&status=answered"
+            preventScrollReset
+            className="mt-2 inline-flex items-baseline text-3xl font-black text-emerald-500 transition hover:translate-x-0.5 hover:text-emerald-400"
+            aria-label={`답변 완료 문의 ${d.counts?.answered ?? 0}건 보기`}
+          >
+            {d.counts?.answered ?? 0}
+            <span className="ml-1 text-sm">건</span>
+            <ChevronRightIcon className="ml-1 size-5 self-center" />
+          </Link>
+        </div>
+        <div className="rounded-3xl border border-slate-500/20 bg-slate-500/[0.06] p-5 sm:p-7">
+          <p className="text-muted-foreground text-sm">종료</p>
+          <Link
+            to="/dashboard/admin?tab=inbox&status=closed"
+            preventScrollReset
+            className="mt-2 inline-flex items-baseline text-3xl font-black text-slate-500 transition hover:translate-x-0.5 hover:text-slate-400"
+            aria-label={`종료된 문의 ${d.counts?.closed ?? 0}건 보기`}
+          >
+            {d.counts?.closed ?? 0}
+            <span className="ml-1 text-sm">건</span>
+            <ChevronRightIcon className="ml-1 size-5 self-center" />
+          </Link>
         </div>
       </div>
       <nav aria-label="관리자 메뉴" className="flex flex-wrap gap-2">

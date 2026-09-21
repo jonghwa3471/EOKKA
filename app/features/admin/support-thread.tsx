@@ -101,7 +101,7 @@ export default function SupportThread({
         {thread.messages.map((message) => {
           const fromStaff = message.is_staff === "yes";
           const authorName = fromStaff
-            ? "EOKKA 운영팀"
+            ? "EOKKA 운영자"
             : (thread.ticket.authorName ?? "문의 작성자");
           return (
             <div key={message.id} className="flex items-start gap-3">

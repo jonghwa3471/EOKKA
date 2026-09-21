@@ -354,7 +354,7 @@ export async function deleteSupportTicket(
           user_id: recipient.user_id,
           type: "support_deleted",
           title: staff
-            ? "문의글이 운영팀에 의해 삭제됐어요"
+            ? "문의글이 EOKKA 운영자에 의해 삭제됐어요"
             : "문의글이 작성자에 의해 삭제됐어요",
           message: ticket.title,
           href: staff ? "/contact" : "/dashboard/admin?tab=inbox",
@@ -421,7 +421,7 @@ export async function deleteSupportMessage(
           user_id: recipient.user_id,
           type: "support_deleted",
           title: staff
-            ? "문의 댓글이 운영팀에 의해 삭제됐어요"
+            ? "문의 댓글이 EOKKA 운영자에 의해 삭제됐어요"
             : "문의 댓글이 작성자에 의해 삭제됐어요",
           message: ticket.title,
           href: staff
@@ -559,7 +559,11 @@ export async function getAdminAnnouncementPage(offset: number, limit = 20) {
   };
 }
 
-export async function getAdminOverview(search: string, page: number) {
+export async function getAdminOverview(
+  search: string,
+  page: number,
+  status: "all" | "open" | "answered" | "closed" = "all",
+) {
   const [tickets, announcementPage, users, counts, announcementRecipients] =
     await Promise.all([
       db.execute<{
@@ -596,6 +600,7 @@ export async function getAdminOverview(search: string, page: number) {
       join profiles p on p.profile_id = st.user_id
       join auth.users u on u.id = st.user_id
       left join admin_members a on a.user_id = st.user_id
+      ${status === "all" ? sql`` : sql`where st.status = ${status}`}
       order by st.created_at desc limit 100`),
       getAdminAnnouncementPage(0),
       db.execute<{
@@ -614,8 +619,17 @@ export async function getAdminOverview(search: string, page: number) {
       from profiles p join auth.users u on u.id = p.profile_id left join admin_members a on a.user_id = p.profile_id
       where p.name ilike ${`%${search}%`} or u.email ilike ${`%${search}%`}
       order by p.created_at desc limit 21 offset ${page * 20}`),
-      db.execute<{ users: number; open: number }>(
-        sql`select (select count(*)::int from profiles) as users, (select count(*)::int from support_tickets where status = 'open') as open`,
+      db.execute<{
+        users: number;
+        open: number;
+        answered: number;
+        closed: number;
+      }>(
+        sql`select
+          (select count(*)::int from profiles) as users,
+          (select count(*)::int from support_tickets where status = 'open') as open,
+          (select count(*)::int from support_tickets where status = 'answered') as answered,
+          (select count(*)::int from support_tickets where status = 'closed') as closed`,
       ),
       db.execute<{
         id: string;
