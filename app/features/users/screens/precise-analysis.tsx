@@ -46,6 +46,7 @@ import {
   calculateManagedHoldings,
   getManagedPortfolio,
   investmentMonthsSince,
+  managedPortfolioCashFlows,
 } from "~/features/stocks/portfolio/portfolio.server";
 import { getAutomaticAnalysisSettings } from "~/features/users/automatic-analysis-settings.server";
 
@@ -197,6 +198,7 @@ export async function action({ request }: Route.ActionArgs) {
       goalAmount: parsed.goalAmount,
       monthlyContribution: parsed.monthlyContribution,
       investmentPeriodMonths: investmentMonthsSince(firstBoughtOn, seoulDate()),
+      cashFlows: managedPortfolioCashFlows(managed.transactions),
       holdings: holdings.map((holding) => ({
         stockId: holding.stockId,
         averagePrice: holding.averagePrice,

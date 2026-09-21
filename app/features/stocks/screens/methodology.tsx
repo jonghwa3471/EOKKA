@@ -6,6 +6,7 @@ import {
   ChartSplineIcon,
   CircleAlertIcon,
   DatabaseIcon,
+  GaugeIcon,
   GitCompareArrowsIcon,
   RouteIcon,
 } from "lucide-react";
@@ -27,7 +28,13 @@ const steps = [
     icon: CalculatorIcon,
     title: "현재 평가금액 계산",
     description:
-      "종목별 현재가에 보유 수량을 곱하고, 미국 주식은 조회 시점 환율로 원화 환산합니다. 평균 매수가는 현재 손익 계산에만 사용해요.",
+      "모든 종목은 분석에 사용할 수 있는 가장 최근 종가를 기준으로 맞춰요. 종목별 종가에 보유 수량을 곱하고, 해외 주식은 해당 기준일 환율로 원화 환산합니다.",
+  },
+  {
+    icon: GaugeIcon,
+    title: "개인 연평균 수익률 계산",
+    description:
+      "정밀 분석은 매수·매도 날짜, 거래 가격과 당시 환율, 현재 평가금액을 함께 사용해 돈을 넣고 뺀 시점까지 고려한 수익률을 계산해요. 빠른 분석은 거래 날짜가 없으므로 입력한 투자 기간과 원금·현재 가치로 근사해요.",
   },
   {
     icon: DatabaseIcon,
@@ -40,6 +47,12 @@ const steps = [
     title: "과거와 시장 기준 혼합",
     description:
       "과거 수익률의 평균과 변동성을 분리합니다. 변동성은 유지하고 평균의 영향만 시간이 갈수록 줄여 장기 시장 수준으로 수렴시켜요.",
+  },
+  {
+    icon: GitCompareArrowsIcon,
+    title: "개인 성과를 제한적으로 반영",
+    description:
+      "현재 평가금액은 미래 경로의 출발점에 그대로 반영하고, 개인 연평균 수익률은 투자 이력이 쌓인 만큼만 예상 수익률을 조금 조정하는 데 사용해요. 짧은 기간의 급등이나 급락이 수십 년 전망을 지배하지 않도록 영향에는 상한을 둬요.",
   },
   {
     icon: RouteIcon,
@@ -70,8 +83,9 @@ export default function MethodologyScreen() {
             어떻게 계산하나요?
           </h1>
           <p className="text-muted-foreground mx-auto mt-6 max-w-2xl leading-7 md:text-lg">
-            AI가 숫자를 임의로 만드는 것이 아닙니다. 가격 데이터와 정해진 계산
-            모델이 결과를 만들고, 화면은 그 결과를 이해하기 쉽게 설명해요.
+            가격·환율·매매 기록과 정해진 계산 모델이 숫자를 만들고, AI는 그
+            결과를 이해하기 쉬운 말로 설명해요. 같은 입력과 같은 기준일이라면
+            시나리오 결과도 같게 유지돼요.
           </p>
         </div>
       </section>
@@ -82,7 +96,7 @@ export default function MethodologyScreen() {
             {steps.map(({ icon: Icon, title, description }, index) => (
               <article
                 key={title}
-                className="grid gap-5 rounded-2xl border bg-card p-6 sm:grid-cols-[auto_1fr] sm:items-start md:p-7"
+                className="bg-card grid gap-5 rounded-2xl border p-6 sm:grid-cols-[auto_1fr] sm:items-start md:p-7"
               >
                 <div className="flex size-12 items-center justify-center rounded-xl bg-sky-500/10 text-sky-500">
                   <Icon className="size-5" />
@@ -102,13 +116,13 @@ export default function MethodologyScreen() {
         </div>
       </section>
 
-      <section className="border-y bg-muted/30 px-5 py-20 md:py-24">
+      <section className="bg-muted/30 border-y px-5 py-20 md:py-24">
         <div className="mx-auto max-w-5xl">
           <h2 className="text-center text-3xl font-black">
             장기 계산의 핵심 기준
           </h2>
-          <div className="mt-10 grid gap-4 md:grid-cols-2">
-            <article className="rounded-2xl border bg-background p-6">
+          <div className="mt-10 grid gap-4 lg:grid-cols-3">
+            <article className="bg-background rounded-2xl border p-6">
               <h3 className="font-black">과거 평균수익률 영향</h3>
               <dl className="mt-4 space-y-3 text-sm">
                 {[
@@ -132,7 +146,32 @@ export default function MethodologyScreen() {
               </p>
             </article>
 
-            <article className="rounded-2xl border bg-background p-6">
+            <article className="bg-background rounded-2xl border p-6">
+              <h3 className="font-black">개인 성과 반영 범위</h3>
+              <dl className="mt-4 space-y-3 text-sm">
+                {[
+                  ["6개월 미만", "미반영"],
+                  ["6개월~5년", "점진적으로 확대"],
+                  ["5년 이상", "최대 25% 신뢰"],
+                  ["최종 예상수익률 조정", "최대 ±2.5%p"],
+                ].map(([period, weight]) => (
+                  <div
+                    key={period}
+                    className="flex justify-between gap-4 border-b pb-3 last:border-0 last:pb-0"
+                  >
+                    <dt className="text-muted-foreground">{period}</dt>
+                    <dd className="text-right font-black">{weight}</dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="text-muted-foreground mt-4 text-xs leading-5">
+                시장 기준과 비교한 개인 성과 차이는 ±10%p로 먼저 제한해요. 투자
+                기간이 하루 늘었다고 결과가 갑자기 바뀌지 않도록 신뢰도는 매일
+                부드럽게 높아져요.
+              </p>
+            </article>
+
+            <article className="bg-background rounded-2xl border p-6">
               <h3 className="font-black">명목 장기 시장 기준</h3>
               <dl className="mt-4 space-y-3 text-sm">
                 {[
@@ -168,8 +207,13 @@ export default function MethodologyScreen() {
           <ul className="text-muted-foreground mt-5 grid gap-3 leading-6 md:grid-cols-2">
             <li>• 과거 수익률은 미래 수익률을 보장하지 않아요.</li>
             <li>
-              • 세금과 거래 수수료, 입력한 월 투자금 외 비정기 매수는 반영하지
-              않아요.
+              • 세금과 거래 수수료는 반영하지 않아요. 정밀 분석의 과거 성과에는
+              입력한 매매 기록을 반영하지만, 미래 경로에는 입력한 월 투자금만
+              정기적으로 추가해요.
+            </li>
+            <li>
+              • 빠른 분석의 개인 연평균 수익률은 실제 거래 날짜가 없는
+              근사값이에요.
             </li>
             <li>• 30·50년 결과는 기간이 길수록 불확실성이 커져요.</li>
             <li>• 개별 기업의 상장폐지와 사업 변화는 직접 예측하지 않아요.</li>

@@ -6,6 +6,7 @@ import {
   calculateManagedHoldings,
   getManagedPortfolio,
   investmentMonthsSince,
+  managedPortfolioCashFlows,
 } from "~/features/stocks/portfolio/portfolio.server";
 import { managedPortfolios } from "~/features/stocks/portfolio/schema";
 import { stocks } from "~/features/stocks/schema";
@@ -209,6 +210,10 @@ export async function runAutomaticPortfolioAnalysis(): Promise<AutomaticAnalysis
           : snapshot.result.investmentPeriodMonths === undefined
             ? 12
             : snapshot.result.investmentPeriodMonths,
+        cashFlows:
+          managedHoldings && managed
+            ? managedPortfolioCashFlows(managed.transactions)
+            : undefined,
         holdings,
       };
       const result = await analyzePortfolio(input);

@@ -6,12 +6,15 @@ import {
   personalPerformanceWeight,
 } from "./scenario-adjustment";
 
-test("투자 기간에 맞는 신뢰 가중치를 적용한다", () => {
+test("투자 기간에 따라 신뢰 가중치를 끊김 없이 높인다", () => {
   assert.equal(personalPerformanceWeight(5), 0);
-  assert.equal(personalPerformanceWeight(6), 0.05);
-  assert.equal(personalPerformanceWeight(12), 0.1);
-  assert.equal(personalPerformanceWeight(24), 0.15);
-  assert.equal(personalPerformanceWeight(36), 0.2);
+  assert.equal(personalPerformanceWeight(6), 0);
+  assert.ok(personalPerformanceWeight(12) > 0);
+  assert.ok(personalPerformanceWeight(24) > personalPerformanceWeight(12));
+  assert.ok(personalPerformanceWeight(36) > personalPerformanceWeight(35));
+  assert.ok(
+    personalPerformanceWeight(36) - personalPerformanceWeight(35) < 0.01,
+  );
   assert.equal(personalPerformanceWeight(60), 0.25);
 });
 

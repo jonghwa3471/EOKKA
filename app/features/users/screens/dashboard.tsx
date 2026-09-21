@@ -2718,6 +2718,11 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                   ? "text-rose-500"
                   : "text-blue-500"
             }
+            detail={
+              latest.result.personalReturnMethod === "money-weighted"
+                ? "매매일지 현금흐름 기준"
+                : "투자 기간 기준 근사값"
+            }
             change={
               annualizedReturnRate === null ? (
                 <span className="text-muted-foreground text-xs">

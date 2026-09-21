@@ -11,6 +11,10 @@ import {
 } from "./kis-client.server";
 import { getMarketData } from "./market-data.server";
 import { getStockMarketMode } from "./market-mode.server";
+import {
+  type DatedCashFlow,
+  moneyWeightedAnnualReturn,
+} from "./personal-return";
 import { calculatePersonalReturnAdjustment } from "./scenario-adjustment";
 import { stocks } from "./schema";
 
@@ -22,6 +26,7 @@ export interface AnalysisInput {
   goalAmount: number;
   monthlyContribution: number;
   investmentPeriodMonths: number | null;
+  cashFlows?: DatedCashFlow[];
   holdings: Array<{
     stockId: number;
     averagePrice: number;
@@ -375,12 +380,18 @@ export async function analyzePortfolio(
     cagr(portfolioReturns, Math.min(60, portfolioReturns.length)) ?? 0;
   const profit = currentValue - totalCost;
   const returnRate = (profit / totalCost) * 100;
+  const moneyWeightedReturn = input.cashFlows?.length
+    ? moneyWeightedAnnualReturn(input.cashFlows, currentValue, analysisAsOf)
+    : null;
   const annualizedReturnRate =
-    currentValue > 0 && totalCost > 0 && input.investmentPeriodMonths !== null
+    moneyWeightedReturn ??
+    (currentValue > 0 && totalCost > 0 && input.investmentPeriodMonths !== null
       ? ((currentValue / totalCost) ** (12 / input.investmentPeriodMonths) -
           1) *
         100
-      : null;
+      : null);
+  const personalReturnMethod =
+    moneyWeightedReturn === null ? "estimated" : "money-weighted";
   const rawSimulationMonthlyDrift =
     portfolioReturns.reduce((sum, rate) => sum + Math.log1p(rate), 0) /
     portfolioReturns.length;
@@ -827,6 +838,7 @@ export async function analyzePortfolio(
     profit,
     returnRate,
     annualizedReturnRate,
+    personalReturnMethod,
     personalReturnAdjustment,
     priceBasis: marketData[0].data.priceBasis,
     exchangeRate:
@@ -882,7 +894,7 @@ export async function analyzePortfolio(
         ? investmentPeriodDescription === null
           ? "투자 기간을 입력하지 않아 개인 연환산 수익률은 미래 시나리오에 반영하지 않았습니다."
           : "투자 기간이 6개월 미만이라 개인 연환산 수익률은 미래 시나리오에 반영하지 않았습니다."
-        : `투자 기간 ${investmentPeriodDescription}의 신뢰 가중치 ${(personalReturnAdjustment.confidenceWeight * 100).toFixed(0)}%를 적용해 개인 성과를 미래 경로의 연 수익률에 ${personalReturnAdjustment.appliedAnnualAdjustment >= 0 ? "+" : ""}${personalReturnAdjustment.appliedAnnualAdjustment.toFixed(2)}%p 제한적으로 반영했습니다.`,
+        : `투자 기간 ${investmentPeriodDescription}에 따라 개인 성과를 ${(personalReturnAdjustment.confidenceWeight * 100).toFixed(1)}%만 반영해 미래 경로의 연 수익률을 ${personalReturnAdjustment.appliedAnnualAdjustment >= 0 ? "+" : ""}${personalReturnAdjustment.appliedAnnualAdjustment.toFixed(2)}%p 조정했습니다. 투자 기간이 늘어날수록 반영 비율은 5년까지 조금씩 높아집니다.`,
       `20년 안에 ${goalLabel(input.goalAmount)}을 넘은 시뮬레이션 비율은 ${probabilityAt(240).toFixed(1)}%입니다.`,
       marketMode === "domestic"
         ? "금융위원회 공공데이터의 종가를 사용하므로 액면분할·병합 같은 기업행사가 과거 수익률에 영향을 줄 수 있습니다."

@@ -11,11 +11,8 @@ export function personalPerformanceWeight(
 ) {
   if (investmentPeriodMonths === null) return 0;
   if (investmentPeriodMonths < 6) return 0;
-  if (investmentPeriodMonths < 12) return 0.05;
-  if (investmentPeriodMonths < 24) return 0.1;
-  if (investmentPeriodMonths < 36) return 0.15;
-  if (investmentPeriodMonths < 60) return 0.2;
-  return 0.25;
+  const progress = Math.min(1, (investmentPeriodMonths - 6) / 54);
+  return progress * 0.25;
 }
 
 export function calculatePersonalReturnAdjustment({
@@ -50,8 +47,7 @@ export function calculatePersonalReturnAdjustment({
     historicalAnnualDecimal + appliedAnnualAdjustment / 100,
   );
   const monthlyLogAdjustment =
-    (Math.log1p(adjustedAnnualDecimal) -
-      Math.log1p(historicalAnnualDecimal)) /
+    (Math.log1p(adjustedAnnualDecimal) - Math.log1p(historicalAnnualDecimal)) /
     12;
 
   return {

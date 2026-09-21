@@ -279,3 +279,18 @@ export function calculateManagedHoldings(
       averagePrice: position.costInCurrency / position.quantity,
     }));
 }
+
+export function managedPortfolioCashFlows(
+  transactions: NonNullable<
+    Awaited<ReturnType<typeof getManagedPortfolio>>
+  >["transactions"],
+) {
+  return transactions.map((transaction) => ({
+    date: transaction.tradedOn,
+    amountKrw:
+      transaction.unitPrice *
+      transaction.quantity *
+      transaction.exchangeRate *
+      (transaction.type === "BUY" ? -1 : 1),
+  }));
+}

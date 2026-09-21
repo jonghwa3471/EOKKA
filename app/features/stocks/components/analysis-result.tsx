@@ -2566,8 +2566,10 @@ export function AnalysisResultView({
         )}
       </div>
       <p className="text-muted-foreground mt-2 text-[11px] leading-5">
-        현재 수익률은 매수 이후의 누적 수익률이고, 내 연평균 수익률은 입력한
-        투자 기간을 기준으로 연복리 환산한 참고값이에요.
+        현재 수익률은 매수 이후의 누적 수익률이에요. 내 연평균 수익률은{" "}
+        {result.personalReturnMethod === "money-weighted"
+          ? "매매일지의 매수·매도 날짜, 거래 당시 환율과 현재 평가금액을 반영한 금액가중 연환산 수익률이에요."
+          : "입력한 투자 기간과 현재 매입원금·평가금액으로 계산한 근사 연복리 수익률이에요."}
       </p>
 
       <div className="mt-5 rounded-2xl border p-5">

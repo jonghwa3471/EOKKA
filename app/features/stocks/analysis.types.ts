@@ -11,6 +11,7 @@ export interface AnalysisResult {
   profit: number;
   returnRate: number;
   annualizedReturnRate?: number | null;
+  personalReturnMethod?: "money-weighted" | "estimated";
   personalReturnAdjustment?: {
     historicalAnnualReturn: number;
     personalAnnualizedReturn: number | null;
