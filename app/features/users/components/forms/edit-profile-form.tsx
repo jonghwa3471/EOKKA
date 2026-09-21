@@ -31,6 +31,7 @@ import {
 } from "~/core/components/ui/dialog";
 import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
+import { invalidateRouteDataCache } from "~/core/lib/route-data-cache";
 
 export default function EditProfileForm({
   name,
@@ -72,6 +73,7 @@ export default function EditProfileForm({
       initialNameRef.current = profileName;
       initialMarketingConsentRef.current = marketingEnabled;
       setHasNewAvatar(false);
+      invalidateRouteDataCache("profile");
       const fileInput = formRef.current?.elements.namedItem("avatar");
       if (fileInput instanceof HTMLInputElement) fileInput.value = "";
       formRef.current?.blur();

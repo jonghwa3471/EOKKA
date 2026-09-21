@@ -288,9 +288,9 @@ export default function App() {
     targetPath !== location.pathname;
   const isInsideDashboardShell =
     location.pathname.startsWith("/dashboard") ||
-    location.pathname.startsWith("/account/");
+    location.pathname.startsWith("/account");
   const isTargetInsideDashboardShell =
-    targetPath.startsWith("/dashboard") || targetPath.startsWith("/account/");
+    targetPath.startsWith("/dashboard") || targetPath.startsWith("/account");
   const targetSkeletonVariant = targetPath.startsWith("/dashboard/history")
     ? "history"
     : targetPath.startsWith("/dashboard/portfolio")
@@ -299,7 +299,7 @@ export default function App() {
         ? "precise-analysis"
         : targetPath.startsWith("/dashboard/insights")
           ? "insights"
-          : targetPath.startsWith("/account/")
+          : targetPath.startsWith("/account")
             ? "account"
             : targetPath.startsWith("/dashboard/pro")
               ? "pro"

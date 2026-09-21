@@ -129,6 +129,7 @@ export default [
           "features/notifications/screens/notifications.tsx",
         ),
       ]),
+      route("/account", "features/users/screens/profile.tsx"),
       route("/account/edit", "features/users/screens/account.tsx"),
     ]),
   ]),

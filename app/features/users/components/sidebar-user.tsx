@@ -127,9 +127,9 @@ export default function SidebarUser({
                   asChild
                   className="hover:[&>svg]:animate-sidebar-menu-icon hover:[&>svg]:text-emerald-500 motion-reduce:hover:[&>svg]:animate-none"
                 >
-                  <Link to="/account/edit" viewTransition>
+                  <Link to="/account" viewTransition>
                     <UserCircle2Icon />
-                    프로필 설정
+                    프로필
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem

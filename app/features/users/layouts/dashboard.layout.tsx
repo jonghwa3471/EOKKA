@@ -30,7 +30,7 @@ function DashboardRouteTransitionSkeleton() {
   const [visible, setVisible] = useState(false);
   const targetPath = navigation.location?.pathname ?? "";
   const targetStaysInDashboard =
-    targetPath.startsWith("/dashboard") || targetPath.startsWith("/account/");
+    targetPath.startsWith("/dashboard") || targetPath.startsWith("/account");
   const isRouteLoading =
     navigation.state === "loading" &&
     !navigation.formData &&
@@ -46,7 +46,7 @@ function DashboardRouteTransitionSkeleton() {
         ? "precise-analysis"
         : targetPath.startsWith("/dashboard/insights")
           ? "insights"
-          : targetPath.startsWith("/account/")
+          : targetPath.startsWith("/account")
             ? "account"
             : targetPath.startsWith("/dashboard/pro")
               ? "pro"
@@ -131,7 +131,7 @@ export function shouldRevalidate({
   defaultShouldRevalidate: boolean;
 }) {
   const isDashboardShell = (pathname: string) =>
-    pathname.startsWith("/dashboard") || pathname.startsWith("/account/");
+    pathname.startsWith("/dashboard") || pathname.startsWith("/account");
   if (
     !formMethod &&
     isDashboardShell(currentUrl.pathname) &&
@@ -175,23 +175,25 @@ export default function DashboardLayout({ loaderData }: Route.ComponentProps) {
   }, []);
   const pageTitle = pathname.startsWith("/dashboard/admin")
     ? "운영 관리"
-    : pathname.startsWith("/account/")
+    : pathname.startsWith("/account/edit")
       ? "프로필 설정"
-      : pathname.startsWith("/dashboard/portfolio")
-        ? "내 포트폴리오"
-        : pathname.startsWith("/dashboard/precise-analysis")
-          ? "정밀 분석"
-          : pathname.startsWith("/dashboard/insights")
-            ? "투자 인사이트"
-            : pathname.startsWith("/dashboard/history")
-              ? "분석 기록"
-              : pathname.startsWith("/dashboard/pro")
-                ? "EOKKA Pro"
-                : pathname.startsWith("/dashboard/payments")
-                  ? "결제내역"
-                  : pathname.startsWith("/dashboard/notifications")
-                    ? "알림"
-                    : "내 투자 대시보드";
+      : pathname === "/account"
+        ? "프로필"
+        : pathname.startsWith("/dashboard/portfolio")
+          ? "내 포트폴리오"
+          : pathname.startsWith("/dashboard/precise-analysis")
+            ? "정밀 분석"
+            : pathname.startsWith("/dashboard/insights")
+              ? "투자 인사이트"
+              : pathname.startsWith("/dashboard/history")
+                ? "분석 기록"
+                : pathname.startsWith("/dashboard/pro")
+                  ? "EOKKA Pro"
+                  : pathname.startsWith("/dashboard/payments")
+                    ? "결제내역"
+                    : pathname.startsWith("/dashboard/notifications")
+                      ? "알림"
+                      : "내 투자 대시보드";
   return (
     <SidebarProvider>
       <DashboardSidebar

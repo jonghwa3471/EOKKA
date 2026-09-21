@@ -57,7 +57,7 @@ const dashboardShellTitles: Partial<Record<RouteSkeletonVariant, string>> = {
   portfolio: "내 포트폴리오",
   "precise-analysis": "정밀 분석",
   insights: "투자 인사이트",
-  account: "프로필 설정",
+  account: "프로필",
   pro: "EOKKA Pro",
   payments: "결제내역",
   notifications: "알림",
@@ -173,9 +173,9 @@ const pageCopy: Partial<
     description: "선택한 목표로 저장된 모든 기록을 함께 분석했어요.",
   },
   account: {
-    eyebrow: "PROFILE SETTINGS",
-    title: "프로필 설정",
-    description: "프로필과 로그인 계정, 서비스 데이터를 관리해요.",
+    eyebrow: "MY PROFILE",
+    title: "프로필",
+    description: "내 정보와 연결된 로그인 수단을 한곳에서 확인해요.",
   },
   payments: {
     eyebrow: "PAYMENT HISTORY",

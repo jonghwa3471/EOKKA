@@ -153,9 +153,9 @@ function UserMenu({
               className="hover:[&>svg]:animate-sidebar-menu-icon hover:[&>svg]:text-emerald-500 motion-reduce:hover:[&>svg]:animate-none"
             >
               <SheetClose asChild>
-                <Link to="/account/edit" viewTransition>
+                <Link to="/account" viewTransition>
                   <UserCircle2Icon className="size-4" />
-                  프로필 설정
+                  프로필
                 </Link>
               </SheetClose>
             </DropdownMenuItem>
