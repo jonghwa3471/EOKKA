@@ -16,6 +16,7 @@ import {
   Link,
   data,
   redirect,
+  useFetcher,
   useLocation,
   useNavigation,
   useSubmit,
@@ -45,6 +46,7 @@ import {
 import {
   deleteSupportMessage,
   deleteSupportTicket,
+  getAdminAnnouncementPage,
   getAdminOverview,
   publishAnnouncement,
   replyToTicket,
@@ -69,26 +71,57 @@ export const headers = () => ({ "Cache-Control": "private, no-store" });
 
 const announcementTemplates = [
   {
+    kind: "general",
     label: "일반 공지",
     title: "EOKKA에서 안내해 드려요",
     body: "[안내 내용]\n• 사용자에게 전달할 내용을 적어 주세요.\n\n[확인해 주세요]\n• 함께 확인해야 할 내용이나 유의사항을 적어 주세요.",
   },
   {
+    kind: "update",
     label: "서비스 업데이트",
     title: "EOKKA 업데이트 소식을 알려드려요",
     body: "[무엇이 바뀌었나요?]\n• 변경된 기능을 적어 주세요.\n\n[언제 적용되나요?]\n• 적용 날짜와 시간을 적어 주세요.\n\n[확인해 주세요]\n• 사용자가 알아야 할 내용을 적어 주세요.",
   },
   {
+    kind: "maintenance",
     label: "서비스 점검",
     title: "EOKKA 서비스 점검을 안내해 드려요",
     body: "[점검 일시]\n• 시작 시간과 종료 예정 시간을 적어 주세요.\n\n[점검 내용]\n• 점검하는 기능을 적어 주세요.\n\n[이용 안내]\n• 점검 중 이용할 수 없는 기능을 적어 주세요.",
   },
   {
+    kind: "event",
     label: "이벤트 안내",
     title: "EOKKA 이벤트가 시작됐어요",
     body: "[이벤트 내용]\n• 혜택을 알기 쉽게 적어 주세요.\n\n[참여 기간]\n• 시작일과 종료일을 적어 주세요.\n\n[참여 방법]\n• 사용자가 따라 할 순서와 주의사항을 적어 주세요.",
   },
 ] as const;
+
+const announcementKindMeta = {
+  general: {
+    label: "일반 공지",
+    className: "bg-slate-500/10 text-slate-600 dark:text-slate-300",
+  },
+  update: {
+    label: "서비스 업데이트",
+    className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  },
+  maintenance: {
+    label: "서비스 점검",
+    className: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  },
+  event: {
+    label: "이벤트 안내",
+    className: "bg-violet-500/10 text-violet-700 dark:text-violet-300",
+  },
+} as const;
+
+function getAnnouncementKindMeta(kind: string) {
+  return announcementKindMeta[
+    kind in announcementKindMeta
+      ? (kind as keyof typeof announcementKindMeta)
+      : "general"
+  ];
+}
 export async function loader({ request }: Route.LoaderArgs) {
   await requireAdmin(request);
   const url = new URL(request.url);
@@ -230,6 +263,12 @@ export default function Admin({
   const [announcementBody, setAnnouncementBody] = useState("");
   const [selectedAnnouncementTemplate, setSelectedAnnouncementTemplate] =
     useState<string | null>(null);
+  const [selectedAnnouncementId, setSelectedAnnouncementId] = useState<
+    string | null
+  >(null);
+  const [displayedAnnouncements, setDisplayedAnnouncements] = useState(
+    d.announcements,
+  );
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(
     d.initialTicketId,
   );
@@ -237,8 +276,12 @@ export default function Admin({
   const formRef = useRef<HTMLFormElement>(null);
   const requestId = useRef<string | null>(null);
   const submit = useSubmit();
+  const announcementFetcher =
+    useFetcher<Awaited<ReturnType<typeof getAdminAnnouncementPage>>>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
+  const hasMoreAnnouncements =
+    announcementFetcher.data?.hasMore ?? d.hasMoreAnnouncements;
   const pendingTab =
     navigation.location?.pathname === "/dashboard/admin"
       ? (new URLSearchParams(navigation.location.search).get("tab") ?? "inbox")
@@ -248,6 +291,29 @@ export default function Admin({
     () => d.tickets.find((ticket) => ticket.id === selectedTicketId) ?? null,
     [d.tickets, selectedTicketId],
   );
+  const selectedAnnouncement = useMemo(
+    () =>
+      displayedAnnouncements.find(
+        (announcement) => announcement.id === selectedAnnouncementId,
+      ) ?? null,
+    [displayedAnnouncements, selectedAnnouncementId],
+  );
+  useEffect(() => {
+    setDisplayedAnnouncements(d.announcements);
+  }, [d.announcements]);
+  useEffect(() => {
+    const page = announcementFetcher.data;
+    if (!page) return;
+    setDisplayedAnnouncements((current) => {
+      const ids = new Set(current.map((announcement) => announcement.id));
+      return [
+        ...current,
+        ...page.announcements.filter(
+          (announcement) => !ids.has(announcement.id),
+        ),
+      ];
+    });
+  }, [announcementFetcher.data]);
   const filteredTickets = useMemo(
     () =>
       d.statusFilter === "all"
@@ -670,6 +736,15 @@ export default function Admin({
             <input type="hidden" name="audience" value={announcementAudience} />
             <input
               type="hidden"
+              name="kind"
+              value={
+                announcementTemplates.find(
+                  (template) => template.label === selectedAnnouncementTemplate,
+                )?.kind ?? "general"
+              }
+            />
+            <input
+              type="hidden"
               name="recipientIds"
               value={announcementRecipientIds.join(",")}
             />
@@ -870,37 +945,68 @@ export default function Admin({
                 : "개별 공지 보내기"}
             </Button>
           </Form>
-          <section className={`${panel} order-1 space-y-5`}>
+          <section className={`${panel} order-1`}>
             <h2 className="text-lg font-bold">발송한 공지 · 최근 20건</h2>
-            {!d.announcements.length && (
-              <p className="text-muted-foreground text-sm">
+            {!displayedAnnouncements.length && (
+              <p className="text-muted-foreground mt-5 text-sm">
                 아직 발송한 공지가 없어요.
               </p>
             )}
-            {d.announcements.map((a) => (
-              <article key={a.id} className="border-b pb-5 last:border-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="font-bold break-words">{a.title}</h3>
-                  <span className="rounded-full bg-violet-500/10 px-2.5 py-1 text-[11px] font-black text-violet-600 dark:text-violet-300">
-                    {a.recipient_user_ids.length
-                      ? a.recipient_user_ids.length === 1
-                        ? (d.announcementRecipients.find(
-                            (user) => user.id === a.recipient_user_ids[0],
-                          )?.name ?? "특정 사용자")
-                        : "특정 사용자 " + a.recipient_user_ids.length + "명"
-                      : "전체 사용자"}
-                  </span>
-                </div>
-                <p className="text-muted-foreground my-2 text-xs">
-                  {new Date(a.created_at).toLocaleString("ko-KR", {
-                    timeZone: "Asia/Seoul",
-                  })}
-                </p>
-                <p className="text-sm leading-7 break-words whitespace-pre-wrap">
-                  {a.body}
-                </p>
-              </article>
-            ))}
+            <div className="mt-4 max-h-[32rem] divide-y overflow-y-auto pr-1">
+              {displayedAnnouncements.map((a) => {
+                const kind = getAnnouncementKindMeta(a.kind);
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => setSelectedAnnouncementId(a.id)}
+                    className="hover:bg-muted/45 grid w-full cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-2 py-3.5 text-left transition-colors first:rounded-t-xl last:rounded-b-xl sm:grid-cols-[auto_minmax(0,1fr)_auto_auto]"
+                  >
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[11px] font-black whitespace-nowrap ${kind.className}`}
+                    >
+                      {kind.label}
+                    </span>
+                    <span className="min-w-0 truncate text-sm font-bold">
+                      {a.title}
+                    </span>
+                    <span className="text-muted-foreground hidden text-xs whitespace-nowrap sm:block">
+                      {a.recipient_user_ids.length
+                        ? a.recipient_user_ids.length === 1
+                          ? (d.announcementRecipients.find(
+                              (user) => user.id === a.recipient_user_ids[0],
+                            )?.name ?? "특정 사용자")
+                          : `특정 사용자 ${a.recipient_user_ids.length}명`
+                        : "전체 사용자"}
+                    </span>
+                    <time className="text-muted-foreground text-xs whitespace-nowrap">
+                      {new Date(a.created_at).toLocaleDateString("ko-KR", {
+                        timeZone: "Asia/Seoul",
+                        month: "numeric",
+                        day: "numeric",
+                      })}
+                    </time>
+                  </button>
+                );
+              })}
+            </div>
+            {hasMoreAnnouncements && (
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-4 w-full"
+                disabled={announcementFetcher.state !== "idle"}
+                onClick={() =>
+                  announcementFetcher.load(
+                    `/api/admin/announcements?offset=${displayedAnnouncements.length}`,
+                  )
+                }
+              >
+                {announcementFetcher.state === "loading"
+                  ? "불러오는 중..."
+                  : "공지 20건 더 불러오기"}
+              </Button>
+            )}
           </section>
         </div>
       )}
@@ -961,6 +1067,49 @@ export default function Admin({
           )}
         </DialogContent>
       </Dialog>
+      <Dialog
+        open={Boolean(selectedAnnouncement)}
+        onOpenChange={(open) => !open && setSelectedAnnouncementId(null)}
+      >
+        <DialogContent className="max-h-[88vh] overflow-y-auto rounded-3xl sm:max-w-xl">
+          {selectedAnnouncement && (
+            <>
+              <DialogHeader className="pr-8 text-left">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-black ${getAnnouncementKindMeta(selectedAnnouncement.kind).className}`}
+                  >
+                    {getAnnouncementKindMeta(selectedAnnouncement.kind).label}
+                  </span>
+                  <span className="bg-muted text-muted-foreground rounded-full px-2.5 py-1 text-[11px] font-black">
+                    {selectedAnnouncement.recipient_user_ids.length
+                      ? selectedAnnouncement.recipient_user_ids.length === 1
+                        ? (d.announcementRecipients.find(
+                            (user) =>
+                              user.id ===
+                              selectedAnnouncement.recipient_user_ids[0],
+                          )?.name ?? "특정 사용자")
+                        : `특정 사용자 ${selectedAnnouncement.recipient_user_ids.length}명`
+                      : "전체 사용자"}
+                  </span>
+                </div>
+                <DialogTitle className="text-xl leading-snug font-black break-words">
+                  {selectedAnnouncement.title}
+                </DialogTitle>
+                <DialogDescription>
+                  {new Date(selectedAnnouncement.created_at).toLocaleString(
+                    "ko-KR",
+                    { timeZone: "Asia/Seoul" },
+                  )}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="bg-muted/35 rounded-2xl border p-5 text-sm leading-7 break-words whitespace-pre-wrap">
+                {selectedAnnouncement.body}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
       <Dialog open={confirm} onOpenChange={setConfirm}>
         <DialogContent className="max-h-[92vh] overflow-y-auto rounded-3xl p-0 sm:max-w-5xl">
           <DialogHeader className="border-b px-6 py-5 text-left sm:px-8">
@@ -1009,20 +1158,39 @@ export default function Admin({
                 <MailIcon className="size-4 text-violet-500" />
                 이메일 미리보기
               </div>
-              <div className="overflow-hidden rounded-3xl border bg-[#f2f5f1] p-5 text-[#1d2922] shadow-sm sm:p-7">
-                <p className="mb-4 text-xs font-black tracking-[0.12em] text-emerald-600">
-                  EOKKA
-                </p>
-                <div className="rounded-3xl border border-[#d8e0da] bg-[#fbfcfa] p-6">
-                  <h3 className="text-xl font-black break-words">
-                    {announcementTitle}
-                  </h3>
-                  <p className="mt-4 text-sm leading-7 whitespace-pre-wrap text-[#59655e]">
-                    {announcementBody}
+              <div className="overflow-hidden rounded-3xl border border-[#20242b] bg-[#090b0f] p-4 text-[#f8fafc] shadow-sm sm:p-6">
+                <div className="mx-auto max-w-[560px]">
+                  <div className="h-[5px] rounded-t-[18px] bg-gradient-to-r from-emerald-500 via-cyan-400 to-violet-500" />
+                  <div className="rounded-b-[18px] border border-t-0 border-[#2b3038] bg-[#15181d] px-6 py-7 sm:px-8">
+                    <div className="mb-7 flex items-center gap-2.5">
+                      <span className="text-base font-extrabold tracking-[0.12em] text-emerald-400">
+                        EOKKA
+                      </span>
+                      <span className="rounded-full border border-[#4b5563] px-2 py-1 text-[10px] font-bold tracking-wider text-[#9ca3af]">
+                        EOKKA 소식
+                      </span>
+                    </div>
+                    <h3 className="text-[22px] leading-snug font-black break-words text-white">
+                      {announcementTitle}
+                    </h3>
+                    <p className="mt-3.5 text-sm leading-7 whitespace-pre-wrap text-[#c4c9d1]">
+                      {announcementBody}
+                    </p>
+                    <span className="mt-7 flex w-full items-center justify-center rounded-[10px] bg-[#f8fafc] px-5 py-3.5 text-sm font-bold text-[#111827]">
+                      공지 확인하기
+                    </span>
+                    <div className="my-7 border-t border-[#30353d]" />
+                    <p className="text-xs leading-5 text-[#8b93a1]">
+                      버튼이 작동하지 않으면 아래 주소를 브라우저에 복사해
+                      주세요.
+                    </p>
+                    <p className="mt-3 text-[11px] leading-5 break-all text-[#67e8f9]">
+                      발송 시 사용자의 EOKKA 알림 페이지 주소가 표시돼요.
+                    </p>
+                  </div>
+                  <p className="mt-4 text-center text-[11px] text-[#626a76]">
+                    © {new Date().getFullYear()} EOKKA
                   </p>
-                  <span className="mt-6 inline-flex rounded-full bg-[#111827] px-5 py-3 text-sm font-black text-white">
-                    EOKKA에서 확인하기
-                  </span>
                 </div>
               </div>
             </section>

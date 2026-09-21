@@ -48,6 +48,9 @@ export default [
       route("/notification-emails", "features/cron/api/notification-emails.ts"),
     ]),
     ...prefix("/blog", [route("/og", "features/blog/api/og.tsx")]),
+    ...prefix("/admin", [
+      route("/announcements", "features/admin/api/announcements.ts"),
+    ]),
     ...prefix("/stocks", [
       route("/search", "features/stocks/api/search.ts"),
       route("/analyze", "features/stocks/api/analyze.ts"),

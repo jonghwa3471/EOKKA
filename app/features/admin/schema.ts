@@ -53,6 +53,7 @@ export const siteAnnouncements = pgTable("site_announcements", {
   recipient_user_id: uuid().references(() => authUsers.id, {
     onDelete: "set null",
   }),
+  kind: text().notNull().default("general"),
   title: text().notNull(),
   body: text().notNull(),
   created_at: timestamp({ withTimezone: true }).notNull().defaultNow(),

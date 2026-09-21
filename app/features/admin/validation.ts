@@ -19,6 +19,9 @@ export const announcementSchema = z
   .object({
     id: z.string().uuid(),
     audience: z.enum(["all", "user"]),
+    kind: z
+      .enum(["general", "update", "maintenance", "event"])
+      .default("general"),
     recipientIds: z
       .string()
       .transform((value) =>

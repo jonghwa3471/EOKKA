@@ -1,0 +1,1 @@
+ALTER TABLE "site_announcements" ADD COLUMN "kind" text DEFAULT 'general' NOT NULL;

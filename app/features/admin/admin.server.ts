@@ -438,6 +438,7 @@ export async function publishAnnouncement(
     title: string;
     body: string;
     audience: "all" | "user";
+    kind: "general" | "update" | "maintenance" | "event";
     recipientIds: string[];
   },
 ) {
@@ -458,6 +459,7 @@ export async function publishAnnouncement(
         id: input.id,
         author_id: userId,
         recipient_user_id: targetUserIds.length === 1 ? targetUserIds[0] : null,
+        kind: input.kind,
         title: input.title,
         body: input.body,
       })
@@ -508,8 +510,57 @@ export async function publishAnnouncement(
     );
   }
 }
+
+export async function getAdminAnnouncementPage(offset: number, limit = 20) {
+  const rows = Array.from(
+    await db.execute<{
+      id: string;
+      author_id: string | null;
+      recipient_user_id: string | null;
+      kind: string;
+      title: string;
+      body: string;
+      created_at: string;
+    }>(sql`select id, author_id, recipient_user_id, kind, title, body, created_at
+      from site_announcements order by created_at desc
+      limit ${limit + 1} offset ${offset}`),
+  );
+  const page = rows.slice(0, limit);
+  const recipientRows = page.length
+    ? await db
+        .select({
+          announcementId: siteAnnouncementRecipients.announcement_id,
+          userId: siteAnnouncementRecipients.user_id,
+        })
+        .from(siteAnnouncementRecipients)
+        .where(
+          inArray(
+            siteAnnouncementRecipients.announcement_id,
+            page.map((announcement) => announcement.id),
+          ),
+        )
+    : [];
+  const recipientIdsByAnnouncement = new Map<string, string[]>();
+  for (const row of recipientRows) {
+    const recipients = recipientIdsByAnnouncement.get(row.announcementId) ?? [];
+    recipients.push(row.userId);
+    recipientIdsByAnnouncement.set(row.announcementId, recipients);
+  }
+  return {
+    announcements: page.map((announcement) => ({
+      ...announcement,
+      recipient_user_ids:
+        recipientIdsByAnnouncement.get(announcement.id) ??
+        (announcement.recipient_user_id
+          ? [announcement.recipient_user_id]
+          : []),
+    })),
+    hasMore: rows.length > limit,
+  };
+}
+
 export async function getAdminOverview(search: string, page: number) {
-  const [tickets, announcements, users, counts, announcementRecipients] =
+  const [tickets, announcementPage, users, counts, announcementRecipients] =
     await Promise.all([
       db.execute<{
         id: string;
@@ -546,11 +597,7 @@ export async function getAdminOverview(search: string, page: number) {
       join auth.users u on u.id = st.user_id
       left join admin_members a on a.user_id = st.user_id
       order by st.created_at desc limit 100`),
-      db
-        .select()
-        .from(siteAnnouncements)
-        .orderBy(desc(siteAnnouncements.created_at))
-        .limit(20),
+      getAdminAnnouncementPage(0),
       db.execute<{
         id: string;
         name: string;
@@ -579,36 +626,10 @@ export async function getAdminOverview(search: string, page: number) {
       from profiles p join auth.users u on u.id = p.profile_id
       order by p.name, u.email limit 500`),
     ]);
-  const announcementRecipientRows = announcements.length
-    ? await db
-        .select({
-          announcementId: siteAnnouncementRecipients.announcement_id,
-          userId: siteAnnouncementRecipients.user_id,
-        })
-        .from(siteAnnouncementRecipients)
-        .where(
-          inArray(
-            siteAnnouncementRecipients.announcement_id,
-            announcements.map((announcement) => announcement.id),
-          ),
-        )
-    : [];
-  const recipientIdsByAnnouncement = new Map<string, string[]>();
-  for (const row of announcementRecipientRows) {
-    const recipients = recipientIdsByAnnouncement.get(row.announcementId) ?? [];
-    recipients.push(row.userId);
-    recipientIdsByAnnouncement.set(row.announcementId, recipients);
-  }
   return {
     tickets: Array.from(tickets),
-    announcements: announcements.map((announcement) => ({
-      ...announcement,
-      recipient_user_ids:
-        recipientIdsByAnnouncement.get(announcement.id) ??
-        (announcement.recipient_user_id
-          ? [announcement.recipient_user_id]
-          : []),
-    })),
+    announcements: announcementPage.announcements,
+    hasMoreAnnouncements: announcementPage.hasMore,
     users: Array.from(users).slice(0, 20),
     hasMore: users.length > 20,
     counts: counts[0],
