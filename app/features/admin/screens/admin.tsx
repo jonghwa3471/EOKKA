@@ -46,7 +46,6 @@ import {
 import {
   deleteSupportMessage,
   deleteSupportTicket,
-  getAdminAnnouncementPage,
   getAdminOverview,
   publishAnnouncement,
   replyToTicket,
@@ -151,6 +150,10 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 type AdminLoaderData = Awaited<ReturnType<typeof loader>>;
+type AdminAnnouncementPage = {
+  announcements: AdminLoaderData["announcements"];
+  hasMore: boolean;
+};
 export async function clientLoader({
   request,
   serverLoader,
@@ -276,8 +279,7 @@ export default function Admin({
   const formRef = useRef<HTMLFormElement>(null);
   const requestId = useRef<string | null>(null);
   const submit = useSubmit();
-  const announcementFetcher =
-    useFetcher<Awaited<ReturnType<typeof getAdminAnnouncementPage>>>();
+  const announcementFetcher = useFetcher<AdminAnnouncementPage>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
   const hasMoreAnnouncements =

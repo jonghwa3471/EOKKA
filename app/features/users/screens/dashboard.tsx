@@ -601,7 +601,12 @@ function useRevealOncePerVisit<T extends Element>() {
   return { ref, isRevealed };
 }
 
-type TrendSeries = "actual" | "expected" | "market" | "actualMarket";
+type TrendSeries =
+  | "actual"
+  | "currentExpected"
+  | "expected"
+  | "market"
+  | "actualMarket";
 type TrendInterval = "daily" | "weekly" | "monthly" | "yearly";
 
 function calendarTrendHistory(history: History, endDate: string) {
@@ -734,10 +739,29 @@ function TrendChart({
     interval,
   );
   const first = history[0];
+  const latest = history.at(-1)!;
   const actualMarketBaseline = history.find(
     (item) => item.result.benchmark?.observedComponents?.length,
   );
   const startTime = new Date(`${first.savedOn}T00:00:00Z`).getTime();
+  const projectionValueAtMonth = (
+    elapsedMonth: number,
+    key: "base" | "market",
+  ): number | null => {
+    const points = first.result.chart.flatMap((point) => {
+      const value = point[key];
+      return value === null ? [] : [{ month: point.month, value }];
+    });
+    if (points.length === 0) return null;
+    const nextIndex = points.findIndex((point) => point.month >= elapsedMonth);
+    if (nextIndex <= 0) return points[Math.max(0, nextIndex)].value;
+    if (nextIndex === -1) return points.at(-1)!.value;
+    const previous = points[nextIndex - 1];
+    const next = points[nextIndex];
+    const ratio =
+      (elapsedMonth - previous.month) / (next.month - previous.month || 1);
+    return previous.value + (next.value - previous.value) * ratio;
+  };
   const projectionValue = (
     savedOn: string,
     key: "base" | "market",
@@ -746,12 +770,14 @@ function TrendChart({
       0,
       (new Date(`${savedOn}T00:00:00Z`).getTime() - startTime) / 86_400_000,
     );
-    const elapsedMonth = elapsedDays / 30.4375;
-    const points = first.result.chart.flatMap((point) => {
-      const value = point[key];
-      return value === null ? [] : [{ month: point.month, value }];
-    });
-    if (points.length === 0) return null;
+    return projectionValueAtMonth(elapsedDays / 30.4375, key);
+  };
+  const currentProjectionValue = (elapsedMonth: number) => {
+    const points = latest.result.chart.map((point) => ({
+      month: point.month,
+      value: point.base,
+    }));
+    if (points.length === 0) return latest.currentValue;
     const nextIndex = points.findIndex((point) => point.month >= elapsedMonth);
     if (nextIndex <= 0) return points[Math.max(0, nextIndex)].value;
     if (nextIndex === -1) return points.at(-1)!.value;
@@ -772,21 +798,94 @@ function TrendChart({
       actualMarket: actualMarketValue(item, actualMarketBaseline),
     }),
   );
-  const values = records.flatMap(({ item, expected, market, actualMarket }) => [
-    item.currentValue,
-    ...(expected === null ? [] : [expected]),
-    ...(market === null ? [] : [market]),
-    ...(actualMarket === null ? [] : [actualMarket]),
-  ]);
+  const latestElapsedMonth =
+    Math.max(
+      0,
+      (new Date(`${latest.savedOn}T00:00:00Z`).getTime() - startTime) /
+        86_400_000,
+    ) / 30.4375;
+  const futureProjection = Array.from(
+    {
+      length:
+        interval === "daily"
+          ? 7
+          : interval === "weekly"
+            ? 4
+            : interval === "monthly"
+              ? 3
+              : 1,
+    },
+    (_, index) => {
+      const step = index + 1;
+      const elapsedMonth =
+        interval === "daily"
+          ? step / 30.4375
+          : interval === "weekly"
+            ? (step * 7) / 30.4375
+            : interval === "monthly"
+              ? step
+              : step * 12;
+      return {
+        elapsedMonth,
+        value: currentProjectionValue(elapsedMonth),
+        expected: projectionValueAtMonth(
+          latestElapsedMonth + elapsedMonth,
+          "base",
+        ),
+        market: projectionValueAtMonth(
+          latestElapsedMonth + elapsedMonth,
+          "market",
+        ),
+      };
+    },
+  );
+  const values = [
+    ...records.flatMap(({ item, expected, market, actualMarket }) => [
+      item.currentValue,
+      ...(expected === null ? [] : [expected]),
+      ...(market === null ? [] : [market]),
+      ...(actualMarket === null ? [] : [actualMarket]),
+    ]),
+    ...futureProjection.flatMap((point) => [
+      point.value,
+      ...(point.expected === null ? [] : [point.expected]),
+      ...(point.market === null ? [] : [point.market]),
+    ]),
+  ];
   const min = Math.min(...values);
   const max = Math.max(...values);
   const span = Math.max(1, max - min);
-  const x = (index: number) =>
-    padding.left +
-    (records.length === 1
-      ? (width - padding.left - padding.right) / 2
-      : (index / (records.length - 1)) *
-        (width - padding.left - padding.right));
+  const timelineLength = records.length + futureProjection.length;
+  const plotWidth = width - padding.left - padding.right;
+  const historyEndX = padding.left + plotWidth * 0.78;
+  const historyPlotWidth = historyEndX - padding.left;
+  const maxZoom = Math.max(6, records.length / 10);
+  const visibleDateLabelCapacity = Math.max(
+    2,
+    Math.floor((historyPlotWidth * zoom) / 64),
+  );
+  const dateLabelStep = Math.max(
+    1,
+    Math.ceil(
+      Math.max(1, records.length - 1) /
+        Math.max(1, visibleDateLabelCapacity - 1),
+    ),
+  );
+  const x = (index: number) => {
+    if (index <= records.length - 1) {
+      if (records.length === 1) return historyEndX;
+      return (
+        padding.left +
+        (index / (records.length - 1)) * (historyEndX - padding.left)
+      );
+    }
+    const futureIndex = index - records.length + 1;
+    return (
+      historyEndX +
+      (futureIndex / futureProjection.length) *
+        (width - padding.right - historyEndX)
+    );
+  };
   const y = (value: number) =>
     padding.top +
     (1 - (value - min) / span) * (height - padding.top - padding.bottom);
@@ -797,16 +896,89 @@ function TrendChart({
   const actualPoints = visibleRecords.map(
     ({ item, index }) => `${x(index)},${y(item.currentValue)}`,
   );
-  const expectedPoints = visibleRecords.flatMap(({ expected, index }) =>
-    expected === null ? [] : [`${x(index)},${y(expected)}`],
-  );
-  const marketPoints = visibleRecords.flatMap(({ market, index }) =>
-    market === null ? [] : [`${x(index)},${y(market)}`],
-  );
+  const expectedPoints = [
+    ...visibleRecords.flatMap(({ expected, index }) =>
+      expected === null ? [] : [`${x(index)},${y(expected)}`],
+    ),
+    ...futureProjection.flatMap((point, index) =>
+      point.expected === null
+        ? []
+        : [`${x(records.length + index)},${y(point.expected)}`],
+    ),
+  ];
+  const marketPoints = [
+    ...visibleRecords.flatMap(({ market, index }) =>
+      market === null ? [] : [`${x(index)},${y(market)}`],
+    ),
+    ...futureProjection.flatMap((point, index) =>
+      point.market === null
+        ? []
+        : [`${x(records.length + index)},${y(point.market)}`],
+    ),
+  ];
   const actualMarketPoints = visibleRecords.flatMap(
     ({ actualMarket, index }) =>
       actualMarket === null ? [] : [`${x(index)},${y(actualMarket)}`],
   );
+  const currentExpectedPoints = [
+    `${x(records.length - 1)},${y(latest.currentValue)}`,
+    ...futureProjection.map(
+      (point, index) => `${x(records.length + index)},${y(point.value)}`,
+    ),
+  ];
+  const currentExpectedEnd = futureProjection.at(-1)!;
+  const futureHorizonLabel =
+    interval === "daily"
+      ? "1주 뒤"
+      : interval === "weekly"
+        ? "4주 뒤"
+        : interval === "monthly"
+          ? "3개월 뒤"
+          : "1년 뒤";
+  const forecastEndLabels = (() => {
+    const labels = [
+      {
+        key: "currentExpected" as const,
+        label: "현재 예상",
+        value: currentExpectedEnd.value,
+        color: "#3b82f6",
+      },
+      ...(currentExpectedEnd.expected === null
+        ? []
+        : [
+            {
+              key: "expected" as const,
+              label: "최초 예상",
+              value: currentExpectedEnd.expected,
+              color: "#f59e0b",
+            },
+          ]),
+      ...(currentExpectedEnd.market === null
+        ? []
+        : [
+            {
+              key: "market" as const,
+              label: "최초 시장 예상",
+              value: currentExpectedEnd.market,
+              color: "#a78bfa",
+            },
+          ]),
+    ].sort((a, b) => y(a.value) - y(b.value));
+    let previousY = 1;
+    const positioned = labels.map((label) => {
+      const labelY = Math.max(18, y(label.value) - 10, previousY + 17);
+      previousY = labelY;
+      return { ...label, labelY };
+    });
+    const overflow = Math.max(
+      0,
+      (positioned.at(-1)?.labelY ?? 0) - (height - padding.bottom),
+    );
+    return positioned.map((label) => ({
+      ...label,
+      labelY: label.labelY - overflow,
+    }));
+  })();
   const area = `${x(visibleRecords[0].index)},${height - padding.bottom} ${actualPoints.join(" ")} ${x(visibleRecords.at(-1)!.index)},${height - padding.bottom}`;
   const hovered = hoveredIndex === null ? null : records[hoveredIndex];
   const hoverX = hoveredIndex === null ? null : x(hoveredIndex);
@@ -820,7 +992,7 @@ function TrendChart({
   const seriesOpacity = (series: TrendSeries) =>
     dimmedSeries.includes(series) ? 0.16 : 1;
   const updateZoom = (nextZoom: number, anchorRatio = 0.5) => {
-    const clampedZoom = Math.min(6, Math.max(1, nextZoom));
+    const clampedZoom = Math.min(maxZoom, Math.max(1, nextZoom));
     const container = scrollRef.current;
     const contentRatio = container
       ? (container.scrollLeft + anchorRatio * container.clientWidth) /
@@ -895,7 +1067,7 @@ function TrendChart({
             type="button"
             className="hover:bg-muted flex size-8 items-center justify-center rounded-full disabled:opacity-35"
             aria-label="차트 확대"
-            disabled={zoom >= 5.99}
+            disabled={zoom >= maxZoom - 0.01}
             onClick={() => updateZoom(zoom * 1.5)}
           >
             <ZoomInIcon className="size-4" />
@@ -911,7 +1083,7 @@ function TrendChart({
           className="h-full min-h-[280px] max-w-none"
           style={{ width: `${zoom * 100}%` }}
           role="img"
-          aria-label="실제 평가금액과 최초 예상, 최초 시장 예상 및 시장 실제 추이의 비교"
+          aria-label="실제 평가금액과 현재 예상, 최초 예상, 최초 시장 예상 및 시장 실제 추이의 비교"
         >
           <defs>
             <linearGradient id="dashboard-area" x1="0" y1="0" x2="0" y2="1">
@@ -973,6 +1145,47 @@ function TrendChart({
               transition: "stroke-dashoffset 900ms ease-out 100ms",
             }}
           />
+          <polyline
+            points={currentExpectedPoints.join(" ")}
+            fill="none"
+            stroke="#3b82f6"
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeDasharray="9 7"
+            style={{
+              opacity: isRevealed ? seriesOpacity("currentExpected") : 0,
+              transition: "opacity 650ms ease-out 250ms",
+            }}
+          />
+          {forecastEndLabels.map((label) => (
+            <g
+              key={label.key}
+              style={{
+                opacity: isRevealed ? seriesOpacity(label.key) : 0,
+                transition: "opacity 650ms ease-out 450ms",
+              }}
+            >
+              <circle
+                cx={x(timelineLength - 1)}
+                cy={y(label.value)}
+                r="6"
+                fill={label.color}
+                stroke="white"
+                strokeWidth="2"
+              />
+              <text
+                x={x(timelineLength - 1) - 8}
+                y={label.labelY}
+                textAnchor="end"
+                fill={label.color}
+                className="text-[11px] font-black"
+              >
+                {label.label} · {futureHorizonLabel} · {won.format(label.value)}
+                원
+              </text>
+            </g>
+          ))}
           <polyline
             points={actualPoints.join(" ")}
             fill="none"
@@ -1119,7 +1332,7 @@ function TrendChart({
                 >
                   {(index === 0 ||
                     index === records.length - 1 ||
-                    index % Math.max(1, Math.ceil(records.length / 6)) === 0) &&
+                    index % dateLabelStep === 0) &&
                     (interval === "yearly" ? (
                       item.savedOn.slice(0, 4)
                     ) : interval === "monthly" ? (
@@ -1144,10 +1357,14 @@ function TrendChart({
               const rect =
                 event.currentTarget.ownerSVGElement!.getBoundingClientRect();
               const svgX = ((event.clientX - rect.left) / rect.width) * width;
+              if (svgX > historyEndX) {
+                setHoveredIndex(null);
+                return;
+              }
               const ratio =
-                (Math.min(width - padding.right, Math.max(padding.left, svgX)) -
+                (Math.min(historyEndX, Math.max(padding.left, svgX)) -
                   padding.left) /
-                (width - padding.left - padding.right);
+                Math.max(1, historyEndX - padding.left);
               setHoveredIndex(
                 records.length === 1
                   ? 0
@@ -2864,73 +3081,130 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
 
         <section className="mt-5 grid gap-5 xl:grid-cols-[1.65fr_1fr]">
           <div className="bg-card flex min-h-[430px] flex-col rounded-3xl border p-5 shadow-sm md:p-7">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
               <div>
                 <p className="text-muted-foreground text-sm font-semibold">
                   전체 기간 기록
                 </p>
                 <h2 className="mt-1 text-xl font-black">내 자산 성장 추이</h2>
               </div>
-              <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
-                <button
-                  type="button"
-                  onClick={() => toggleTrendSeries("actual")}
-                  aria-pressed={!dimmedTrendSeries.includes("actual")}
-                  className={cn(
-                    "inline-flex items-center gap-2 rounded-full px-3 py-1.5 transition",
-                    dimmedTrendSeries.includes("actual")
-                      ? "bg-muted text-emerald-500 opacity-40 hover:opacity-65"
-                      : "bg-emerald-500/15 text-emerald-500 ring-1 ring-emerald-500/30",
-                  )}
-                >
-                  <span className="size-2 rounded-full bg-emerald-500" /> 실제
-                  평가금액
-                </button>
-                <button
-                  type="button"
-                  onClick={() => toggleTrendSeries("expected")}
-                  aria-pressed={!dimmedTrendSeries.includes("expected")}
-                  className={cn(
-                    "inline-flex items-center gap-2 rounded-full px-3 py-1.5 transition",
-                    dimmedTrendSeries.includes("expected")
-                      ? "bg-muted text-amber-500 opacity-40 hover:opacity-65"
-                      : "bg-amber-500/15 text-amber-500 ring-1 ring-amber-500/30",
-                  )}
-                >
-                  <span className="h-0.5 w-4 bg-amber-500" /> 최초 예상
-                </button>
+              <div className="mt-4 flex flex-wrap items-center gap-1.5 text-[11px] font-bold xl:flex-nowrap">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => toggleTrendSeries("actual")}
+                      aria-pressed={!dimmedTrendSeries.includes("actual")}
+                      className={cn(
+                        "order-4 inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 transition",
+                        dimmedTrendSeries.includes("actual")
+                          ? "bg-muted text-emerald-500 opacity-40 hover:opacity-65"
+                          : "bg-emerald-500/15 text-emerald-500 ring-1 ring-emerald-500/30",
+                      )}
+                    >
+                      <span className="size-2 rounded-full bg-emerald-500" />
+                      실제 평가금액
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-64">
+                    종가 기준으로 저장된 내 자산의 실제 평가금액 변화예요.
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => toggleTrendSeries("currentExpected")}
+                      aria-pressed={
+                        !dimmedTrendSeries.includes("currentExpected")
+                      }
+                      className={cn(
+                        "order-5 inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 transition",
+                        dimmedTrendSeries.includes("currentExpected")
+                          ? "bg-muted text-blue-500 opacity-40 hover:opacity-65"
+                          : "bg-blue-500/15 text-blue-500 ring-1 ring-blue-500/30",
+                      )}
+                    >
+                      <span className="w-4 border-t-2 border-dashed border-blue-500" />
+                      현재 예상
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-64">
+                    가장 최근 분석을 현재 평가금액에 반영한 가까운 미래의 평균
+                    시나리오예요.
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => toggleTrendSeries("expected")}
+                      aria-pressed={!dimmedTrendSeries.includes("expected")}
+                      className={cn(
+                        "order-1 inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 transition",
+                        dimmedTrendSeries.includes("expected")
+                          ? "bg-muted text-amber-500 opacity-40 hover:opacity-65"
+                          : "bg-amber-500/15 text-amber-500 ring-1 ring-amber-500/30",
+                      )}
+                    >
+                      <span className="h-0.5 w-4 bg-amber-500" /> 최초 예상
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-64">
+                    첫 분석 당시 평균 시나리오가 예상했던 자산 변화예요.
+                  </TooltipContent>
+                </Tooltip>
                 {history[0]?.result.benchmark && (
-                  <button
-                    type="button"
-                    onClick={() => toggleTrendSeries("market")}
-                    aria-pressed={!dimmedTrendSeries.includes("market")}
-                    className={cn(
-                      "inline-flex items-center gap-2 rounded-full px-3 py-1.5 transition",
-                      dimmedTrendSeries.includes("market")
-                        ? "bg-muted text-violet-500 opacity-40 hover:opacity-65"
-                        : "bg-violet-500/15 text-violet-500 ring-1 ring-violet-500/30",
-                    )}
-                  >
-                    <span className="w-4 border-t-2 border-dashed border-violet-500" />
-                    최초 시장 예상
-                  </button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => toggleTrendSeries("market")}
+                        aria-pressed={!dimmedTrendSeries.includes("market")}
+                        className={cn(
+                          "order-2 inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 transition",
+                          dimmedTrendSeries.includes("market")
+                            ? "bg-muted text-violet-500 opacity-40 hover:opacity-65"
+                            : "bg-violet-500/15 text-violet-500 ring-1 ring-violet-500/30",
+                        )}
+                      >
+                        <span className="w-4 border-t-2 border-dashed border-violet-500" />
+                        최초 시장 예상
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-64">
+                      첫 분석 당시 장기 시장 수익률을 적용해 계산한 비교
+                      경로예요.
+                    </TooltipContent>
+                  </Tooltip>
                 )}
                 {history.some(
                   (item) => item.result.benchmark?.observedComponents?.length,
                 ) && (
-                  <button
-                    type="button"
-                    onClick={() => toggleTrendSeries("actualMarket")}
-                    aria-pressed={!dimmedTrendSeries.includes("actualMarket")}
-                    className={cn(
-                      "inline-flex items-center gap-2 rounded-full px-3 py-1.5 transition",
-                      dimmedTrendSeries.includes("actualMarket")
-                        ? "bg-muted text-cyan-500 opacity-40 hover:opacity-65"
-                        : "bg-cyan-500/15 text-cyan-500 ring-1 ring-cyan-500/30",
-                    )}
-                  >
-                    <span className="h-0.5 w-4 bg-cyan-500" /> 시장 실제 추이
-                  </button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => toggleTrendSeries("actualMarket")}
+                        aria-pressed={
+                          !dimmedTrendSeries.includes("actualMarket")
+                        }
+                        className={cn(
+                          "order-3 inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 transition",
+                          dimmedTrendSeries.includes("actualMarket")
+                            ? "bg-muted text-cyan-500 opacity-40 hover:opacity-65"
+                            : "bg-cyan-500/15 text-cyan-500 ring-1 ring-cyan-500/30",
+                        )}
+                      >
+                        <span className="h-0.5 w-4 bg-cyan-500" /> 시장 실제
+                        추이
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-64">
+                      첫 기록 이후 내 포트폴리오와 연결된 시장 지수가 실제로
+                      움직인 정도예요.
+                    </TooltipContent>
+                  </Tooltip>
                 )}
               </div>
             </div>
