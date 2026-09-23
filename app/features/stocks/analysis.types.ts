@@ -156,6 +156,13 @@ export interface AiStrategy {
     joelGreenblatt: string;
   };
   committeeConclusion?: string;
+  assessmentDomains?: Array<{
+    key: "structure" | "risk" | "quality" | "valuation";
+    label: string;
+    status: "양호" | "점검" | "주의" | "정보 부족";
+    summary: string;
+    evidence: string[];
+  }>;
   overallCommitteeScore?: number;
   committeeScores?: {
     warrenBuffett: number;
