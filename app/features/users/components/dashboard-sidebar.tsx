@@ -1,3 +1,5 @@
+import type { ProTenureBadge } from "../pro-tenure";
+
 import {
   BriefcaseBusinessIcon,
   CalendarDaysIcon,
@@ -54,7 +56,12 @@ export default function DashboardSidebar({
   isAdmin = false,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
-  user: { name: string; email: string; avatarUrl: string };
+  user: {
+    name: string;
+    email: string;
+    avatarUrl: string;
+    proBadgeTone: ProTenureBadge["tone"] | null;
+  };
   unreadNotificationCount: number;
   isAdmin?: boolean;
 }) {

@@ -19,8 +19,15 @@ import {
   usePrimeRouteDataCache,
 } from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
+import { cn } from "~/core/lib/utils";
+import { getPayments } from "~/features/payments/queries";
 
 import { getAutomaticAnalysisSettings } from "../automatic-analysis-settings.server";
+import {
+  ProTenureBadgeView,
+  proTenureToneStyles,
+} from "../components/pro-tenure-badge";
+import { PRO_TENURE_BADGES, proTenureBadge } from "../pro-tenure";
 
 export const meta: Route.MetaFunction = () => [
   { title: `EOKKA Pro | ${import.meta.env.VITE_APP_NAME}` },
@@ -31,9 +38,18 @@ export async function loader({ request }: Route.LoaderArgs) {
   const {
     data: { user },
   } = await client.auth.getUser();
-  const settings = user
-    ? await getAutomaticAnalysisSettings(user.id)
-    : { isPro: false };
+  const [settings, payments] = user
+    ? await Promise.all([
+        getAutomaticAnalysisSettings(user.id),
+        getPayments(client, { userId: user.id }),
+      ])
+    : [{ isPro: false }, []];
+  const completedPaymentCount = payments.filter((payment) =>
+    ["DONE", "PAID", "APPROVED"].includes(payment.status.toUpperCase()),
+  ).length;
+  const proTenureMonths = settings.isPro
+    ? Math.max(1, completedPaymentCount)
+    : completedPaymentCount;
   const now = new Date();
   const nextBillingDate = new Date(now);
   nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
@@ -45,6 +61,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         : null,
     checkoutStartsAt: now.toISOString(),
     checkoutRenewsAt: nextBillingDate.toISOString(),
+    proTenureMonths,
   };
 }
 
@@ -110,6 +127,7 @@ function koreanDate(value: string) {
 
 export default function EokkaPro({ loaderData }: Route.ComponentProps) {
   usePrimeRouteDataCache("eokka-pro", loaderData);
+  const currentTenureBadge = proTenureBadge(loaderData.proTenureMonths);
   return (
     <main className="flex flex-1 flex-col px-5 pt-8 pb-12 md:px-8 md:pt-12">
       <div className="mx-auto w-full max-w-6xl">
@@ -193,6 +211,14 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
                         </div>
                       </dl>
                     ) : null}
+                    {currentTenureBadge && (
+                      <div className="mt-3 border-t border-emerald-500/15 pt-3">
+                        <p className="text-muted-foreground mb-2 text-[11px] font-bold">
+                          현재 구독 배지
+                        </p>
+                        <ProTenureBadgeView badge={currentTenureBadge} />
+                      </div>
+                    )}
                   </div>
                   <Button
                     type="button"
@@ -244,6 +270,63 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
                 있어요.
               </p>
             </div>
+          </div>
+        </section>
+
+        <section className="mt-8">
+          <div className="text-center">
+            <p className="text-xs font-black tracking-[0.14em] text-amber-600 uppercase dark:text-amber-400">
+              Pro journey badges
+            </p>
+            <h2 className="mt-2 text-2xl font-black md:text-3xl">
+              함께한 시간만큼 배지가 자라요
+            </h2>
+            <p className="text-muted-foreground mt-2 text-sm leading-6">
+              결제가 완료된 누적 구독 개월에 따라 프로필에 새로운 배지가
+              표시돼요.
+            </p>
+          </div>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {PRO_TENURE_BADGES.map((badge) => {
+              const earned = loaderData.proTenureMonths >= badge.months;
+              return (
+                <article
+                  key={badge.months}
+                  className={cn(
+                    "bg-card group rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg",
+                    proTenureToneStyles[badge.tone].card,
+                    earned
+                      ? cn("shadow-sm", proTenureToneStyles[badge.tone].badge)
+                      : "border-border opacity-65 hover:opacity-100",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <img
+                      src={badge.image}
+                      alt={`${badge.name} 배지`}
+                      className={cn(
+                        "size-20 object-contain drop-shadow-lg transition duration-300",
+                        earned
+                          ? "scale-105"
+                          : "grayscale group-hover:scale-105 group-hover:grayscale-0",
+                      )}
+                    />
+                    <span className="bg-muted rounded-full px-2 py-1 text-[10px] font-black">
+                      {badge.months}개월
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm font-black">{badge.name}</p>
+                  <p className="text-muted-foreground mt-3 text-xs leading-5 break-keep">
+                    {badge.description}
+                  </p>
+                  {earned && (
+                    <p className="mt-3 flex items-center gap-1 text-[11px] font-black text-emerald-500">
+                      <CheckIcon className="size-3.5" /> 획득 완료
+                    </p>
+                  )}
+                </article>
+              );
+            })}
           </div>
         </section>
 
