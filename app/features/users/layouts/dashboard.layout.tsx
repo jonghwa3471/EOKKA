@@ -20,9 +20,7 @@ import { isAdmin } from "~/features/admin/admin.server";
 import { getUnreadNotificationCount } from "~/features/notifications/notifications.server";
 
 import { markUserActive } from "../activity.server";
-import { getAutomaticAnalysisSettings } from "../automatic-analysis-settings.server";
 import DashboardSidebar from "../components/dashboard-sidebar";
-import { proTenureBadge } from "../pro-tenure";
 import { getUserProfile } from "../queries";
 
 function DashboardRouteTransitionSkeleton() {
@@ -85,20 +83,12 @@ export async function loader({ request }: Route.LoaderArgs) {
     data: { user },
   } = await client.auth.getUser();
   if (user) await markUserActive(user.id);
-  const [unreadNotificationCount, profile, paymentsResult, settings] = user
+  const [unreadNotificationCount, profile] = user
     ? await Promise.all([
         getUnreadNotificationCount(user.id),
         getUserProfile(client, { userId: user.id }),
-        client.from("payments").select("status").eq("user_id", user.id),
-        getAutomaticAnalysisSettings(user.id),
       ])
-    : [0, null, null, { isPro: false }];
-  const completedPaymentCount = (paymentsResult?.data ?? []).filter((payment) =>
-    ["DONE", "PAID", "APPROVED"].includes(payment.status.toUpperCase()),
-  ).length;
-  const tenureBadge = proTenureBadge(
-    settings.isPro ? Math.max(1, completedPaymentCount) : completedPaymentCount,
-  );
+    : [0, null];
   return {
     isAdmin: user ? await isAdmin(user.id) : false,
     unreadNotificationCount,
@@ -116,7 +106,6 @@ export async function loader({ request }: Route.LoaderArgs) {
             user.user_metadata.picture ??
             "",
           email: user.email ?? "",
-          proBadgeTone: tenureBadge?.tone ?? null,
         }
       : null,
   };

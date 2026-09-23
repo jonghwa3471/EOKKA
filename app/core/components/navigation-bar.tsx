@@ -28,10 +28,6 @@ import {
 import { useState } from "react";
 import { Link, useFetcher } from "react-router";
 
-import { proTenureToneStyles } from "~/features/users/components/pro-tenure-badge";
-import type { ProTenureBadge } from "~/features/users/pro-tenure";
-
-import { cn } from "../lib/utils";
 import ConfirmDialog from "./confirm-dialog";
 import { EokkaLogo } from "./eokka-logo";
 import ThemeSwitcher from "./theme-switcher";
@@ -79,14 +75,12 @@ function UserMenu({
   email,
   avatarUrl,
   unreadNotificationCount = 0,
-  proBadgeTone,
 }: {
   isAdmin?: boolean;
   name: string;
   email?: string;
   avatarUrl?: string | null;
   unreadNotificationCount?: number;
-  proBadgeTone?: ProTenureBadge["tone"] | null;
 }) {
   const logoutFetcher = useFetcher();
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
@@ -97,14 +91,7 @@ function UserMenu({
         {/* Avatar as the dropdown trigger */}
         <DropdownMenuTrigger asChild>
           <span className="relative">
-            <Avatar
-              className={cn(
-                "size-8 cursor-pointer rounded-lg ring-2 transition-all hover:ring-4 data-[state=open]:ring-4",
-                proBadgeTone
-                  ? proTenureToneStyles[proBadgeTone].ring
-                  : "ring-border/70 hover:ring-emerald-500/40 data-[state=open]:ring-emerald-500/50",
-              )}
-            >
+            <Avatar className="ring-border/70 size-8 cursor-pointer rounded-lg ring-1 transition-all hover:ring-2 hover:ring-emerald-500/40 data-[state=open]:ring-2 data-[state=open]:ring-emerald-500/50">
               <AvatarImage src={avatarUrl ?? undefined} />
               <AvatarFallback>{name.slice(0, 2)}</AvatarFallback>
             </Avatar>
@@ -120,14 +107,7 @@ function UserMenu({
         <DropdownMenuContent align="end" sideOffset={10} className="w-64 p-2">
           {/* User information display */}
           <DropdownMenuLabel className="mb-1 flex items-center gap-3 rounded-xl border border-emerald-500/15 bg-gradient-to-br from-emerald-500/10 to-violet-500/10 p-3 font-normal">
-            <Avatar
-              className={cn(
-                "size-10 rounded-xl shadow-sm ring-2",
-                proBadgeTone
-                  ? proTenureToneStyles[proBadgeTone].ring
-                  : "ring-background",
-              )}
-            >
+            <Avatar className="ring-background size-10 rounded-xl shadow-sm ring-2">
               <AvatarImage src={avatarUrl ?? undefined} />
               <AvatarFallback className="rounded-xl font-black">
                 {name.slice(0, 2)}
@@ -337,7 +317,6 @@ export function NavigationBar({
   email,
   avatarUrl,
   unreadNotificationCount,
-  proBadgeTone,
   loading,
 }: {
   isAdmin?: boolean;
@@ -345,7 +324,6 @@ export function NavigationBar({
   email?: string;
   avatarUrl?: string | null;
   unreadNotificationCount?: number;
-  proBadgeTone?: ProTenureBadge["tone"] | null;
   loading: boolean;
 }) {
   return (
@@ -410,7 +388,6 @@ export function NavigationBar({
                   avatarUrl={avatarUrl}
                   unreadNotificationCount={unreadNotificationCount}
                   isAdmin={isAdmin}
-                  proBadgeTone={proBadgeTone}
                 />
               ) : (
                 // Unauthenticated state with auth buttons
@@ -461,7 +438,6 @@ export function NavigationBar({
                       avatarUrl={avatarUrl}
                       unreadNotificationCount={unreadNotificationCount}
                       isAdmin={isAdmin}
-                      proBadgeTone={proBadgeTone}
                     />
                   </div>
                 </div>
