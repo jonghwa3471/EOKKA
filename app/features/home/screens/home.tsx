@@ -585,20 +585,29 @@ function GoalTrend({ points }: { points: MoneyInsight["trend"] }) {
   const minimum = Math.min(...values);
   const maximum = Math.max(...values);
   const range = Math.max(1, maximum - minimum);
+  const chartWidth = 640;
+  const chartHeight = 240;
+  const horizontalPadding = 18;
+  const chartTop = 28;
+  const chartBottom = 204;
   const coordinates = points.map((point, index) => ({
-    x: (index / (points.length - 1)) * 100,
-    y: 36 - ((point.currentValue - minimum) / range) * 30,
+    x:
+      horizontalPadding +
+      (index / (points.length - 1)) * (chartWidth - horizontalPadding * 2),
+    y:
+      chartBottom -
+      ((point.currentValue - minimum) / range) * (chartBottom - chartTop),
   }));
   const line = coordinates.map((point) => `${point.x},${point.y}`).join(" ");
 
   return (
     <div>
       <svg
-        viewBox="0 0 100 42"
+        viewBox={`0 0 ${chartWidth} ${chartHeight}`}
         role="img"
         aria-label="최근 평가금액 변화"
-        className="h-28 w-full overflow-visible"
-        preserveAspectRatio="none"
+        className="block h-auto w-full overflow-visible"
+        preserveAspectRatio="xMidYMid meet"
       >
         <defs>
           <linearGradient id="home-goal-trend" x1="0" y1="0" x2="0" y2="1">
@@ -606,12 +615,31 @@ function GoalTrend({ points }: { points: MoneyInsight["trend"] }) {
             <stop offset="100%" stopColor="rgb(16 185 129)" stopOpacity="0" />
           </linearGradient>
         </defs>
-        <polygon points={`0,42 ${line} 100,42`} fill="url(#home-goal-trend)" />
+        {[0, 1, 2].map((index) => {
+          const y = chartTop + ((chartBottom - chartTop) / 2) * index;
+          return (
+            <line
+              key={y}
+              x1={horizontalPadding}
+              x2={chartWidth - horizontalPadding}
+              y1={y}
+              y2={y}
+              stroke="currentColor"
+              strokeWidth="1"
+              className="text-border/55"
+              vectorEffect="non-scaling-stroke"
+            />
+          );
+        })}
+        <polygon
+          points={`${horizontalPadding},${chartBottom} ${line} ${chartWidth - horizontalPadding},${chartBottom}`}
+          fill="url(#home-goal-trend)"
+        />
         <polyline
           points={line}
           fill="none"
           stroke="rgb(16 185 129)"
-          strokeWidth="1.8"
+          strokeWidth="3"
           strokeLinecap="round"
           strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"
@@ -621,8 +649,10 @@ function GoalTrend({ points }: { points: MoneyInsight["trend"] }) {
             key={points[index].savedOn}
             cx={point.x}
             cy={point.y}
-            r="1.5"
+            r="5"
             fill="rgb(16 185 129)"
+            stroke="var(--background)"
+            strokeWidth="2"
             vectorEffect="non-scaling-stroke"
           />
         ))}
