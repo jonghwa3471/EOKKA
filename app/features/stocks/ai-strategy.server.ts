@@ -699,6 +699,10 @@ export async function generateAiStrategy(
       .replace(/businessCategoryWeights/g, "사업군별 비중")
       .replace(/uncategorizedHoldingCount/g, "사업군을 구분하지 못한 종목 수")
       .replace(/calculatedConsensus/g, "계산된 종목 평가")
+      .replace(
+        /currentPriceVsAveragePurchasePercent/g,
+        "현재가와 평균 매수가의 차이",
+      )
       .replace(/financialProfile/g, "재무정보")
       .replace(/\s{2,}/g, " ")
       .trim();
@@ -710,6 +714,20 @@ export async function generateAiStrategy(
       result.currentValue > 0
         ? Number(((holding.valueKrw / result.currentValue) * 100).toFixed(1))
         : 0;
+    const averagePrice =
+      holding.averagePrice ??
+      (holding.returnRate > -100
+        ? holding.currentPrice / (1 + holding.returnRate / 100)
+        : null);
+    const currentPriceVsAveragePurchasePercent =
+      averagePrice && averagePrice > 0
+        ? Number(
+            (
+              ((holding.currentPrice - averagePrice) / averagePrice) *
+              100
+            ).toFixed(1),
+          )
+        : null;
     const financialProfile = holding.fundamentals
       ? {
           source: holding.fundamentals.source,
@@ -741,6 +759,7 @@ export async function generateAiStrategy(
       broadBusinessCategory: inferBroadBusinessCategory(holding),
       portfolioWeightPercent,
       returnRatePercent: Number(holding.returnRate.toFixed(1)),
+      currentPriceVsAveragePurchasePercent,
       profitDirection:
         holding.profitKrw > 0
           ? "수익"
@@ -934,12 +953,13 @@ export async function generateAiStrategy(
           "holdingAlias는 화면에 표시하기 직전에 실제 종목명으로 자동 복원됩니다. 응답에서 익명화, 별칭, 실제 종목명을 모른다는 사실이나 '종목명 대신 익명 표시만 있다'는 내부 처리 과정을 절대 언급하지 마세요.",
           "기업 정보가 부족할 때도 종목명이 없다고 말하지 말고 holdingAlias를 회사 이름처럼 자연스럽게 사용하세요. 예를 들어 '종목 A가 어떻게 돈을 벌고, 빚을 감당할 수 있는지 확인해 보세요'처럼 쓰면 화면에서는 실제 회사명으로 표시됩니다.",
           "여러 회사를 함께 언급할 때도 '종목 A~E', 'A·B·C', '나머지 종목'처럼 줄이지 마세요. 각 회사의 holdingAlias를 '종목 A, 종목 B, 종목 C'처럼 매번 완전하게 적으세요.",
-          "종목별 과거 수익률만으로 우수 종목을 판정하지 말고 매수 위치, 비중 쏠림, 손익 방향과 변동 위험을 함께 설명하세요.",
+          "종목별 과거 수익률만으로 우수 종목을 판정하지 마세요. 종목별 조언의 중심은 현재가가 사용자의 평균 매수가보다 얼마나 높거나 낮은지와 지금 추가 매수를 검토해도 되는지입니다. 여기에 현재 비중, 재무 상태, 장기 가격 구간을 함께 적용하세요.",
+          "currentPriceVsAveragePurchasePercent가 양수면 현재가가 평균 매수가보다 높은 상태이고, 음수면 낮은 상태입니다. 양수라는 이유만으로 추가 매수를 막거나 음수라는 이유만으로 물타기를 권하지 마세요. 현재 비중이 과도하거나 재무 흐름이 나쁘면 추가 매수보다 관찰과 비중 관리가 우선이고, 가격 부담이 낮고 비중과 재무 상태도 무리가 없을 때만 분할 추가 매수를 조건부로 검토하도록 설명하세요.",
           "최근 최대 10년 기준 내 매수가 위치가 80% 이상이면 높은 평균단가의 근거로 언급하고, 무조건적인 물타기 대신 추격매수를 피하며 가격·비중 조건을 정한 분할매수를 검토하라고 안내하세요.",
           "최근 최대 10년 기준 내 매수가 위치가 20% 이하이면 상대적으로 낮은 구간에서 매수한 점을 인정하되 과거 최저가 부근이라는 이유만으로 추가 매수를 권하지 마세요. 사용자에게 보여주는 문장에서는 '장기 매수 위치', '최근 매수 위치'라는 줄임말 대신 각각 '최근 최대 10년 기준 내 매수가 위치', '최근 1년 기준 내 매수가 위치'라고 풀어 쓰세요.",
           "한 종목 비중이 35% 이상이거나 상위 3종목 합계가 75% 이상이면 집중 위험을 해당 수치와 함께 분명히 지적하세요.",
           "급등주·우량주 여부는 제공된 데이터로 확인할 수 없습니다. 공격성 점수나 위험 경고가 높다면 특정 종목명을 지어내지 말고, 이익 지속성·부채·현금흐름을 확인한 대형 우량주 또는 광범위 시장 ETF를 고르는 기준을 제시하세요.",
-          "holdingInsights에는 제공된 모든 보유 종목을 빠짐없이 하나씩 작성하세요. 각 종목의 calculatedConsensus와 votes는 서버가 같은 입력에 항상 같은 결과가 나오도록 계산한 최종 판정입니다. 이를 바꾸거나 새 투표를 만들지 말고, evidence와 strategy에서 그 판정의 이유와 다음 행동만 설명하세요. evidence는 financialProfile의 실제 재무 수치가 있으면 우선 사용하고 비중·수익률·평균 매수가 위치까지 쉬운 말로 풀어 주세요. strategy에는 추가 매수 전에 확인할 조건을 명확히 적으세요. 확인되지 않은 전망이나 적정가는 추측하지 마세요.",
+          "holdingInsights에는 제공된 모든 보유 종목을 빠짐없이 하나씩 작성하세요. 각 종목의 calculatedConsensus와 votes는 서버가 같은 입력에 항상 같은 결과가 나오도록 계산한 최종 판정입니다. 이를 바꾸거나 새 투표를 만들지 마세요. evidence의 첫 문장에서는 현재가가 평균 매수가보다 몇 % 높거나 낮은지 쉽게 설명하고, 이어서 비중과 실제 재무 수치가 추가 매수 판단에 어떤 영향을 주는지 적으세요. strategy에는 '지금 추가 매수를 검토해도 되는 상태인지', '기다리는 편이 나은지', '추가 매수보다 비중을 줄이거나 유지해야 하는지' 중 현재 수치에 맞는 결론을 먼저 쓰고, 분할 횟수나 확인 조건을 구체적으로 덧붙이세요. 확인되지 않은 전망이나 적정가는 추측하지 마세요.",
           "monthlyPlan에는 월 투자금이 0원이면 임의의 투자 금액이나 단축 기간을 만들지 말고 감당 가능한 금액을 정하는 방법을 설명하세요. 입력값이 있으면 계산된 단축 기간을 그대로 인용하세요. 생활비 점검, 투자 방법, 계산 결과처럼 서로 다른 내용은 각각 짧은 문장 하나로 분리하고, 한 문장에 여러 행동을 길게 이어 쓰지 마세요.",
           "monthlyPlan과 diversification은 각각 2~3개의 짧고 완결된 문장으로 작성하세요. 문장마다 핵심 내용은 하나만 담고 같은 조언을 표현만 바꾸어 반복하지 마세요.",
           "diversification에는 단순히 분산하라는 말 대신 최대 비중과 상위 3종목 비중을 인용하고 신규 자금으로 쏠림을 완화하는 순서를 제시하세요.",

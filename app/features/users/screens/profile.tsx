@@ -26,10 +26,7 @@ import { cn } from "~/core/lib/utils";
 import { getPayments } from "~/features/payments/queries";
 
 import { getAutomaticAnalysisSettings } from "../automatic-analysis-settings.server";
-import {
-  ProTenureBadgeView,
-  proTenureToneStyles,
-} from "../components/pro-tenure-badge";
+import { ProTenureBadgeView } from "../components/pro-tenure-badge";
 import { proTenureBadge } from "../pro-tenure";
 import { getUserProfile } from "../queries";
 
@@ -138,7 +135,6 @@ export default function Profile({ loaderData }: Route.ComponentProps) {
     proTenureMonths,
   } = loaderData;
   const tenureBadge = proTenureBadge(proTenureMonths);
-  const tenureTone = tenureBadge ? proTenureToneStyles[tenureBadge.tone] : null;
 
   return (
     <main className="flex flex-1 flex-col px-5 pt-8 pb-10 md:px-8 md:pt-12">
@@ -166,12 +162,7 @@ export default function Profile({ loaderData }: Route.ComponentProps) {
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.14),transparent_42%),radial-gradient(circle_at_bottom_right,rgba(139,92,246,0.12),transparent_42%)]" />
           <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center">
             <div className="flex w-fit shrink-0 flex-col items-center gap-3">
-              <Avatar
-                className={cn(
-                  "size-24 rounded-3xl shadow-xl ring-4 md:size-28",
-                  tenureTone ? tenureTone.ring : "ring-background",
-                )}
-              >
+              <Avatar className="ring-background size-24 rounded-3xl shadow-xl ring-4 md:size-28">
                 <AvatarImage src={avatarUrl} alt={`${name} 프로필 사진`} />
                 <AvatarFallback className="rounded-3xl text-2xl font-black">
                   {name.slice(0, 2)}

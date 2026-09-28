@@ -27,6 +27,7 @@ export interface AnalysisResult {
     country?: string;
     exchange?: string;
     currentPrice: number;
+    averagePrice?: number;
     currency: "KRW" | "USD";
     costKrw: number;
     valueKrw: number;

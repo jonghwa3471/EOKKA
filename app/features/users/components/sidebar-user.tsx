@@ -1,5 +1,3 @@
-import type { ProTenureBadge } from "../pro-tenure";
-
 import {
   BadgeCheck,
   Bell,
@@ -34,9 +32,6 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "~/core/components/ui/sidebar";
-import { cn } from "~/core/lib/utils";
-
-import { proTenureToneStyles } from "./pro-tenure-badge";
 
 export default function SidebarUser({
   user,
@@ -46,7 +41,6 @@ export default function SidebarUser({
     name: string;
     email: string;
     avatarUrl: string;
-    proBadgeTone: ProTenureBadge["tone"] | null;
   };
   unreadNotificationCount: number;
 }) {
@@ -65,20 +59,12 @@ export default function SidebarUser({
                 className="group/profile-card data-[state=open]:text-sidebar-accent-foreground border-sidebar-border/70 from-background/85 via-background/60 relative h-[68px] overflow-hidden rounded-2xl border bg-gradient-to-br to-emerald-500/8 px-3 py-2.5 shadow-[0_14px_35px_-24px_rgba(15,23,42,0.65),inset_0_1px_0_rgba(255,255,255,0.08)] transition-all group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:rounded-xl group-data-[collapsible=icon]:border-transparent group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:shadow-none before:absolute before:inset-y-3 before:left-0 before:w-0.5 before:rounded-full before:bg-gradient-to-b before:from-emerald-400 before:to-violet-500 before:opacity-0 before:transition-opacity group-data-[collapsible=icon]:before:hidden hover:-translate-y-0.5 hover:border-emerald-500/25 hover:shadow-[0_18px_38px_-22px_rgba(16,185,129,0.35)] hover:before:opacity-100 focus-visible:ring-1 focus-visible:ring-emerald-500/40 data-[state=open]:border-emerald-500/30 data-[state=open]:bg-gradient-to-br data-[state=open]:from-emerald-500/12 data-[state=open]:to-violet-500/10 data-[state=open]:before:opacity-100"
               >
                 <div className="relative shrink-0">
-                  <Avatar
-                    className={cn(
-                      "size-10 rounded-xl shadow-md ring-2 group-data-[collapsible=icon]:size-8",
-                      user.proBadgeTone
-                        ? proTenureToneStyles[user.proBadgeTone].ring
-                        : "ring-background",
-                    )}
-                  >
+                  <Avatar className="ring-background size-10 rounded-xl shadow-md ring-2 group-data-[collapsible=icon]:size-8">
                     <AvatarImage src={user.avatarUrl} alt={user.name} />
                     <AvatarFallback className="rounded-xl font-black">
                       {user.name.slice(0, 2)}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="ring-sidebar absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full bg-emerald-500 shadow-[0_0_9px_rgba(16,185,129,0.8)] ring-2" />
                   {unreadNotificationCount > 0 && (
                     <span className="ring-sidebar absolute -top-2 -right-2 flex min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] leading-5 font-black text-white ring-2">
                       {unreadNotificationCount > 99
@@ -108,14 +94,7 @@ export default function SidebarUser({
             >
               <DropdownMenuLabel className="mb-1 rounded-xl border border-emerald-500/15 bg-gradient-to-br from-emerald-500/10 to-violet-500/10 p-0 font-normal">
                 <div className="flex items-center gap-3 p-3 text-left text-sm">
-                  <Avatar
-                    className={cn(
-                      "size-10 rounded-xl shadow-sm ring-2",
-                      user.proBadgeTone
-                        ? proTenureToneStyles[user.proBadgeTone].ring
-                        : "ring-background",
-                    )}
-                  >
+                  <Avatar className="ring-background size-10 rounded-xl shadow-sm ring-2">
                     <AvatarImage src={user.avatarUrl} alt={user.name} />
                     <AvatarFallback className="rounded-xl font-black">
                       {user.name.slice(0, 2)}

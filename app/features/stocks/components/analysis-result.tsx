@@ -257,41 +257,31 @@ const purchasePosition = (rangePosition: number) => {
   if (rangePosition <= 20)
     return {
       label: "발에서 샀어요",
-      y: 87,
-      face: "♥‿♥",
-      bubble: "완전 잘 샀다!",
-      faceTone: "text-pink-400",
+      y: 94,
+      image: "/images/eokka-mascot-position-foot.png",
     };
   if (rangePosition <= 40)
     return {
       label: "무릎에서 샀어요",
-      y: 78,
-      face: "^‿^",
-      bubble: "제법 좋은데?",
-      faceTone: "text-emerald-300",
+      y: 83,
+      image: "/images/eokka-mascot-position-knee.png",
     };
   if (rangePosition <= 60)
     return {
       label: "배에서 샀어요",
-      y: 65,
-      face: "•ᴗ•",
-      bubble: "나쁘지 않아요",
-      faceTone: "text-amber-200",
+      y: 79,
+      image: "/images/eokka-mascot-position-belly.png",
     };
   if (rangePosition <= 80)
     return {
       label: "어깨에서 샀어요",
-      y: 49,
-      face: "•_•",
-      bubble: "…",
-      faceTone: "text-slate-200",
+      y: 71,
+      image: "/images/eokka-mascot-position-shoulder.png",
     };
   return {
     label: "머리에서 샀어요",
-    y: 28,
-    face: "×﹏×",
-    bubble: "조금 비싸게 샀어요",
-    faceTone: "text-rose-300",
+    y: 56,
+    image: "/images/eokka-mascot-position-head.png",
   };
 };
 
@@ -307,15 +297,14 @@ function PurchasePositionCharacter({
     ? purchasePosition(data.tenYearPosition)
     : {
         label: "위치 계산 전",
-        y: 65,
-        face: "•_•",
-        bubble: "다시 분석해 주세요",
-        faceTone: "text-slate-300",
+        y: 82,
+        image: "/images/eokka-compound-mate-mascot.png",
       };
   const averagePrice =
-    holding.returnRate > -100
+    holding.averagePrice ??
+    (holding.returnRate > -100
       ? holding.currentPrice / (1 + holding.returnRate / 100)
-      : 0;
+      : 0);
   return (
     <div className="mx-auto mt-6 w-full max-w-md min-w-0 overflow-hidden rounded-3xl border border-white/10 bg-[#171d21]">
       <div className="px-6 pt-6 pb-3">
@@ -330,26 +319,17 @@ function PurchasePositionCharacter({
           내 평균가 {price(averagePrice, holding.currency)}
         </p>
       </div>
-      <div className="relative h-[320px] w-full overflow-hidden bg-[#071018]">
+      <div className="relative h-[380px] w-full overflow-hidden bg-gradient-to-br from-[#101024] via-[#111827] to-[#071018]">
         <img
-          src="/images/purchase-position-human.png?v=2"
-          alt="매수 위치를 표시하는 둥근 사람 실루엣"
-          className="absolute inset-0 h-full w-full object-contain object-center"
+          src={position.image}
+          alt="매수 위치를 설명하는 EOKKA 복리 메이트 마스코트"
+          className="absolute inset-y-3 left-1 h-[calc(100%_-_1.5rem)] w-[72%] object-contain object-center drop-shadow-[0_18px_28px_rgba(16,185,129,0.22)]"
         />
         <div
-          className={`absolute top-[27%] left-[37%] z-10 -translate-x-1/2 -translate-y-1/2 text-2xl font-black tracking-tighter ${position.faceTone}`}
-          aria-hidden="true"
-        >
-          {position.face}
-        </div>
-        <div className="absolute top-[12%] left-[54%] z-10 rounded-2xl rounded-bl-sm bg-white px-3 py-2 text-xs font-black whitespace-nowrap text-slate-900 shadow-xl">
-          {position.bubble}
-        </div>
-        <div
-          className="absolute right-5 left-[43%] z-10 flex -translate-y-1/2 items-center"
+          className="absolute right-4 left-[50%] z-10 flex -translate-y-1/2 items-center"
           style={{ top: `${position.y}%` }}
         >
-          <span className="min-w-7 flex-1 border-t-2 border-dashed border-white" />
+          <span className="min-w-7 flex-1 border-t-2 border-dashed border-emerald-200" />
           <span className="rounded-full bg-white px-3 py-1.5 text-sm font-black whitespace-nowrap text-slate-900 shadow-lg">
             {position.label}
           </span>
@@ -2665,7 +2645,7 @@ export function AnalysisResultView({
             <DialogTitle>내 평균 매수 위치</DialogTitle>
             <DialogDescription>
               평균 매수가가 최근 최대 10년의 최저가와 최고가 사이에서 어느
-              높이인지 계산했어요.
+              높이인지 계산하고, EOKKA 마스코트가 쉽게 알려드려요.
             </DialogDescription>
           </DialogHeader>
           {selectedPurchaseHolding && (
@@ -3304,9 +3284,9 @@ export function AnalysisResultView({
                     종목별 투자 컨센서스
                   </h4>
                   <p className="mt-2 text-sm leading-6 text-slate-300">
-                    가치·성장·가격·분산·시장 사이클을 바라보는 열 가지 관점을
-                    종합했어요. 한 사람의 확신보다 의견이 어디에서 모이고
-                    갈리는지 먼저 확인해 보세요.
+                    현재가와 내 평균 매수가를 먼저 비교하고, 종목 비중과 기업
+                    상태까지 함께 살펴 지금 추가 매수를 검토해도 되는지
+                    정리했어요.
                   </p>
                   <p className="mt-3 text-[11px] leading-5 text-slate-500">
                     종목명과 실제 금액은 AI에 보내지 않으며, 결과가 매수·매도
@@ -3315,79 +3295,142 @@ export function AnalysisResultView({
                 </div>
               </div>
               <div className="mt-4 grid gap-3">
-                {result.aiStrategy.holdingInsights?.map((insight) => (
-                  <article
-                    key={insight.name}
-                    className="bg-background/70 rounded-xl border p-4"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="font-black">{aiText(insight.name)}</p>
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
-                          insight.verdict === "좋은 위치"
-                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300"
-                            : insight.verdict === "주의 필요"
-                              ? "bg-rose-500/15 text-rose-600 dark:text-rose-300"
-                              : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
-                        }`}
-                      >
-                        {insight.verdict === "좋은 위치"
-                          ? "괜찮아 보여요"
-                          : insight.verdict === "주의 필요"
-                            ? "한번 점검해 봐요"
-                            : "조금 더 지켜봐요"}
-                      </span>
-                    </div>
-                    {insight.consensus && insight.votes && (
-                      <div className="mt-3 rounded-xl border border-white/5 bg-black/10 p-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-xs font-black">
-                            위원회 결론 · {insight.consensus}
-                          </p>
-                          <p className="text-muted-foreground text-[10px] font-bold">
-                            총 10표
-                          </p>
-                        </div>
-                        <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-slate-500/15">
-                          <span
-                            className="bg-emerald-500"
-                            style={{ width: `${insight.votes.positive * 10}%` }}
-                          />
-                          <span
-                            className="bg-amber-400"
-                            style={{ width: `${insight.votes.neutral * 10}%` }}
-                          />
-                          <span
-                            className="bg-rose-500"
-                            style={{ width: `${insight.votes.cautious * 10}%` }}
-                          />
-                        </div>
-                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] font-bold">
-                          <span className="text-emerald-500">
-                            긍정 {insight.votes.positive}
-                          </span>
-                          <span className="text-amber-500">
-                            중립 {insight.votes.neutral}
-                          </span>
-                          <span className="text-rose-500">
-                            신중 {insight.votes.cautious}
-                          </span>
-                        </div>
+                {result.aiStrategy.holdingInsights?.map((insight) => {
+                  const holding = result.holdings.find(
+                    (item) => item.name === aiText(insight.name),
+                  );
+                  const averagePrice = holding
+                    ? (holding.averagePrice ??
+                      (holding.returnRate > -100
+                        ? holding.currentPrice / (1 + holding.returnRate / 100)
+                        : 0))
+                    : 0;
+                  const priceGapPercent =
+                    holding && averagePrice > 0
+                      ? ((holding.currentPrice - averagePrice) / averagePrice) *
+                        100
+                      : null;
+                  return (
+                    <article
+                      key={insight.name}
+                      className="bg-background/70 rounded-xl border p-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-black">{aiText(insight.name)}</p>
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
+                            insight.verdict === "좋은 위치"
+                              ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300"
+                              : insight.verdict === "주의 필요"
+                                ? "bg-rose-500/15 text-rose-600 dark:text-rose-300"
+                                : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                          }`}
+                        >
+                          {insight.consensus === "긍정"
+                            ? "조건부 추가 매수 검토"
+                            : insight.consensus === "신중"
+                              ? "추가 매수보다 비중 점검"
+                              : "가격을 조금 더 지켜봐요"}
+                        </span>
                       </div>
-                    )}
-                    <p className="text-muted-foreground mt-2 text-xs leading-5">
-                      {aiText(insight.evidence)}
-                    </p>
-                    <div className="mt-3 rounded-lg bg-violet-500/[0.08] p-3">
-                      <p className="text-[10px] font-black tracking-wide text-violet-600 uppercase dark:text-violet-400">
-                        10인 위원회의 합의된 조언
+                      {holding && averagePrice > 0 && (
+                        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                          <div className="bg-muted/45 rounded-xl px-3 py-2.5">
+                            <p className="text-muted-foreground text-[10px] font-bold">
+                              현재가
+                            </p>
+                            <p className="mt-1 text-sm font-black">
+                              {price(holding.currentPrice, holding.currency)}
+                            </p>
+                          </div>
+                          <div className="bg-muted/45 rounded-xl px-3 py-2.5">
+                            <p className="text-muted-foreground text-[10px] font-bold">
+                              내 평균 매수가
+                            </p>
+                            <p className="mt-1 text-sm font-black">
+                              {price(averagePrice, holding.currency)}
+                            </p>
+                          </div>
+                          <div className="bg-muted/45 rounded-xl px-3 py-2.5">
+                            <p className="text-muted-foreground text-[10px] font-bold">
+                              평균 매수가와 비교
+                            </p>
+                            <p
+                              className={cn(
+                                "mt-1 text-sm font-black",
+                                (priceGapPercent ?? 0) > 0
+                                  ? "text-rose-500"
+                                  : (priceGapPercent ?? 0) < 0
+                                    ? "text-blue-500"
+                                    : "text-muted-foreground",
+                              )}
+                            >
+                              {priceGapPercent === null
+                                ? "비교 전"
+                                : priceGapPercent === 0
+                                  ? "평균 매수가와 같아요"
+                                  : `평균 매수가보다 ${Math.abs(priceGapPercent).toFixed(1)}% ${priceGapPercent > 0 ? "높아요" : "낮아요"}`}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      {insight.consensus && insight.votes && (
+                        <div className="mt-3 rounded-xl border border-white/5 bg-black/10 p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-xs font-black">
+                              위원회 결론 · {insight.consensus}
+                            </p>
+                            <p className="text-muted-foreground text-[10px] font-bold">
+                              총 10표
+                            </p>
+                          </div>
+                          <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-slate-500/15">
+                            <span
+                              className="bg-emerald-500"
+                              style={{
+                                width: `${insight.votes.positive * 10}%`,
+                              }}
+                            />
+                            <span
+                              className="bg-amber-400"
+                              style={{
+                                width: `${insight.votes.neutral * 10}%`,
+                              }}
+                            />
+                            <span
+                              className="bg-rose-500"
+                              style={{
+                                width: `${insight.votes.cautious * 10}%`,
+                              }}
+                            />
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] font-bold">
+                            <span className="text-emerald-500">
+                              긍정 {insight.votes.positive}
+                            </span>
+                            <span className="text-amber-500">
+                              중립 {insight.votes.neutral}
+                            </span>
+                            <span className="text-rose-500">
+                              신중 {insight.votes.cautious}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      <p className="text-muted-foreground mt-2 text-xs leading-5">
+                        {aiText(insight.evidence)}
                       </p>
-                      <p className="mt-1 text-sm leading-6">
-                        {aiText(insight.strategy)}
-                      </p>
-                    </div>
-                  </article>
-                ))}
+                      <div className="mt-3 rounded-lg bg-violet-500/[0.08] p-3">
+                        <p className="text-[10px] font-black tracking-wide text-violet-600 uppercase dark:text-violet-400">
+                          추가 매수 판단
+                        </p>
+                        <p className="mt-1 text-sm leading-6">
+                          {aiText(insight.strategy)}
+                        </p>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             </div>
           )}

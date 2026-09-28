@@ -326,6 +326,7 @@ export async function analyzePortfolio(
       country: stock.country,
       exchange: stock.exchange,
       currentPrice: data.currentPrice,
+      averagePrice: averagePriceInStockCurrency,
       currency: stock.currency as "KRW" | "USD",
       costKrw: cost,
       valueKrw: value,

@@ -664,12 +664,13 @@ function aggregateTrendHistory(
   for (const record of calendarHistory) {
     const key = trendPeriodKey(record.item.savedOn, interval);
     const previous = groups.get(key);
+    const hasActualRecord =
+      (previous?.hasActualRecord ?? false) || !record.isCarried;
     groups.set(key, {
       ...record,
-      isCarried: false,
-      closedReason: null,
-      hasActualRecord:
-        (previous?.hasActualRecord ?? false) || !record.isCarried,
+      isCarried: !hasActualRecord,
+      closedReason: hasActualRecord ? null : record.closedReason,
+      hasActualRecord,
       periodLabel:
         interval === "weekly"
           ? `${key.replaceAll("-", ".")}~${shiftDate(key, 6).replaceAll("-", ".")}`
@@ -719,6 +720,9 @@ function TrendChart({
   const { ref: chartRef, isRevealed } = useRevealOncePerVisit<HTMLDivElement>();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [hoveredFutureIndex, setHoveredFutureIndex] = useState<number | null>(
+    null,
+  );
   const [zoom, setZoom] = useState(1);
   const [interval, setInterval] = useState<TrendInterval>("daily");
   const [latestPointVisible, setLatestPointVisible] = useState(false);
@@ -854,7 +858,6 @@ function TrendChart({
   const min = Math.min(...values);
   const max = Math.max(...values);
   const span = Math.max(1, max - min);
-  const timelineLength = records.length + futureProjection.length;
   const plotWidth = width - padding.left - padding.right;
   const historyEndX = padding.left + plotWidth * 0.78;
   const historyPlotWidth = historyEndX - padding.left;
@@ -925,68 +928,30 @@ function TrendChart({
       (point, index) => `${x(records.length + index)},${y(point.value)}`,
     ),
   ];
-  const currentExpectedEnd = futureProjection.at(-1)!;
-  const futureHorizonLabel =
-    interval === "daily"
-      ? "1주 뒤"
-      : interval === "weekly"
-        ? "4주 뒤"
-        : interval === "monthly"
-          ? "3개월 뒤"
-          : "1년 뒤";
-  const forecastEndLabels = (() => {
-    const labels = [
-      {
-        key: "currentExpected" as const,
-        label: "현재 예상",
-        value: currentExpectedEnd.value,
-        color: "#3b82f6",
-      },
-      ...(currentExpectedEnd.expected === null
-        ? []
-        : [
-            {
-              key: "expected" as const,
-              label: "최초 예상",
-              value: currentExpectedEnd.expected,
-              color: "#f59e0b",
-            },
-          ]),
-      ...(currentExpectedEnd.market === null
-        ? []
-        : [
-            {
-              key: "market" as const,
-              label: "최초 시장 예상",
-              value: currentExpectedEnd.market,
-              color: "#a78bfa",
-            },
-          ]),
-    ].sort((a, b) => y(a.value) - y(b.value));
-    let previousY = 1;
-    const positioned = labels.map((label) => {
-      const labelY = Math.max(18, y(label.value) - 10, previousY + 17);
-      previousY = labelY;
-      return { ...label, labelY };
-    });
-    const overflow = Math.max(
-      0,
-      (positioned.at(-1)?.labelY ?? 0) - (height - padding.bottom),
-    );
-    return positioned.map((label) => ({
-      ...label,
-      labelY: label.labelY - overflow,
-    }));
-  })();
   const area = `${x(visibleRecords[0].index)},${height - padding.bottom} ${actualPoints.join(" ")} ${x(visibleRecords.at(-1)!.index)},${height - padding.bottom}`;
   const hovered = hoveredIndex === null ? null : records[hoveredIndex];
   const hoverX = hoveredIndex === null ? null : x(hoveredIndex);
+  const hoveredFuture =
+    hoveredFutureIndex === null ? null : futureProjection[hoveredFutureIndex];
+  const futureHoverX =
+    hoveredFutureIndex === null ? null : x(records.length + hoveredFutureIndex);
+  const futurePeriodLabel =
+    hoveredFutureIndex === null
+      ? ""
+      : interval === "daily"
+        ? `${hoveredFutureIndex + 1}일 뒤`
+        : interval === "weekly"
+          ? `${hoveredFutureIndex + 1}주 뒤`
+          : interval === "monthly"
+            ? `${hoveredFutureIndex + 1}개월 뒤`
+            : `${hoveredFutureIndex + 1}년 뒤`;
   const tooltipHeight = hovered
-    ? 58 +
-      (hovered.expected !== null ? 18 : 0) +
-      (hovered.market !== null ? 18 : 0) +
-      (hovered.actualMarket !== null ? 18 : 0) +
-      (hovered.isCarried ? 18 : 0)
+    ? hovered.isCarried
+      ? 58
+      : 58 +
+        (hovered.expected !== null ? 18 : 0) +
+        (hovered.market !== null ? 18 : 0) +
+        (hovered.actualMarket !== null ? 18 : 0)
     : 58;
   const seriesOpacity = (series: TrendSeries) =>
     dimmedSeries.includes(series) ? 0.16 : 1;
@@ -999,6 +964,7 @@ function TrendChart({
       : anchorRatio;
     setZoom(clampedZoom);
     setHoveredIndex(null);
+    setHoveredFutureIndex(null);
     window.requestAnimationFrame(() => {
       const updatedContainer = scrollRef.current;
       if (!updatedContainer) return;
@@ -1012,6 +978,7 @@ function TrendChart({
   const selectInterval = (nextInterval: TrendInterval) => {
     setInterval(nextInterval);
     setHoveredIndex(null);
+    setHoveredFutureIndex(null);
     setZoom(1);
     if (scrollRef.current) scrollRef.current.scrollLeft = 0;
   };
@@ -1157,34 +1124,6 @@ function TrendChart({
               transition: "opacity 650ms ease-out 250ms",
             }}
           />
-          {forecastEndLabels.map((label) => (
-            <g
-              key={label.key}
-              style={{
-                opacity: isRevealed ? seriesOpacity(label.key) : 0,
-                transition: "opacity 650ms ease-out 450ms",
-              }}
-            >
-              <circle
-                cx={x(timelineLength - 1)}
-                cy={y(label.value)}
-                r="6"
-                fill={label.color}
-                stroke="white"
-                strokeWidth="2"
-              />
-              <text
-                x={x(timelineLength - 1) - 8}
-                y={label.labelY}
-                textAnchor="end"
-                fill={label.color}
-                className="text-[11px] font-black"
-              >
-                {label.label} · {futureHorizonLabel} · {won.format(label.value)}
-                원
-              </text>
-            </g>
-          ))}
           <polyline
             points={actualPoints.join(" ")}
             fill="none"
@@ -1219,22 +1158,33 @@ function TrendChart({
                   transition: "stroke-dashoffset 900ms ease-out 220ms",
                 }}
               />
-              {visibleRecords.map(({ actualMarket, index, item }) =>
+              {visibleRecords.map(({ actualMarket, index, item, isCarried }) =>
                 actualMarket === null ? null : (
-                  <circle
-                    key={`actual-market-${item.savedOn}`}
-                    cx={x(index)}
-                    cy={y(actualMarket)}
-                    r="10"
-                    fill="#06b6d4"
-                    stroke="white"
-                    strokeWidth="2"
-                    style={{
-                      opacity: isRevealed ? seriesOpacity("actualMarket") : 0,
-                      filter: "drop-shadow(0 0 4px rgba(6,182,212,0.85))",
-                      transition: `opacity 250ms ease-out ${300 + Math.min(index, 30) * 15}ms`,
-                    }}
-                  />
+                  <g key={`actual-market-${item.savedOn}`}>
+                    <circle
+                      cx={x(index)}
+                      cy={y(actualMarket)}
+                      r={isCarried ? "4" : "7"}
+                      fill={isCarried ? "#64748b" : "#06b6d4"}
+                      style={{
+                        opacity: isRevealed ? seriesOpacity("actualMarket") : 0,
+                        filter: isCarried
+                          ? undefined
+                          : "drop-shadow(0 0 3px rgba(6,182,212,0.65))",
+                        transition: `opacity 250ms ease-out ${300 + Math.min(index, 30) * 15}ms`,
+                      }}
+                    />
+                    <circle
+                      cx={x(index)}
+                      cy={y(actualMarket)}
+                      r={isCarried ? "1.5" : "3"}
+                      fill="white"
+                      style={{
+                        opacity: isRevealed ? seriesOpacity("actualMarket") : 0,
+                        transition: `opacity 250ms ease-out ${340 + Math.min(index, 30) * 15}ms`,
+                      }}
+                    />
+                  </g>
                 ),
               )}
             </>
@@ -1358,8 +1308,21 @@ function TrendChart({
               const svgX = ((event.clientX - rect.left) / rect.width) * width;
               if (svgX > historyEndX) {
                 setHoveredIndex(null);
+                const futureRatio =
+                  (Math.min(width - padding.right, svgX) - historyEndX) /
+                  Math.max(1, width - padding.right - historyEndX);
+                setHoveredFutureIndex(
+                  Math.min(
+                    futureProjection.length - 1,
+                    Math.max(
+                      0,
+                      Math.round(futureRatio * futureProjection.length) - 1,
+                    ),
+                  ),
+                );
                 return;
               }
+              setHoveredFutureIndex(null);
               const ratio =
                 (Math.min(historyEndX, Math.max(padding.left, svgX)) -
                   padding.left) /
@@ -1373,8 +1336,102 @@ function TrendChart({
                     ),
               );
             }}
-            onMouseLeave={() => setHoveredIndex(null)}
+            onMouseLeave={() => {
+              setHoveredIndex(null);
+              setHoveredFutureIndex(null);
+            }}
           />
+          {hoveredFuture && futureHoverX !== null && (
+            <g pointerEvents="none">
+              <line
+                x1={futureHoverX}
+                x2={futureHoverX}
+                y1={padding.top}
+                y2={height - padding.bottom}
+                className="stroke-muted-foreground"
+                strokeDasharray="3 4"
+                opacity=".55"
+              />
+              <circle
+                cx={futureHoverX}
+                cy={y(hoveredFuture.value)}
+                r="5"
+                fill="#3b82f6"
+                stroke="white"
+                strokeWidth="2"
+              />
+              {hoveredFuture.expected !== null && (
+                <circle
+                  cx={futureHoverX}
+                  cy={y(hoveredFuture.expected)}
+                  r="4"
+                  fill="#f59e0b"
+                  stroke="white"
+                  strokeWidth="1.5"
+                />
+              )}
+              {hoveredFuture.market !== null && (
+                <circle
+                  cx={futureHoverX}
+                  cy={y(hoveredFuture.market)}
+                  r="4"
+                  fill="#a78bfa"
+                  stroke="white"
+                  strokeWidth="1.5"
+                />
+              )}
+              <g
+                transform={`translate(${futureHoverX > width - 225 ? futureHoverX - 212 : futureHoverX + 12}, ${padding.top + 8})`}
+              >
+                <rect
+                  width="200"
+                  height={
+                    58 +
+                    (hoveredFuture.expected !== null ? 18 : 0) +
+                    (hoveredFuture.market !== null ? 18 : 0)
+                  }
+                  rx="12"
+                  className="fill-background stroke-border"
+                  strokeWidth="1"
+                />
+                <text
+                  x="12"
+                  y="20"
+                  className="fill-foreground text-[11px] font-bold"
+                >
+                  {futurePeriodLabel}
+                </text>
+                <text
+                  x="12"
+                  y="41"
+                  fill="#3b82f6"
+                  className="text-[11px] font-semibold"
+                >
+                  현재 예상 · {won.format(hoveredFuture.value)}원
+                </text>
+                {hoveredFuture.expected !== null && (
+                  <text
+                    x="12"
+                    y="59"
+                    fill="#f59e0b"
+                    className="text-[11px] font-semibold"
+                  >
+                    최초 예상 · {won.format(hoveredFuture.expected)}원
+                  </text>
+                )}
+                {hoveredFuture.market !== null && (
+                  <text
+                    x="12"
+                    y={59 + (hoveredFuture.expected !== null ? 18 : 0)}
+                    fill="#a78bfa"
+                    className="text-[11px] font-semibold"
+                  >
+                    최초 시장 예상 · {won.format(hoveredFuture.market)}원
+                  </text>
+                )}
+              </g>
+            </g>
+          )}
           {hovered && hoverX !== null && (
             <g pointerEvents="none">
               <line
@@ -1390,7 +1447,13 @@ function TrendChart({
                 cx={hoverX}
                 cy={y(hovered.item.currentValue)}
                 r="5"
-                fill={hovered.item.savedOn === endDate ? "#ec4899" : "#10b981"}
+                fill={
+                  hovered.isCarried
+                    ? "#64748b"
+                    : hovered.item.savedOn === endDate
+                      ? "#ec4899"
+                      : "#10b981"
+                }
                 stroke="white"
                 strokeWidth="2"
               />
@@ -1419,7 +1482,7 @@ function TrendChart({
                   cx={hoverX}
                   cy={y(hovered.actualMarket)}
                   r="4"
-                  fill="#06b6d4"
+                  fill={hovered.isCarried ? "#64748b" : "#06b6d4"}
                   stroke="white"
                   strokeWidth="1.5"
                 />
@@ -1441,7 +1504,7 @@ function TrendChart({
                 >
                   {hovered.periodLabel}
                 </text>
-                {hovered.item.savedOn === endDate && (
+                {!hovered.isCarried && hovered.item.savedOn === endDate && (
                   <text
                     x="138"
                     y="20"
@@ -1452,61 +1515,61 @@ function TrendChart({
                     최신 종가
                   </text>
                 )}
-                <text
-                  x="12"
-                  y="41"
-                  fill="#10b981"
-                  className="text-[11px] font-semibold"
-                >
-                  실제 평가금액 · {won.format(hovered.item.currentValue)}원
-                </text>
-                {hovered.expected !== null && (
+                {hovered.isCarried ? (
                   <text
                     x="12"
-                    y="59"
-                    fill="#f59e0b"
-                    className="text-[11px] font-semibold"
+                    y="41"
+                    className="fill-muted-foreground text-[11px] font-semibold"
                   >
-                    최초 예상 · {won.format(hovered.expected)}원
+                    {hovered.closedReason === "휴장일"
+                      ? "휴장일이라 미갱신됐어요"
+                      : "새 종가가 없어 미갱신됐어요"}
                   </text>
-                )}
-                {hovered.market !== null && (
-                  <text
-                    x="12"
-                    y={
-                      59 +
-                      (hovered.expected !== null ? 18 : 0) +
-                      (hovered.actualMarket !== null ? 18 : 0)
-                    }
-                    fill="#a78bfa"
-                    className="text-[11px] font-semibold"
-                  >
-                    최초 시장 예상 · {won.format(hovered.market)}원
-                  </text>
-                )}
-                {hovered.actualMarket !== null && (
-                  <text
-                    x="12"
-                    y={59 + (hovered.expected !== null ? 18 : 0)}
-                    fill="#06b6d4"
-                    className="text-[11px] font-semibold"
-                  >
-                    시장 실제 추이 · {won.format(hovered.actualMarket)}원
-                  </text>
-                )}
-                {hovered.isCarried && (
-                  <text
-                    x="12"
-                    y={
-                      59 +
-                      (hovered.expected !== null ? 18 : 0) +
-                      (hovered.actualMarket !== null ? 18 : 0) +
-                      (hovered.market !== null ? 18 : 0)
-                    }
-                    className="fill-muted-foreground text-[10px] font-semibold"
-                  >
-                    {hovered.closedReason} · 직전 종가 유지
-                  </text>
+                ) : (
+                  <>
+                    <text
+                      x="12"
+                      y="41"
+                      fill="#10b981"
+                      className="text-[11px] font-semibold"
+                    >
+                      실제 평가금액 · {won.format(hovered.item.currentValue)}원
+                    </text>
+                    {hovered.expected !== null && (
+                      <text
+                        x="12"
+                        y="59"
+                        fill="#f59e0b"
+                        className="text-[11px] font-semibold"
+                      >
+                        최초 예상 · {won.format(hovered.expected)}원
+                      </text>
+                    )}
+                    {hovered.market !== null && (
+                      <text
+                        x="12"
+                        y={
+                          59 +
+                          (hovered.expected !== null ? 18 : 0) +
+                          (hovered.actualMarket !== null ? 18 : 0)
+                        }
+                        fill="#a78bfa"
+                        className="text-[11px] font-semibold"
+                      >
+                        최초 시장 예상 · {won.format(hovered.market)}원
+                      </text>
+                    )}
+                    {hovered.actualMarket !== null && (
+                      <text
+                        x="12"
+                        y={59 + (hovered.expected !== null ? 18 : 0)}
+                        fill="#06b6d4"
+                        className="text-[11px] font-semibold"
+                      >
+                        시장 실제 추이 · {won.format(hovered.actualMarket)}원
+                      </text>
+                    )}
+                  </>
                 )}
               </g>
             </g>
@@ -2755,6 +2818,22 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
     100,
     (latest.currentValue / latest.goalAmount) * 100,
   );
+  const recordOutcomes = history.slice(1).map((item, index) => {
+    const profitDelta = item.profit - history[index].profit;
+    return profitDelta > 1 ? "win" : profitDelta < -1 ? "loss" : "draw";
+  });
+  const winningRecordCount = recordOutcomes.filter(
+    (outcome) => outcome === "win",
+  ).length;
+  const losingRecordCount = recordOutcomes.filter(
+    (outcome) => outcome === "loss",
+  ).length;
+  const drawRecordCount =
+    recordOutcomes.length - winningRecordCount - losingRecordCount;
+  const decidedRecordCount = winningRecordCount + losingRecordCount;
+  const recordWinRate = decidedRecordCount
+    ? (winningRecordCount / decidedRecordCount) * 100
+    : null;
 
   return (
     <main className="flex flex-1 flex-col px-5 pt-8 pb-10 md:px-8 md:pt-12">
@@ -2893,17 +2972,19 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
 
         <section
           className={cn(
-            "grid gap-4 md:grid-cols-2 xl:grid-cols-6",
+            "grid gap-4 md:grid-cols-2 xl:grid-cols-12",
             goalOptions.length > 1 ? "mt-5" : "mt-7",
           )}
         >
           <SummaryCard
+            className="xl:col-span-3"
             icon={PiggyBankIcon}
             label="현재 평가금액"
             value={formatWon(latest.currentValue)}
             change={<Change value={assetChange} suffix="원" />}
           />
           <SummaryCard
+            className="xl:col-span-3"
             icon={CoinsIcon}
             label="현재 평가손익"
             value={formatWon(latest.profit)}
@@ -2911,6 +2992,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             change={<Change value={profitChange} suffix="원" />}
           />
           <SummaryCard
+            className="xl:col-span-3"
             icon={TrendingUpIcon}
             label="현재 수익률"
             value={formatRate(latest.returnRate)}
@@ -2920,6 +3002,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             change={<Change value={returnChange} suffix="%p" />}
           />
           <SummaryCard
+            className="xl:col-span-3"
             icon={ChartNoAxesCombinedIcon}
             label="총 연평균 수익률"
             value={
@@ -2950,6 +3033,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             }
           />
           <SummaryCard
+            className="xl:col-span-4"
             icon={Clock3Icon}
             label={`${formatGoalAmount(latest.goalAmount)} 목표 도달 예상`}
             value={formatMonths(latest.goalMonth)}
@@ -2962,6 +3046,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             change={<Change value={periodChange} suffix="개월" inverse />}
           />
           <SummaryCard
+            className="xl:col-span-4"
             icon={TargetIcon}
             label={`${formatGoalAmount(latest.goalAmount)} 목표 달성률`}
             value={`${progress.toFixed(1)}%`}
@@ -2971,6 +3056,30 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                   Math.max(0, latest.goalAmount - latest.currentValue),
                 )}{" "}
                 남음
+              </span>
+            }
+          />
+          <SummaryCard
+            className="xl:col-span-4"
+            icon={AwardIcon}
+            label="승률"
+            value={
+              recordWinRate === null
+                ? "비교 준비 중"
+                : `${recordWinRate.toFixed(1)}%`
+            }
+            valueClass={
+              recordWinRate === null
+                ? "text-muted-foreground"
+                : recordWinRate >= 50
+                  ? "text-rose-500"
+                  : "text-blue-500"
+            }
+            detail="직전 기록 대비 평가손익 기준"
+            change={
+              <span className="text-muted-foreground text-xs leading-5">
+                수익 {winningRecordCount}일 · 손해 {losingRecordCount}일
+                {drawRecordCount > 0 ? ` · 보합 ${drawRecordCount}일 제외` : ""}
               </span>
             }
           />
@@ -3421,6 +3530,7 @@ function CalculationChange({
 }
 
 function SummaryCard({
+  className,
   icon: Icon,
   label,
   value,
@@ -3429,6 +3539,7 @@ function SummaryCard({
   detailAfterChange = false,
   change,
 }: {
+  className?: string;
   icon: typeof TrendingUpIcon;
   label: string;
   value: string;
@@ -3438,7 +3549,12 @@ function SummaryCard({
   change: React.ReactNode;
 }) {
   return (
-    <div className="bg-card rounded-3xl border p-5 shadow-sm">
+    <div
+      className={cn(
+        "bg-card h-full rounded-3xl border p-5 shadow-sm",
+        className,
+      )}
+    >
       <div className="flex items-center justify-between">
         <span className="text-muted-foreground text-sm font-semibold">
           {label}
