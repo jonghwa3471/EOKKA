@@ -17,6 +17,7 @@ import { data, redirect } from "react-router";
 import { z } from "zod";
 
 import makeServerClient from "~/core/lib/supa-client.server";
+import { recordAdminActivity } from "~/features/admin/activity.server";
 
 /**
  * Meta function for the social authentication complete page
@@ -114,6 +115,8 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     requestedNext?.startsWith("/") && !requestedNext.startsWith("//")
       ? requestedNext
       : "/";
+  const analyticsEvent =
+    searchParams.get("mode") === "signup" ? "sign_up" : "login";
 
   // Try to validate the parameters as a successful OAuth callback
   const { success, data: validData } = searchParamsSchema.safeParse(
@@ -223,8 +226,25 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     );
   }
 
+  const createdAt = new Date(user.created_at).getTime();
+  const lastSignedInAt = new Date(
+    user.last_sign_in_at ?? user.created_at,
+  ).getTime();
+  const isNewAccount = Math.abs(lastSignedInAt - createdAt) < 60_000;
+  await recordAdminActivity({
+    eventType: isNewAccount ? "account_created" : "login_completed",
+    userId: user.id,
+  });
+
   // Redirect to home page with auth cookies in headers
-  return redirect(nextPath, { headers });
+  const redirectUrl = new URL(nextPath, new URL(request.url).origin);
+  redirectUrl.searchParams.set("analytics", analyticsEvent);
+  return redirect(
+    `${redirectUrl.pathname}${redirectUrl.search}${redirectUrl.hash}`,
+    {
+      headers,
+    },
+  );
 }
 
 /**

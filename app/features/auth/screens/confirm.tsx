@@ -19,6 +19,7 @@ import { data, redirect } from "react-router";
 import { z } from "zod";
 
 import makeServerClient from "~/core/lib/supa-client.server";
+import { recordAdminActivity } from "~/features/admin/activity.server";
 
 /**
  * Meta function for the confirmation page
@@ -101,13 +102,27 @@ export async function loader({ request }: Route.LoaderArgs) {
   const [client, headers] = makeServerClient(request);
 
   // Verify the token with Supabase
-  const { error } = await client.auth.verifyOtp({
+  const { data: authData, error } = await client.auth.verifyOtp({
     ...validData,
   });
 
   // Return error if verification fails
   if (error) {
     return data({ error: error.message }, { status: 400 });
+  }
+
+  if (validData.type === "email" && authData.user) {
+    const createdAt = new Date(authData.user.created_at).getTime();
+    const lastSignedInAt = new Date(
+      authData.user.last_sign_in_at ?? authData.user.created_at,
+    ).getTime();
+    await recordAdminActivity({
+      eventType:
+        Math.abs(lastSignedInAt - createdAt) < 60_000
+          ? "account_created"
+          : "login_completed",
+      userId: authData.user.id,
+    });
   }
 
   // Special handling for email change confirmations

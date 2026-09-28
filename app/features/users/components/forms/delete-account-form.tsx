@@ -18,6 +18,7 @@ import {
 import { Checkbox } from "~/core/components/ui/checkbox";
 import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
+import { markPendingAnalyticsEvent } from "~/core/lib/analytics.client";
 
 export default function DeleteAccountForm() {
   const fetcher = useFetcher<Route.ComponentProps["actionData"]>();
@@ -118,6 +119,7 @@ export default function DeleteAccountForm() {
         busy={isSubmitting}
         onConfirm={() => {
           if (!formRef.current) return;
+          markPendingAnalyticsEvent("account_deleted");
           setConfirmOpen(false);
           void fetcher.submit(formRef.current, {
             method: "delete",

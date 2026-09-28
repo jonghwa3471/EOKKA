@@ -26,7 +26,9 @@ import {
   SelectValue,
 } from "~/core/components/ui/select";
 import { Textarea } from "~/core/components/ui/textarea";
+import { markPendingAnalyticsEvent } from "~/core/lib/analytics.client";
 import makeServerClient from "~/core/lib/supa-client.server";
+import { recordAdminActivity } from "~/features/admin/activity.server";
 import {
   addTicket,
   deleteSupportMessage,
@@ -150,7 +152,13 @@ export async function action({ request }: Route.ActionArgs) {
         { status: 400 },
       );
     const id = await addTicket(user.id, parsed.data);
-    return redirect(`/contact?ticket=${id}`);
+    await recordAdminActivity({
+      eventType: "support_ticket_created",
+      userId: user.id,
+      targetType: "support_ticket",
+      targetId: id,
+    });
+    return redirect(`/contact?ticket=${id}&analytics=support_ticket_created`);
   } catch (error) {
     if (error instanceof Response) throw error;
     const expected =
@@ -402,7 +410,13 @@ export default function Support({
             </p>
           )}
           {d.signedIn ? (
-            <Form method="post" className="space-y-5">
+            <Form
+              method="post"
+              className="space-y-5"
+              onSubmit={() =>
+                markPendingAnalyticsEvent("support_ticket_created")
+              }
+            >
               <div>
                 <label
                   htmlFor="category"

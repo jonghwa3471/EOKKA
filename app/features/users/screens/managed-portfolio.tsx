@@ -39,12 +39,14 @@ import {
   SelectValue,
 } from "~/core/components/ui/select";
 import db from "~/core/db/drizzle-client.server";
+import trackEvent from "~/core/lib/analytics.client";
 import {
   loadCachedRouteData,
   usePrimeRouteDataCache,
 } from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
+import { recordAdminActivity } from "~/features/admin/activity.server";
 import { StockAutocomplete } from "~/features/stocks/components/stock-autocomplete";
 import {
   getAnalysisHistory,
@@ -310,6 +312,11 @@ export async function action({ request }: Route.ActionArgs) {
         exchangeRate: historicalRate.rate,
         memo: parsed.memo || null,
       });
+      await recordAdminActivity({
+        eventType: "portfolio_transaction_added",
+        userId: user.id,
+        targetType: "portfolio",
+      });
       return data({
         success: "매매일지를 추가했어요.",
         portfolioChanged: true,
@@ -337,6 +344,11 @@ export async function action({ request }: Route.ActionArgs) {
         currentHoldingCount,
       );
       await deletePortfolioTransaction(user.id, transactionId);
+      await recordAdminActivity({
+        eventType: "portfolio_transaction_deleted",
+        userId: user.id,
+        targetType: "portfolio",
+      });
       return data({
         success: "매매일지에서 거래를 삭제했어요.",
         portfolioChanged: true,
@@ -349,6 +361,12 @@ export async function action({ request }: Route.ActionArgs) {
       if (!managed?.transactions.length)
         throw new Error("삭제할 매매 기록이 없어요.");
       await deleteAllPortfolioTransactions(user.id);
+      await recordAdminActivity({
+        eventType: "portfolio_transaction_deleted",
+        userId: user.id,
+        targetType: "portfolio",
+        targetLabel: "전체 매매일지",
+      });
       return data({
         success: "매매일지를 전부 삭제했어요.",
         portfolioChanged: true,
@@ -406,6 +424,11 @@ export async function action({ request }: Route.ActionArgs) {
         }),
       );
       await addPortfolioTransactions(user.id, transactions);
+      await recordAdminActivity({
+        eventType: "portfolio_transaction_added",
+        userId: user.id,
+        targetType: "portfolio",
+      });
       return data({
         success: "빠른 분석의 종목을 매매일지에 추가했어요.",
         portfolioChanged: true,
@@ -468,6 +491,11 @@ export async function action({ request }: Route.ActionArgs) {
         currentHoldingCount,
       );
       await updatePortfolioTransactions(user.id, preparedUpdates);
+      await recordAdminActivity({
+        eventType: "portfolio_transaction_updated",
+        userId: user.id,
+        targetType: "portfolio",
+      });
 
       return data({
         success: `매매일지 수정 ${preparedUpdates.length}건을 저장했어요.`,
@@ -605,6 +633,19 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
       actionOperation === "delete-all-transactions"
     )
       setPendingTransactionUpdates({});
+    if (actionOperation === "add" || actionOperation === "import")
+      trackEvent("portfolio_transaction_added", {
+        operation: actionOperation,
+      });
+    if (actionOperation === "batch-update")
+      trackEvent("portfolio_transaction_updated");
+    if (
+      actionOperation === "delete" ||
+      actionOperation === "delete-all-transactions"
+    )
+      trackEvent("portfolio_transaction_deleted", {
+        operation: actionOperation,
+      });
   }, [actionData]);
   const isActive = managed?.portfolio.status === "active";
   const updateQuickImportRow = (

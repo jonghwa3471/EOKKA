@@ -1,4 +1,5 @@
 import {
+  bigserial,
   index,
   pgTable,
   primaryKey,
@@ -15,6 +16,23 @@ export const adminMembers = pgTable("admin_members", {
     .references(() => authUsers.id, { onDelete: "cascade" }),
   created_at: timestamp({ withTimezone: true }).notNull().defaultNow(),
 }).enableRLS();
+
+export const adminActivityEvents = pgTable(
+  "admin_activity_events",
+  {
+    id: bigserial({ mode: "number" }).primaryKey(),
+    event_type: text().notNull(),
+    actor_user_id: uuid(),
+    target_type: text().notNull(),
+    target_id: text(),
+    target_label: text().notNull(),
+    created_at: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("admin_activity_events_created_idx").on(table.created_at),
+    index("admin_activity_events_type_idx").on(table.event_type),
+  ],
+).enableRLS();
 
 export const supportTickets = pgTable(
   "support_tickets",

@@ -43,6 +43,7 @@ import {
 import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
 import { useAdaptiveProgress } from "~/core/hooks/use-adaptive-progress";
+import trackEvent from "~/core/lib/analytics.client";
 import i18next from "~/core/lib/i18next.server";
 import {
   invalidateRouteDataCache,
@@ -1685,6 +1686,10 @@ export default function Home() {
       if (!response.ok || "error" in body)
         throw new Error("error" in body ? body.error : "분석에 실패했습니다.");
       setAnalysis(body);
+      trackEvent("quick_analysis_complete", {
+        holding_count: holdings.length,
+        signed_in: isAuthenticated,
+      });
       window.sessionStorage.setItem(ANALYSIS_STORAGE_KEY, JSON.stringify(body));
       if (isAuthenticated) {
         invalidateRouteDataCache("home");

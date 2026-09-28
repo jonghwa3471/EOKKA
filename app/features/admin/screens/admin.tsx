@@ -1,6 +1,7 @@
 import type { Route } from "./+types/admin";
 
 import {
+  ActivityIcon,
   BellIcon,
   ChevronRightIcon,
   ExternalLinkIcon,
@@ -113,6 +114,20 @@ const announcementKindMeta = {
     className: "bg-violet-500/10 text-violet-700 dark:text-violet-300",
   },
 } as const;
+
+const activityLabels: Record<string, string> = {
+  account_created: "회원가입",
+  login_completed: "로그인",
+  quick_analysis_completed: "빠른 분석 완료",
+  precise_analysis_completed: "정밀 분석 완료",
+  portfolio_transaction_added: "매매일지 추가",
+  portfolio_transaction_updated: "매매일지 수정",
+  portfolio_transaction_deleted: "매매일지 삭제",
+  support_ticket_created: "문의 등록",
+  payment_completed: "결제 완료",
+  subscription_cancelled: "구독 취소",
+  account_deleted: "회원탈퇴",
+};
 
 function getAnnouncementKindMeta(kind: string) {
   return announcementKindMeta[
@@ -331,6 +346,7 @@ export default function Admin({
         name: user.name,
         email: user.email,
         avatar_url: user.avatar_url,
+        username: user.username,
         admin: user.admin,
         pro: user.pro,
         ticket_count: user.ticket_count,
@@ -344,6 +360,7 @@ export default function Admin({
           name: ticket.name,
           email: ticket.email,
           avatar_url: ticket.avatar_url,
+          username: ticket.username,
           admin: ticket.admin,
           pro: ticket.pro,
           ticket_count: ticket.ticket_count,
@@ -454,6 +471,7 @@ export default function Admin({
         {[
           { key: "inbox", label: "문의함", icon: MessagesSquareIcon },
           { key: "users", label: "사용자", icon: UsersIcon },
+          { key: "activities", label: "활동 기록", icon: ActivityIcon },
           { key: "announcements", label: "전체 공지", icon: MegaphoneIcon },
         ].map((item) => (
           <Button
@@ -751,6 +769,54 @@ export default function Admin({
               >
                 다음
               </Link>
+            )}
+          </div>
+        </section>
+      )}
+      {activeTab === "activities" && (
+        <section className={panel}>
+          <h2 className="text-lg font-bold">주요 활동 기록</h2>
+          <p className="text-muted-foreground mt-1 mb-5 text-sm">
+            결제·분석·문의·계정 변경처럼 운영에 필요한 사건만 기록해요. 일반
+            화면 이동과 클릭 분석은 Google Analytics에서 확인해요.
+          </p>
+          <div className="overflow-hidden rounded-2xl border">
+            <div className="bg-muted/50 text-muted-foreground grid grid-cols-[minmax(9rem,1fr)_minmax(8rem,1fr)_minmax(10rem,auto)] gap-3 px-4 py-3 text-xs font-bold sm:grid-cols-[minmax(11rem,1fr)_minmax(10rem,1fr)_minmax(12rem,auto)]">
+              <span>이벤트</span>
+              <span>대상</span>
+              <span>발생 일시</span>
+            </div>
+            {d.activities.map((activity) => (
+              <article
+                key={activity.id}
+                className="grid grid-cols-[minmax(9rem,1fr)_minmax(8rem,1fr)_minmax(10rem,auto)] items-center gap-3 border-t px-4 py-3 text-sm sm:grid-cols-[minmax(11rem,1fr)_minmax(10rem,1fr)_minmax(12rem,auto)]"
+              >
+                <strong>
+                  {activityLabels[activity.event_type] ?? activity.event_type}
+                </strong>
+                <span
+                  className="truncate font-mono text-xs"
+                  title={activity.target_label}
+                >
+                  {activity.target_label}
+                </span>
+                <time className="text-muted-foreground whitespace-nowrap">
+                  {new Date(activity.created_at).toLocaleString("ko-KR", {
+                    timeZone: "Asia/Seoul",
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })}
+                </time>
+              </article>
+            ))}
+            {!d.activities.length && (
+              <p className="text-muted-foreground border-t px-4 py-10 text-center text-sm">
+                아직 기록된 주요 활동이 없어요.
+              </p>
             )}
           </div>
         </section>
@@ -1077,6 +1143,12 @@ export default function Admin({
           </DialogHeader>
           {selectedUser && (
             <dl className="grid grid-cols-2 gap-3">
+              <div className="bg-muted/50 rounded-2xl p-4">
+                <dt className="text-muted-foreground text-xs">사용자 ID</dt>
+                <dd className="mt-1 font-mono text-sm font-black text-emerald-600 dark:text-emerald-400">
+                  @{selectedUser.username}
+                </dd>
+              </div>
               <div className="bg-muted/50 rounded-2xl p-4">
                 <dt className="text-muted-foreground text-xs">이용 상태</dt>
                 <dd className="mt-1 font-bold">

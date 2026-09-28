@@ -35,10 +35,12 @@ import { invalidateRouteDataCache } from "~/core/lib/route-data-cache";
 
 export default function EditProfileForm({
   name,
+  username,
   avatarUrl,
   marketingConsent,
 }: {
   name: string;
+  username: string;
   marketingConsent: boolean;
   avatarUrl: string | null;
 }) {
@@ -46,8 +48,10 @@ export default function EditProfileForm({
   const formRef = useRef<HTMLFormElement>(null);
   const saveInFlightRef = useRef(false);
   const initialNameRef = useRef(name);
+  const initialUsernameRef = useRef(username);
   const initialMarketingConsentRef = useRef(marketingConsent);
   const [profileName, setProfileName] = useState(name);
+  const [profileUsername, setProfileUsername] = useState(username);
   const [marketingEnabled, setMarketingEnabled] = useState(marketingConsent);
   const [hasNewAvatar, setHasNewAvatar] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -55,6 +59,7 @@ export default function EditProfileForm({
   const [avatarZoom, setAvatarZoom] = useState(1);
   const isDirty =
     profileName !== initialNameRef.current ||
+    profileUsername !== initialUsernameRef.current ||
     marketingEnabled !== initialMarketingConsentRef.current ||
     hasNewAvatar;
 
@@ -71,9 +76,11 @@ export default function EditProfileForm({
     ) {
       saveInFlightRef.current = false;
       initialNameRef.current = profileName;
+      initialUsernameRef.current = profileUsername;
       initialMarketingConsentRef.current = marketingEnabled;
       setHasNewAvatar(false);
       invalidateRouteDataCache("profile");
+      invalidateRouteDataCache("account");
       const fileInput = formRef.current?.elements.namedItem("avatar");
       if (fileInput instanceof HTMLInputElement) fileInput.value = "";
       formRef.current?.blur();
@@ -81,7 +88,13 @@ export default function EditProfileForm({
         input.blur();
       });
     }
-  }, [fetcher.data, fetcher.state, marketingEnabled, profileName]);
+  }, [
+    fetcher.data,
+    fetcher.state,
+    marketingEnabled,
+    profileName,
+    profileUsername,
+  ]);
 
   useEffect(() => {
     if (!hasNewAvatar) setAvatar(avatarUrl);
@@ -251,6 +264,41 @@ export default function EditProfileForm({
                 <FormErrors errors={fetcher.data?.fieldErrors?.name} />
               ) : null}
             </div>
+            <div className="flex flex-col items-start space-y-2">
+              <Label htmlFor="username">사용자 ID</Label>
+              <div className="relative w-full">
+                <span className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 font-mono text-sm">
+                  @
+                </span>
+                <Input
+                  id="username"
+                  name="username"
+                  required
+                  type="text"
+                  minLength={5}
+                  maxLength={20}
+                  pattern="[a-z0-9_]{5,20}"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  className="pl-8 font-mono"
+                  placeholder="영문 소문자, 숫자, 밑줄"
+                  value={profileUsername}
+                  onChange={(event) =>
+                    setProfileUsername(event.target.value.toLowerCase())
+                  }
+                />
+              </div>
+              <p className="text-muted-foreground text-xs">
+                5~20자의 영문 소문자, 숫자, 밑줄만 사용할 수 있어요. 다른
+                사용자와 같은 ID는 사용할 수 없어요.
+              </p>
+              {fetcher.data &&
+              "fieldErrors" in fetcher.data &&
+              fetcher.data.fieldErrors?.username ? (
+                <FormErrors errors={fetcher.data.fieldErrors.username} />
+              ) : null}
+            </div>
             <div className="flex items-center gap-2">
               <Checkbox
                 id="marketingConsent"
@@ -292,7 +340,7 @@ export default function EditProfileForm({
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title="프로필 변경사항을 저장할까요?"
-        description="변경한 이름, 프로필 사진과 이메일 소식 수신 설정을 계정에 반영해요."
+        description="변경한 이름, 사용자 ID, 프로필 사진과 이메일 소식 수신 설정을 계정에 반영해요."
         confirmLabel="프로필 저장"
         busy={fetcher.state !== "idle"}
         onConfirm={() => {

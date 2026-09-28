@@ -15,12 +15,15 @@
  */
 import type { Route } from "./+types/success";
 
+import { useEffect } from "react";
 import { redirect } from "react-router";
 import { z } from "zod";
 
+import { consumePendingAnalyticsEvent } from "~/core/lib/analytics.client";
 import { requireAuthentication } from "~/core/lib/guards.server";
 import adminClient from "~/core/lib/supa-admin-client.server";
 import makeServerClient from "~/core/lib/supa-client.server";
+import { recordAdminActivity } from "~/features/admin/activity.server";
 import { createNotification } from "~/features/notifications/notifications.server";
 
 /**
@@ -208,6 +211,12 @@ export async function loader({ request }: Route.LoaderArgs) {
     message: `${paymentResponse.data.orderName} ${paymentResponse.data.totalAmount.toLocaleString("ko-KR")}원 결제가 정상적으로 완료됐어요.`,
     href: "/dashboard/payments",
   });
+  await recordAdminActivity({
+    eventType: "payment_completed",
+    userId: user.id,
+    targetType: "subscription",
+    targetId: paymentResponse.data.orderId,
+  });
 
   // Return payment data for the success page
   return { data };
@@ -229,6 +238,10 @@ export async function loader({ request }: Route.LoaderArgs) {
  * @returns JSX element representing the payment success page
  */
 export default function Success({ loaderData }: Route.ComponentProps) {
+  useEffect(() => {
+    consumePendingAnalyticsEvent("purchase");
+  }, []);
+
   return (
     <div className="flex flex-col items-center gap-20">
       {/* Main content grid - single column on mobile, two columns on desktop */}

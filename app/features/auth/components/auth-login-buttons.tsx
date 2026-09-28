@@ -1,6 +1,10 @@
 import { Link } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
+import {
+  type AnalyticsEventName,
+  markPendingAnalyticsEvent,
+} from "~/core/lib/analytics.client";
 
 import { GoogleLogo } from "./logos/google";
 import { KakaoLogo } from "./logos/kakao";
@@ -9,14 +13,16 @@ function SocialAuthButton({
   logo,
   label,
   href,
+  analyticsEvent,
 }: {
   logo: React.ReactNode;
   label: string;
   href: string;
+  analyticsEvent: AnalyticsEventName;
 }) {
   return (
     <Button variant="outline" className="w-full justify-center gap-2" asChild>
-      <Link to={href}>
+      <Link to={href} onClick={() => markPendingAnalyticsEvent(analyticsEvent)}>
         {logo}
         <span>{label}</span>
       </Link>
@@ -45,12 +51,14 @@ export function SocialAuthButtons({
       <SocialAuthButton
         logo={<KakaoLogo className="size-4 scale-125 dark:text-yellow-300" />}
         label={`카카오로 ${suffix}`}
-        href="/auth/social/start/kakao"
+        href={`/auth/social/start/kakao?mode=${mode}`}
+        analyticsEvent={mode === "signup" ? "sign_up" : "login"}
       />
       <SocialAuthButton
         logo={<GoogleLogo className="size-4" />}
         label={`Google로 ${suffix}`}
-        href="/auth/social/start/google"
+        href={`/auth/social/start/google?mode=${mode}`}
+        analyticsEvent={mode === "signup" ? "sign_up" : "login"}
       />
     </div>
   );

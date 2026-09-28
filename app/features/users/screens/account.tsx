@@ -112,6 +112,7 @@ export default function Account({ loaderData }: Route.ComponentProps) {
             return (
               <EditProfileForm
                 name={profile.name}
+                username={profile.username}
                 marketingConsent={profile.marketing_consent}
                 avatarUrl={profile.avatar_url}
               />

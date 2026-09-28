@@ -16,6 +16,10 @@ import { Button } from "~/core/components/ui/button";
 import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
 import {
+  consumePendingAnalyticsEvent,
+  markPendingAnalyticsEvent,
+} from "~/core/lib/analytics.client";
+import {
   consumeManualAnalysisLimit,
   manualAnalysisLimitResponse,
 } from "~/core/lib/rate-limit.server";
@@ -25,6 +29,7 @@ import {
 } from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
+import { recordAdminActivity } from "~/features/admin/activity.server";
 import { generateAiStrategy } from "~/features/stocks/ai-strategy.server";
 import { analyzePortfolio } from "~/features/stocks/analysis.server";
 import type { AnalysisResult } from "~/features/stocks/analysis.types";
@@ -217,6 +222,11 @@ export async function action({ request }: Route.ActionArgs) {
       console.error("Managed AI strategy generation failed", error);
     }
     const completeResult = { ...result, aiStrategy };
+    await recordAdminActivity({
+      eventType: "precise_analysis_completed",
+      userId: user.id,
+      targetType: "analysis",
+    });
 
     if (!accountSettings.isPro)
       return data({
@@ -243,7 +253,7 @@ export async function action({ request }: Route.ActionArgs) {
           });
     const month = saved.savedOn.slice(0, 7);
     return redirect(
-      `/dashboard/history?month=${month}&date=${saved.savedOn}&analysis=${saved.id}`,
+      `/dashboard/history?month=${month}&date=${saved.savedOn}&analysis=${saved.id}&analytics=precise_analysis_complete`,
     );
   } catch (error) {
     return data(
@@ -269,6 +279,10 @@ export async function action({ request }: Route.ActionArgs) {
 export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
   usePrimeRouteDataCache("precise-analysis", loaderData);
   const actionData = useActionData<typeof action>();
+  useEffect(() => {
+    if (actionData?.result)
+      consumePendingAnalyticsEvent("precise_analysis_complete");
+  }, [actionData?.result]);
   const { managed, holdings, defaultGoalAmount, defaultMonthlyContribution } =
     loaderData;
   const [goalAmount, setGoalAmount] = useState("");
@@ -493,6 +507,7 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
                 method="post"
                 className="mt-5 grid gap-4 sm:grid-cols-2"
                 onSubmit={(event) => {
+                  markPendingAnalyticsEvent("precise_analysis_complete");
                   if (confirmedGoalChangeRef.current) {
                     confirmedGoalChangeRef.current = false;
                     return;

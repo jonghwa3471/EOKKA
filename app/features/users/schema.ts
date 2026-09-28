@@ -8,11 +8,13 @@ import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
+  check,
   date,
   pgPolicy,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { authUid, authUsers, authenticatedRole } from "drizzle-orm/supabase";
@@ -38,6 +40,7 @@ export const profiles = pgTable(
       .references(() => authUsers.id, {
         onDelete: "cascade",
       }),
+    username: text().notNull(),
     name: text().notNull(),
     avatar_url: text(),
     marketing_consent: boolean("marketing_consent").notNull().default(false),
@@ -52,6 +55,11 @@ export const profiles = pgTable(
     ...timestamps,
   },
   (table) => [
+    uniqueIndex("profiles_username_unique").on(table.username),
+    check(
+      "profiles_username_format_check",
+      sql`${table.username} ~ '^[a-z0-9_]{5,20}$'`,
+    ),
     // RLS Policy: Authenticated users can create only their own profile.
     // The auth trigger normally creates it, while this policy lets the OAuth
     // callback safely repair a missing profile for an existing account.

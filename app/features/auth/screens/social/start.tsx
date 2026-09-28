@@ -50,7 +50,10 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   // Create Supabase client and get response headers for auth cookies
   const [client, headers] = makeServerClient(request);
-  const origin = new URL(request.url).origin;
+  const requestUrl = new URL(request.url);
+  const origin = requestUrl.origin;
+  const mode =
+    requestUrl.searchParams.get("mode") === "signup" ? "signup" : "login";
 
   // Initialize OAuth flow with the specified provider
   const { data: signInData, error: signInError } =
@@ -58,7 +61,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       provider: parsedParams.provider,
       options: {
         // Set the callback URL for when authentication is complete
-        redirectTo: `${origin}/auth/social/complete/${parsedParams.provider}`,
+        redirectTo: `${origin}/auth/social/complete/${parsedParams.provider}?mode=${mode}`,
         queryParams:
           parsedParams.provider === "google"
             ? { access_type: "offline", prompt: "select_account" }

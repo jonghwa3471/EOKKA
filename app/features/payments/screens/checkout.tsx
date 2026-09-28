@@ -23,6 +23,10 @@ import { useEffect, useRef, useState } from "react";
 import { redirect } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
+import {
+  markPendingAnalyticsEvent,
+  default as trackEvent,
+} from "~/core/lib/analytics.client";
 import { requireAuthentication } from "~/core/lib/guards.server";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
@@ -171,6 +175,12 @@ export default function Checkout({ loaderData }: Route.ComponentProps) {
    */
   const handleClick = async () => {
     try {
+      trackEvent("begin_checkout", {
+        currency: "KRW",
+        value: 10_000,
+        plan: "pro_beta_monthly",
+      });
+      markPendingAnalyticsEvent("purchase");
       // Force light mode for the payment iframe to ensure proper display
       const metaTags = document.querySelectorAll('meta[name="color-scheme"]');
       metaTags.forEach((tag) => {

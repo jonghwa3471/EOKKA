@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_activity_events: {
+        Row: {
+          actor_user_id: string | null
+          created_at: string
+          event_type: string
+          id: number
+          target_id: string | null
+          target_label: string
+          target_type: string
+        }
+        Insert: {
+          actor_user_id?: string | null
+          created_at?: string
+          event_type: string
+          id?: never
+          target_id?: string | null
+          target_label: string
+          target_type: string
+        }
+        Update: {
+          actor_user_id?: string | null
+          created_at?: string
+          event_type?: string
+          id?: never
+          target_id?: string | null
+          target_label?: string
+          target_type?: string
+        }
+        Relationships: []
+      }
       analysis_snapshots: {
         Row: {
           analysis_mode: string
@@ -232,6 +262,7 @@ export type Database = {
           preferred_goal_amount: number | null
           profile_id: string
           updated_at: string
+          username: string
         }
         Insert: {
           avatar_url?: string | null
@@ -241,6 +272,7 @@ export type Database = {
           preferred_goal_amount?: number | null
           profile_id: string
           updated_at?: string
+          username?: string
         }
         Update: {
           avatar_url?: string | null
@@ -250,6 +282,7 @@ export type Database = {
           preferred_goal_amount?: number | null
           profile_id?: string
           updated_at?: string
+          username?: string
         }
         Relationships: []
       }

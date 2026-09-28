@@ -9,6 +9,7 @@ import { notifications } from "~/features/notifications/schema";
 import { profiles } from "~/features/users/schema";
 
 import {
+  adminActivityEvents,
   adminMembers,
   siteAnnouncementRecipients,
   siteAnnouncements,
@@ -564,33 +565,40 @@ export async function getAdminOverview(
   page: number,
   status: "all" | "open" | "answered" | "closed" = "all",
 ) {
-  const [tickets, announcementPage, users, counts, announcementRecipients] =
-    await Promise.all([
-      db.execute<{
+  const [
+    tickets,
+    announcementPage,
+    users,
+    counts,
+    announcementRecipients,
+    activities,
+  ] = await Promise.all([
+    db.execute<{
+      id: string;
+      title: string;
+      status: string;
+      category: string;
+      created_at: string;
+      updated_at: string;
+      user_id: string;
+      name: string;
+      email: string;
+      avatar_url: string | null;
+      username: string;
+      joined_at: string;
+      last_active_on: string;
+      pro: boolean;
+      admin: boolean;
+      ticket_count: number;
+      messages: Array<{
         id: string;
-        title: string;
-        status: string;
-        category: string;
+        author_id: string | null;
+        is_staff: string;
+        body: string;
         created_at: string;
-        updated_at: string;
-        user_id: string;
-        name: string;
-        email: string;
-        avatar_url: string | null;
-        joined_at: string;
-        last_active_on: string;
-        pro: boolean;
-        admin: boolean;
-        ticket_count: number;
-        messages: Array<{
-          id: string;
-          author_id: string | null;
-          is_staff: string;
-          body: string;
-          created_at: string;
-        }>;
-      }>(sql`select st.id, st.title, st.status, st.category, st.created_at, st.updated_at,
-      st.user_id, p.name, u.email, p.avatar_url, p.created_at as joined_at, p.last_active_on,
+      }>;
+    }>(sql`select st.id, st.title, st.status, st.category, st.created_at, st.updated_at,
+      st.user_id, p.name, u.email, p.avatar_url, p.username, p.created_at as joined_at, p.last_active_on,
       (p.pro_expires_at > now()) as pro, (a.user_id is not null) as admin,
       (select count(*)::int from support_tickets own where own.user_id = st.user_id) as ticket_count,
       coalesce((select json_agg(json_build_object(
@@ -602,44 +610,50 @@ export async function getAdminOverview(
       left join admin_members a on a.user_id = st.user_id
       ${status === "all" ? sql`` : sql`where st.status = ${status}`}
       order by st.created_at desc limit 100`),
-      getAdminAnnouncementPage(0),
-      db.execute<{
-        id: string;
-        name: string;
-        email: string;
-        avatar_url: string | null;
-        created_at: string;
-        last_active_on: string;
-        pro: boolean;
-        admin: boolean;
-        ticket_count: number;
-      }>(sql`select p.profile_id as id, p.name, u.email, p.avatar_url, p.created_at, p.last_active_on,
+    getAdminAnnouncementPage(0),
+    db.execute<{
+      id: string;
+      name: string;
+      email: string;
+      avatar_url: string | null;
+      username: string;
+      created_at: string;
+      last_active_on: string;
+      pro: boolean;
+      admin: boolean;
+      ticket_count: number;
+    }>(sql`select p.profile_id as id, p.name, u.email, p.avatar_url, p.username, p.created_at, p.last_active_on,
       (p.pro_expires_at > now()) as pro, (a.user_id is not null) as admin,
       (select count(*)::int from support_tickets own where own.user_id = p.profile_id) as ticket_count
       from profiles p join auth.users u on u.id = p.profile_id left join admin_members a on a.user_id = p.profile_id
       where p.name ilike ${`%${search}%`} or u.email ilike ${`%${search}%`}
       order by p.created_at desc limit 21 offset ${page * 20}`),
-      db.execute<{
-        users: number;
-        open: number;
-        answered: number;
-        closed: number;
-      }>(
-        sql`select
+    db.execute<{
+      users: number;
+      open: number;
+      answered: number;
+      closed: number;
+    }>(
+      sql`select
           (select count(*)::int from profiles) as users,
           (select count(*)::int from support_tickets where status = 'open') as open,
           (select count(*)::int from support_tickets where status = 'answered') as answered,
           (select count(*)::int from support_tickets where status = 'closed') as closed`,
-      ),
-      db.execute<{
-        id: string;
-        name: string;
-        email: string;
-        avatar_url: string | null;
-      }>(sql`select p.profile_id as id, p.name, u.email, p.avatar_url
+    ),
+    db.execute<{
+      id: string;
+      name: string;
+      email: string;
+      avatar_url: string | null;
+    }>(sql`select p.profile_id as id, p.name, u.email, p.avatar_url
       from profiles p join auth.users u on u.id = p.profile_id
       order by p.name, u.email limit 500`),
-    ]);
+    db
+      .select()
+      .from(adminActivityEvents)
+      .orderBy(desc(adminActivityEvents.created_at))
+      .limit(100),
+  ]);
   return {
     tickets: Array.from(tickets),
     announcements: announcementPage.announcements,
@@ -648,5 +662,6 @@ export async function getAdminOverview(
     hasMore: users.length > 20,
     counts: counts[0],
     announcementRecipients: Array.from(announcementRecipients),
+    activities,
   };
 }

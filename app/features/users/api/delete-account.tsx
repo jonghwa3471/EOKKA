@@ -21,6 +21,7 @@ import { z } from "zod";
 import { requireAuthentication, requireMethod } from "~/core/lib/guards.server";
 import adminClient from "~/core/lib/supa-admin-client.server";
 import makeServerClient from "~/core/lib/supa-client.server";
+import { recordAdminActivity } from "~/features/admin/activity.server";
 
 const deleteAccountSchema = z.object({
   confirmation: z.literal("DELETE"),
@@ -76,6 +77,11 @@ export async function action({ request }: Route.ActionArgs) {
     data: { user },
   } = await client.auth.getUser();
 
+  await recordAdminActivity({
+    eventType: "account_deleted",
+    userId: user!.id,
+  });
+
   // Delete the user from Supabase Auth
   const { error } = await adminClient.auth.admin.deleteUser(user!.id);
 
@@ -101,5 +107,5 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   // Redirect to home page after successful deletion
-  return redirect("/");
+  return redirect("/?analytics=account_deleted");
 }

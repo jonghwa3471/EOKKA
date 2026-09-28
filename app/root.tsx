@@ -49,6 +49,10 @@ import { RouteTransitionSkeleton } from "./core/components/route-transition-skel
 import { Dialog } from "./core/components/ui/dialog";
 import { Sheet } from "./core/components/ui/sheet";
 import { useAdaptiveProgress } from "./core/hooks/use-adaptive-progress";
+import {
+  consumePendingAnalyticsEvent,
+  isAnalyticsEventName,
+} from "./core/lib/analytics.client";
 import i18next from "./core/lib/i18next.server";
 import { hasCachedRouteData } from "./core/lib/route-data-cache";
 import { themeSessionResolver } from "./core/lib/theme-session.server";
@@ -495,6 +499,18 @@ export default function App() {
       description: "입력한 내용을 안전하게 확인하고 있어요.",
     };
   })();
+  useEffect(() => {
+    const analyticsEvent = searchParams.get("analytics");
+    if (!analyticsEvent || !isAnalyticsEventName(analyticsEvent)) return;
+    consumePendingAnalyticsEvent(analyticsEvent);
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete("analytics");
+    navigate(
+      `${location.pathname}${nextSearchParams.size ? `?${nextSearchParams}` : ""}${location.hash}`,
+      { replace: true },
+    );
+  }, [location.hash, location.pathname, navigate, searchParams]);
+
   useEffect(() => {
     if (location.pathname === "/") {
       const error = searchParams.get("error");

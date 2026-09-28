@@ -33,6 +33,13 @@ import { getUserProfile } from "../queries";
  */
 const schema = z.object({
   name: z.string().min(1),
+  username: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .min(5, "사용자 ID는 5자 이상이어야 해요.")
+    .max(20, "사용자 ID는 20자 이하여야 해요.")
+    .regex(/^[a-z0-9_]+$/, "영문 소문자, 숫자, 밑줄만 사용할 수 있어요."),
   avatar: z.instanceof(File),
   marketingConsent: z.coerce.boolean(),
 });
@@ -117,8 +124,9 @@ export async function action({ request }: Route.ActionArgs) {
 
     // Handle upload errors
     if (uploadError) {
-      const isMissingAvatarBucket =
-        uploadError.message.toLowerCase().includes("bucket not found");
+      const isMissingAvatarBucket = uploadError.message
+        .toLowerCase()
+        .includes("bucket not found");
 
       return data(
         {
@@ -145,12 +153,32 @@ export async function action({ request }: Route.ActionArgs) {
     .from("profiles")
     .update({
       name: validData.name,
+      username: validData.username,
       marketing_consent: validData.marketingConsent,
       avatar_url: avatarUrl,
     })
     .eq("profile_id", user.id);
 
   // Update user metadata in the auth table
+  if (updateProfileError) {
+    const isDuplicateUsername =
+      updateProfileError.code === "23505" ||
+      updateProfileError.message.includes("profiles_username_unique");
+    return data(
+      isDuplicateUsername
+        ? {
+            fieldErrors: {
+              name: undefined,
+              avatar: undefined,
+              username: ["이미 사용 중인 사용자 ID예요."],
+              marketingConsent: undefined,
+            },
+          }
+        : { error: updateProfileError.message },
+      { status: 400 },
+    );
+  }
+
   const { error: updateError } = await client.auth.updateUser({
     data: {
       name: validData.name,
@@ -163,11 +191,6 @@ export async function action({ request }: Route.ActionArgs) {
   // Handle auth update errors
   if (updateError) {
     return data({ error: updateError.message }, { status: 400 });
-  }
-
-  // Handle profile update errors
-  if (updateProfileError) {
-    return data({ error: updateProfileError.message }, { status: 400 });
   }
 
   // Return success response

@@ -10,6 +10,7 @@ import {
   rateLimitResponse,
 } from "~/core/lib/rate-limit.server";
 import makeServerClient from "~/core/lib/supa-client.server";
+import { recordAdminActivity } from "~/features/admin/activity.server";
 import { getAutomaticAnalysisSettings } from "~/features/users/automatic-analysis-settings.server";
 
 import { generateAiStrategy } from "../ai-strategy.server";
@@ -158,6 +159,12 @@ export async function action({ request }: Route.ActionArgs) {
       // A storage problem must not discard an otherwise valid analysis.
       console.error("Analysis snapshot save failed", snapshotError);
     }
+    if (user)
+      await recordAdminActivity({
+        eventType: "quick_analysis_completed",
+        userId: user.id,
+        targetType: "analysis",
+      });
 
     return data(
       { ...completeResult, historySaved: isPro },

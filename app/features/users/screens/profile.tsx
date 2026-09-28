@@ -4,6 +4,7 @@ import {
   CalendarDaysIcon,
   ChartNoAxesCombinedIcon,
   CrownIcon,
+  FingerprintIcon,
   Link2Icon,
   MailIcon,
   Settings2Icon,
@@ -22,7 +23,6 @@ import {
   usePrimeRouteDataCache,
 } from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
-import { cn } from "~/core/lib/utils";
 import { getPayments } from "~/features/payments/queries";
 
 import { getAutomaticAnalysisSettings } from "../automatic-analysis-settings.server";
@@ -97,6 +97,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       user.user_metadata.picture ??
       "",
     marketingConsent: profile?.marketing_consent ?? false,
+    username: profile?.username ?? null,
     createdAt: profile?.created_at ?? user.created_at,
     isPro,
     proExpiresAt,
@@ -133,6 +134,7 @@ export default function Profile({ loaderData }: Route.ComponentProps) {
     activeGoalCount,
     latestAnalysisOn,
     proTenureMonths,
+    username,
   } = loaderData;
   const tenureBadge = proTenureBadge(proTenureMonths);
 
@@ -161,38 +163,37 @@ export default function Profile({ loaderData }: Route.ComponentProps) {
         <section className="bg-card relative mt-7 overflow-hidden rounded-[2rem] border p-6 shadow-sm md:p-9">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.14),transparent_42%),radial-gradient(circle_at_bottom_right,rgba(139,92,246,0.12),transparent_42%)]" />
           <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center">
-            <div className="flex w-fit shrink-0 flex-col items-center gap-3">
+            <div className="w-fit shrink-0">
               <Avatar className="ring-background size-24 rounded-3xl shadow-xl ring-4 md:size-28">
                 <AvatarImage src={avatarUrl} alt={`${name} 프로필 사진`} />
                 <AvatarFallback className="rounded-3xl text-2xl font-black">
                   {name.slice(0, 2)}
                 </AvatarFallback>
               </Avatar>
-              {tenureBadge && (
-                <ProTenureBadgeView badge={tenureBadge} compact />
-              )}
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-muted-foreground text-xs font-black tracking-[0.15em] uppercase">
                 EOKKA MEMBER
               </p>
               <h2 className="mt-2 truncate text-3xl font-black">{name}</h2>
+              {username && (
+                <p className="mt-2 flex items-center gap-2 font-mono text-sm font-black text-emerald-600 dark:text-emerald-400">
+                  <FingerprintIcon className="size-4 shrink-0" />@{username}
+                </p>
+              )}
               <p className="text-muted-foreground mt-2 flex items-center gap-2 truncate text-sm">
                 <MailIcon className="size-4 shrink-0" /> {email}
               </p>
             </div>
-            <Link
-              to="/dashboard/pro"
-              className={cn(
-                "inline-flex w-fit items-center gap-2 rounded-full border px-3 py-2 text-xs font-black transition-colors",
-                isPro
-                  ? "border-amber-500/25 bg-amber-500/10 text-amber-600 hover:bg-amber-500/15 dark:text-amber-300"
-                  : "border-border bg-muted/70 text-muted-foreground hover:bg-muted",
-              )}
-            >
-              <CrownIcon className="size-4" />
-              {isPro ? "EOKKA Pro 이용 중" : "무료 플랜 이용 중"}
-            </Link>
+            {tenureBadge && (
+              <Link
+                to="/dashboard/pro"
+                className="w-fit rounded-full transition-transform hover:scale-[1.03] focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:outline-none"
+                aria-label={`${tenureBadge.name} 구독 배지 자세히 보기`}
+              >
+                <ProTenureBadgeView badge={tenureBadge} />
+              </Link>
+            )}
           </div>
         </section>
 
