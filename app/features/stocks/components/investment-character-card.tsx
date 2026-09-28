@@ -5,9 +5,11 @@ import type { AnalysisResult } from "../analysis.types";
 import {
   CheckIcon,
   DownloadIcon,
+  GalleryHorizontalEndIcon,
   LinkIcon,
   LoaderCircleIcon,
   Share2Icon,
+  XIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -138,7 +140,7 @@ const tiers = [
     maxMonth: 84,
     tier: "다이아",
     speed: "300km",
-    image: "/images/speed-tiers/diamond-fantasy-v2.webp",
+    image: "/images/speed-tiers/diamond-supercar-v3.png",
     name: "한계를 질주하는 슈퍼카",
     rank: 6,
     frame:
@@ -592,6 +594,7 @@ export function InvestmentCharacterCard({
 }) {
   const [selectedKey, setSelectedKey] = useState<ScenarioKey>("base");
   const [detailOpen, setDetailOpen] = useState(false);
+  const [tierListOpen, setTierListOpen] = useState(false);
   const [busy, setBusy] = useState<"download" | "share" | null>(null);
   const [feedback, setFeedback] = useState("");
   const shareCardRef = useRef<HTMLElement>(null);
@@ -613,18 +616,20 @@ export function InvestmentCharacterCard({
   );
 
   useEffect(() => {
-    if (!detailOpen) return;
+    if (!detailOpen && !tierListOpen) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setDetailOpen(false);
+      if (event.key !== "Escape") return;
+      setDetailOpen(false);
+      setTierListOpen(false);
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", closeOnEscape);
     };
-  }, [detailOpen]);
+  }, [detailOpen, tierListOpen]);
 
   const cardProps = {
     tier,
@@ -775,7 +780,7 @@ export function InvestmentCharacterCard({
         <button
           type="button"
           onClick={() => setDetailOpen(true)}
-          className="mx-auto block w-full rounded-[28px] text-left outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-4"
+          className="mx-auto block w-full max-w-[420px] rounded-[28px] text-left outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-4"
           aria-label={`${tier.tier} 티어 카드 자세히 보기`}
         >
           <TierCard {...cardProps} cardRef={shareCardRef} />
@@ -787,7 +792,7 @@ export function InvestmentCharacterCard({
           티어는 투자 실력이 아니라 {scenarioLabels[selectedKey]} 시나리오의
           목표 도달 예상 속도를 표현해요.
         </p>
-        <div className="mx-auto mt-5 grid max-w-[420px] gap-2 sm:grid-cols-3">
+        <div className="mx-auto mt-5 grid max-w-[560px] grid-cols-2 gap-2 sm:grid-cols-4">
           <Button type="button" variant="outline" onClick={copyTestLink}>
             <LinkIcon /> 링크 복사
           </Button>
@@ -803,6 +808,13 @@ export function InvestmentCharacterCard({
               <DownloadIcon />
             )}
             이미지 저장
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setTierListOpen(true)}
+          >
+            <GalleryHorizontalEndIcon /> 전체 티어
           </Button>
           <Button
             type="button"
@@ -859,6 +871,85 @@ export function InvestmentCharacterCard({
                 >
                   닫기
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tierListOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="tier-list-title"
+          className="fixed inset-0 z-[100] overflow-y-auto bg-black/85 px-4 backdrop-blur-md"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setTierListOpen(false);
+          }}
+        >
+          <div className="mx-auto flex min-h-full w-full max-w-5xl items-center py-10 sm:py-16">
+            <div className="bg-background relative w-full overflow-hidden rounded-3xl border shadow-2xl">
+              <div className="bg-background/95 sticky top-0 z-20 flex items-start justify-between gap-4 border-b px-5 py-5 backdrop-blur sm:px-7">
+                <div>
+                  <p className="text-xs font-black tracking-[0.12em] text-emerald-500 uppercase">
+                    Goal Speed Tiers
+                  </p>
+                  <h3
+                    id="tier-list-title"
+                    className="mt-1 text-xl font-black sm:text-2xl"
+                  >
+                    목표 달성 속도 전체 티어
+                  </h3>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    빠른 순서대로 티어와 대표 이미지를 확인할 수 있어요.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTierListOpen(false)}
+                  className="hover:bg-muted flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border transition-colors"
+                  aria-label="전체 티어 목록 닫기"
+                  title="닫기"
+                >
+                  <XIcon className="size-5" />
+                </button>
+              </div>
+              <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-6 lg:grid-cols-3">
+                {tiers.map((item) => (
+                  <article
+                    key={item.tier}
+                    className={`group overflow-hidden rounded-2xl border transition-colors ${item.tier === tier.tier ? "border-emerald-400 bg-emerald-500/[0.06]" : "bg-card"}`}
+                  >
+                    <div className="relative aspect-square overflow-hidden bg-slate-950">
+                      <img
+                        src={item.image}
+                        alt={`${item.tier} 티어 · ${item.name}`}
+                        className="size-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                        loading="lazy"
+                      />
+                      <span
+                        className={`absolute top-3 left-3 rounded-full border px-2.5 py-1 text-[10px] font-black tracking-[0.08em] shadow-lg backdrop-blur ${item.badge}`}
+                      >
+                        {item.tier}
+                      </span>
+                      {item.tier === tier.tier && (
+                        <span className="absolute top-3 right-3 rounded-full bg-emerald-500 px-2.5 py-1 text-[10px] font-black text-white shadow-lg">
+                          현재 티어
+                        </span>
+                      )}
+                    </div>
+                    <div className="p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="min-w-0 truncate text-sm font-black">
+                          {item.name}
+                        </p>
+                        <span className="text-muted-foreground text-xs font-bold">
+                          시속 {item.speed}
+                        </span>
+                      </div>
+                    </div>
+                  </article>
+                ))}
               </div>
             </div>
           </div>

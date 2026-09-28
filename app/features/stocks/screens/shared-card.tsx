@@ -46,7 +46,7 @@ const tierPreviewImages: Record<SharedInvestmentCardPayload["tier"], string> = {
   골드: "/images/speed-tiers/gold-fantasy-v2-og.jpg",
   플래티넘: "/images/speed-tiers/platinum-fantasy-v2-og.jpg",
   에메랄드: "/images/speed-tiers/emerald-fantasy-v2-og.jpg",
-  다이아: "/images/speed-tiers/diamond-fantasy-v2-og.jpg",
+  다이아: "/images/speed-tiers/diamond-supercar-v3.png",
   마스터: "/images/speed-tiers/master-fantasy-v2-og.jpg",
   "그랜드 마스터": "/images/speed-tiers/grand-master-fantasy-v2-og.jpg",
   챌린저: "/images/speed-tiers/challenger-fantasy-v2-og.jpg",
