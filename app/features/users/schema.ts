@@ -10,8 +10,10 @@ import {
   boolean,
   check,
   date,
+  index,
   pgPolicy,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -93,3 +95,26 @@ export const profiles = pgTable(
     }),
   ],
 );
+
+export const userAchievements = pgTable(
+  "user_achievements",
+  {
+    user_id: uuid()
+      .notNull()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    achievement_id: text().notNull(),
+    unlocked_at: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.user_id, table.achievement_id] }),
+    index("user_achievements_unlocked_idx").on(
+      table.user_id,
+      table.unlocked_at,
+    ),
+    pgPolicy("select-own-user-achievements", {
+      for: "select",
+      to: authenticatedRole,
+      using: sql`${authUid} = ${table.user_id}`,
+    }),
+  ],
+).enableRLS();

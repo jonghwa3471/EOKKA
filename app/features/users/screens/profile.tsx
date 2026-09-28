@@ -8,6 +8,7 @@ import {
   Link2Icon,
   MailIcon,
   Settings2Icon,
+  TrophyIcon,
   UserCircle2Icon,
 } from "lucide-react";
 import { Link, redirect } from "react-router";
@@ -25,6 +26,7 @@ import {
 import makeServerClient from "~/core/lib/supa-client.server";
 import { getPayments } from "~/features/payments/queries";
 
+import { syncUserAchievements } from "../achievements.server";
 import { getAutomaticAnalysisSettings } from "../automatic-analysis-settings.server";
 import { ProTenureBadgeView } from "../components/pro-tenure-badge";
 import { proTenureBadge } from "../pro-tenure";
@@ -57,18 +59,25 @@ export async function loader({ request }: Route.LoaderArgs) {
   } = await client.auth.getUser();
   if (!user) throw redirect("/login");
 
-  const [profile, identities, analysisHistory, accountSettings, payments] =
-    await Promise.all([
-      getUserProfile(client, { userId: user.id }),
-      client.auth.getUserIdentities(),
-      client
-        .from("analysis_snapshots")
-        .select("goal_amount,saved_on")
-        .eq("user_id", user.id)
-        .order("saved_on", { ascending: false }),
-      getAutomaticAnalysisSettings(user.id),
-      getPayments(client, { userId: user.id }),
-    ]);
+  const [
+    profile,
+    identities,
+    analysisHistory,
+    accountSettings,
+    payments,
+    achievements,
+  ] = await Promise.all([
+    getUserProfile(client, { userId: user.id }),
+    client.auth.getUserIdentities(),
+    client
+      .from("analysis_snapshots")
+      .select("goal_amount,saved_on")
+      .eq("user_id", user.id)
+      .order("saved_on", { ascending: false }),
+    getAutomaticAnalysisSettings(user.id),
+    getPayments(client, { userId: user.id }),
+    syncUserAchievements(user.id),
+  ]);
 
   const analysisRecords = analysisHistory.data ?? [];
   const activeGoalCount = new Set(
@@ -105,6 +114,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     activeGoalCount,
     latestAnalysisOn: analysisRecords[0]?.saved_on ?? null,
     proTenureMonths,
+    achievements,
     providers:
       identities.data?.identities.map((identity) => identity.provider) ?? [],
   };
@@ -135,6 +145,7 @@ export default function Profile({ loaderData }: Route.ComponentProps) {
     latestAnalysisOn,
     proTenureMonths,
     username,
+    achievements,
   } = loaderData;
   const tenureBadge = proTenureBadge(proTenureMonths);
 
@@ -278,6 +289,50 @@ export default function Profile({ loaderData }: Route.ComponentProps) {
             </p>
             <p className="mt-3 text-lg font-black">{formatDate(createdAt)}</p>
           </div>
+        </section>
+
+        <section className="bg-card mt-4 rounded-3xl border p-5 shadow-sm md:p-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 font-black">
+                <TrophyIcon className="size-5 text-amber-500" /> 획득한 도전과제
+              </div>
+              <p className="text-muted-foreground mt-1 text-sm">
+                투자 여정에서 모은 뱃지를 한곳에서 확인해요.
+              </p>
+            </div>
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+            >
+              <Link to="/dashboard/achievements" viewTransition>
+                전체 보기
+              </Link>
+            </Button>
+          </div>
+          {achievements.length ? (
+            <div className="mt-5 flex flex-wrap gap-3">
+              {achievements.map((achievement) => (
+                <Link
+                  key={achievement.id}
+                  to="/dashboard/achievements"
+                  className="bg-muted/60 hover:bg-muted flex items-center gap-2 rounded-2xl border px-3 py-2.5 transition-colors"
+                  title={achievement.mission}
+                >
+                  <span className="text-2xl" aria-hidden="true">
+                    {achievement.emoji}
+                  </span>
+                  <span className="text-sm font-black">{achievement.name}</span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-muted/45 text-muted-foreground mt-5 rounded-2xl border border-dashed px-4 py-5 text-sm">
+              첫 분석을 완료하면 첫 뱃지를 받을 수 있어요.
+            </div>
+          )}
         </section>
 
         <section className="mt-4 flex flex-col gap-4 rounded-3xl border border-dashed p-5 sm:flex-row sm:items-center sm:justify-between md:p-6">

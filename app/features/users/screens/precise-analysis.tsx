@@ -53,6 +53,7 @@ import {
   investmentMonthsSince,
   managedPortfolioCashFlows,
 } from "~/features/stocks/portfolio/portfolio.server";
+import { awardUserAchievementsForAnalysis } from "~/features/users/achievements.server";
 import { getAutomaticAnalysisSettings } from "~/features/users/automatic-analysis-settings.server";
 
 const analysisSchema = z.object({
@@ -227,6 +228,12 @@ export async function action({ request }: Route.ActionArgs) {
       userId: user.id,
       targetType: "analysis",
     });
+
+    try {
+      await awardUserAchievementsForAnalysis(user.id, completeResult);
+    } catch (achievementError) {
+      console.error("Achievement award failed", achievementError);
+    }
 
     if (!accountSettings.isPro)
       return data({

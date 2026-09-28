@@ -122,6 +122,7 @@ export default [
         ),
         route("/insights", "features/users/screens/investment-insights.tsx"),
         route("/history", "features/users/screens/analysis-history.tsx"),
+        route("/achievements", "features/users/screens/achievements.tsx"),
         route("/pro", "features/users/screens/eokka-pro.tsx"),
         route("/payments", "features/payments/screens/payments.tsx"),
         route(

@@ -11,6 +11,7 @@ import {
 } from "~/core/lib/rate-limit.server";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { recordAdminActivity } from "~/features/admin/activity.server";
+import { awardUserAchievementsForAnalysis } from "~/features/users/achievements.server";
 import { getAutomaticAnalysisSettings } from "~/features/users/automatic-analysis-settings.server";
 
 import { generateAiStrategy } from "../ai-strategy.server";
@@ -158,6 +159,13 @@ export async function action({ request }: Route.ActionArgs) {
     } catch (snapshotError) {
       // A storage problem must not discard an otherwise valid analysis.
       console.error("Analysis snapshot save failed", snapshotError);
+    }
+    if (user) {
+      try {
+        await awardUserAchievementsForAnalysis(user.id, completeResult);
+      } catch (achievementError) {
+        console.error("Achievement award failed", achievementError);
+      }
     }
     if (user)
       await recordAdminActivity({

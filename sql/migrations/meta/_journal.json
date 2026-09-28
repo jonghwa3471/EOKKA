@@ -218,6 +218,13 @@
       "when": 1790574540518,
       "tag": "0030_curly_kingpin",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1790576357297,
+      "tag": "0031_real_northstar",
+      "breakpoints": true
     }
   ]
 }

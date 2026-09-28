@@ -40,23 +40,25 @@ function DashboardRouteTransitionSkeleton() {
     "/dashboard/history",
   )
     ? "history"
-    : targetPath.startsWith("/dashboard/portfolio")
-      ? "portfolio"
-      : targetPath.startsWith("/dashboard/precise-analysis")
-        ? "precise-analysis"
-        : targetPath.startsWith("/dashboard/insights")
-          ? "insights"
-          : targetPath.startsWith("/account")
-            ? "account"
-            : targetPath.startsWith("/dashboard/pro")
-              ? "pro"
-              : targetPath.startsWith("/dashboard/payments")
-                ? "payments"
-                : targetPath.startsWith("/dashboard/notifications")
-                  ? "notifications"
-                  : targetPath.startsWith("/dashboard/admin")
-                    ? "admin"
-                    : "dashboard";
+    : targetPath.startsWith("/dashboard/achievements")
+      ? "achievements"
+      : targetPath.startsWith("/dashboard/portfolio")
+        ? "portfolio"
+        : targetPath.startsWith("/dashboard/precise-analysis")
+          ? "precise-analysis"
+          : targetPath.startsWith("/dashboard/insights")
+            ? "insights"
+            : targetPath.startsWith("/account")
+              ? "account"
+              : targetPath.startsWith("/dashboard/pro")
+                ? "pro"
+                : targetPath.startsWith("/dashboard/payments")
+                  ? "payments"
+                  : targetPath.startsWith("/dashboard/notifications")
+                    ? "notifications"
+                    : targetPath.startsWith("/dashboard/admin")
+                      ? "admin"
+                      : "dashboard";
 
   useEffect(() => {
     if (!isRouteLoading) {
@@ -187,13 +189,15 @@ export default function DashboardLayout({ loaderData }: Route.ComponentProps) {
               ? "투자 인사이트"
               : pathname.startsWith("/dashboard/history")
                 ? "분석 기록"
-                : pathname.startsWith("/dashboard/pro")
-                  ? "EOKKA Pro"
-                  : pathname.startsWith("/dashboard/payments")
-                    ? "결제내역"
-                    : pathname.startsWith("/dashboard/notifications")
-                      ? "알림"
-                      : "내 투자 대시보드";
+                : pathname.startsWith("/dashboard/achievements")
+                  ? "도전과제"
+                  : pathname.startsWith("/dashboard/pro")
+                    ? "EOKKA Pro"
+                    : pathname.startsWith("/dashboard/payments")
+                      ? "결제내역"
+                      : pathname.startsWith("/dashboard/notifications")
+                        ? "알림"
+                        : "내 투자 대시보드";
   return (
     <SidebarProvider>
       <DashboardSidebar

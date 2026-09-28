@@ -4,6 +4,7 @@ import db from "~/core/db/drizzle-client.server";
 import { createNotification } from "~/features/notifications/notifications.server";
 import type { AnalysisResult } from "~/features/stocks/analysis.types";
 import { managedPortfolios } from "~/features/stocks/portfolio/schema";
+import { syncUserAchievements } from "~/features/users/achievements.server";
 import { profiles } from "~/features/users/schema";
 
 import { analysisSnapshots } from "./schema";
@@ -247,6 +248,8 @@ export async function saveDailyAnalysisSnapshot({
     });
   }
 
+  await syncUserAchievements(userId);
+
   return { id: snapshotId.id, savedOn };
 }
 
@@ -314,6 +317,8 @@ export async function startManagedAnalysisHistory({
       );
     return inserted.id;
   });
+
+  await syncUserAchievements(userId);
 
   return { id: snapshotId, savedOn };
 }

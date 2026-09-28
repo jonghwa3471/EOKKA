@@ -8,6 +8,7 @@ import {
   MicroscopeIcon,
   PanelLeftIcon,
   SparklesIcon,
+  TrophyIcon,
 } from "lucide-react";
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
@@ -19,6 +20,7 @@ import { cn } from "~/core/lib/utils";
 export type RouteSkeletonVariant =
   | "dashboard"
   | "history"
+  | "achievements"
   | "portfolio"
   | "precise-analysis"
   | "insights"
@@ -49,11 +51,13 @@ const dashboardMenu = [
   [MicroscopeIcon, "정밀 분석"],
   [SparklesIcon, "투자 인사이트"],
   [CalendarDaysIcon, "분석 기록"],
+  [TrophyIcon, "도전과제"],
 ] as const;
 
 const dashboardShellTitles: Partial<Record<RouteSkeletonVariant, string>> = {
   dashboard: "내 투자 대시보드",
   history: "분석 기록",
+  achievements: "도전과제",
   portfolio: "내 포트폴리오",
   "precise-analysis": "정밀 분석",
   insights: "투자 인사이트",
@@ -78,7 +82,9 @@ function ImmediateDashboardSidebar({
           ? 3
           : variant === "history"
             ? 4
-            : 0;
+            : variant === "achievements"
+              ? 5
+              : 0;
   return (
     <aside className="text-sidebar-foreground hidden h-svh w-64 shrink-0 p-2 font-sans md:block">
       <div className="bg-sidebar/92 border-sidebar-border/70 flex h-full w-full flex-col overflow-hidden rounded-2xl border shadow-[0_20px_55px_-28px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:shadow-[0_24px_65px_-30px_rgba(0,0,0,0.9)]">
@@ -154,6 +160,11 @@ const pageCopy: Partial<
     title: "분석 기록",
     description:
       "날짜를 선택하면 해당일에 분석한 포트폴리오와 목표별 결과를 다시 볼 수 있어요.",
+  },
+  achievements: {
+    eyebrow: "EOKKA CHALLENGES",
+    title: "도전과제",
+    description: "분석과 기록을 이어가며 투자 습관을 뱃지로 모아보세요.",
   },
   portfolio: {
     eyebrow: "MANAGED PORTFOLIO",

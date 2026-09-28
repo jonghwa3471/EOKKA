@@ -5,6 +5,7 @@ import {
   MicroscopeIcon,
   ShieldCheckIcon,
   SparklesIcon,
+  TrophyIcon,
 } from "lucide-react";
 import { Link, useLocation, useNavigation } from "react-router";
 
@@ -46,6 +47,7 @@ const navigation = [
     icon: SparklesIcon,
   },
   { title: "분석 기록", url: "/dashboard/history", icon: CalendarDaysIcon },
+  { title: "도전과제", url: "/dashboard/achievements", icon: TrophyIcon },
 ];
 
 export default function DashboardSidebar({
