@@ -37,6 +37,7 @@ import {
 } from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { getPayments } from "~/features/payments/queries";
+import type { AnalysisResult } from "~/features/stocks/analysis.types";
 
 import {
   ACHIEVEMENT_DIFFICULTY_STYLES,
@@ -73,6 +74,16 @@ function formatDate(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
+function formatInvestmentDuration(months: number | null | undefined) {
+  if (months === null || months === undefined) return "기록을 더 쌓는 중";
+  if (months < 1) return "1개월 미만";
+  const years = Math.floor(months / 12);
+  const remainingMonths = Math.floor(months % 12);
+  if (years === 0) return `${remainingMonths}개월`;
+  if (remainingMonths === 0) return `${years}년`;
+  return `${years}년 ${remainingMonths}개월`;
+}
+
 export async function loader({ request }: Route.LoaderArgs) {
   const [client] = makeServerClient(request);
   const {
@@ -92,7 +103,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     client.auth.getUserIdentities(),
     client
       .from("analysis_snapshots")
-      .select("goal_amount,saved_on")
+      .select("goal_amount,saved_on,result")
       .eq("user_id", user.id)
       .order("saved_on", { ascending: false }),
     getAutomaticAnalysisSettings(user.id),
@@ -101,6 +112,29 @@ export async function loader({ request }: Route.LoaderArgs) {
   ]);
 
   const analysisRecords = analysisHistory.data ?? [];
+  const latestAnalysisResult = analysisRecords[0]?.result as unknown as
+    | AnalysisResult
+    | undefined;
+  const investmentStyleHistory = Array.from(
+    new Map(
+      analysisRecords.flatMap((record) => {
+        const result = record.result as unknown as AnalysisResult | undefined;
+        const investmentStyle = result?.investmentStyle;
+        const title = investmentStyle?.title?.trim();
+        return title
+          ? [
+              [
+                title,
+                { title, description: investmentStyle?.description ?? "" },
+              ],
+            ]
+          : [];
+      }),
+    ).values(),
+  );
+  const recordedDayCount = new Set(
+    analysisRecords.map((record) => record.saved_on),
+  ).size;
   const activeGoalCount = new Set(
     analysisRecords.map((record) => record.goal_amount),
   ).size;
@@ -137,6 +171,20 @@ export async function loader({ request }: Route.LoaderArgs) {
     analysisCount: analysisRecords.length,
     activeGoalCount,
     latestAnalysisOn: analysisRecords[0]?.saved_on ?? null,
+    investmentProfile: {
+      durationMonths: latestAnalysisResult?.investmentPeriodMonths ?? null,
+      styleTitle: latestAnalysisResult?.investmentStyle?.title ?? null,
+      styleDescription:
+        latestAnalysisResult?.investmentStyle?.description ?? null,
+      previousStyleTitles: investmentStyleHistory
+        .filter(
+          (style) =>
+            style.title !== latestAnalysisResult?.investmentStyle?.title,
+        )
+        .map((style) => style.title),
+      recordedDayCount,
+      achievementCount: achievements.length,
+    },
     proTenureMonths,
     achievements,
     featuredAchievementIds: (profile?.featured_achievement_ids ?? []).filter(
@@ -182,6 +230,7 @@ export default function Profile({ loaderData }: Route.ComponentProps) {
     username,
     achievements,
     featuredAchievementIds,
+    investmentProfile,
   } = loaderData;
   const [savedFeaturedIds, setSavedFeaturedIds] = useState(
     featuredAchievementIds,
@@ -272,6 +321,103 @@ export default function Profile({ loaderData }: Route.ComponentProps) {
                 <ProTenureBadgeView badge={tenureBadge} />
               </Link>
             )}
+          </div>
+        </section>
+
+        <section className="bg-card mt-4 overflow-hidden rounded-3xl border p-5 shadow-sm md:p-6">
+          <div>
+            <div>
+              <div className="flex items-center gap-2 font-black">
+                <ChartNoAxesCombinedIcon className="size-5 text-emerald-500" />
+                나의 투자 프로필
+              </div>
+              <p className="text-muted-foreground mt-1 text-sm leading-6">
+                분석 기록에서 발견한 나만의 투자 특징을 모아봤어요.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-emerald-500/8 p-5">
+              <div className="absolute -top-5 -right-4 text-6xl opacity-10">
+                ⏳
+              </div>
+              <p className="text-xs font-black text-emerald-600 dark:text-emerald-400">
+                투자력
+              </p>
+              <p className="mt-3 text-xl font-black">
+                {formatInvestmentDuration(investmentProfile.durationMonths)}
+              </p>
+              <p className="text-muted-foreground mt-1 text-xs leading-5">
+                분석에 반영된 나의 투자 경험치예요.
+              </p>
+            </div>
+
+            <div className="relative overflow-hidden rounded-2xl border border-violet-500/20 bg-violet-500/8 p-5 sm:col-span-1 lg:col-span-1">
+              <div className="absolute -top-4 -right-3 text-6xl opacity-10">
+                ✦
+              </div>
+              <p className="text-xs font-black text-violet-600 dark:text-violet-400">
+                투자 성향
+              </p>
+              <p className="mt-3 text-lg leading-snug font-black">
+                {investmentProfile.styleTitle ?? "나만의 성향을 찾는 중"}
+              </p>
+              <p className="text-muted-foreground mt-1 line-clamp-2 text-xs leading-5">
+                {investmentProfile.styleDescription ??
+                  "분석 기록이 생기면 포트폴리오 성향에 맞는 칭호가 나타나요."}
+              </p>
+              {investmentProfile.previousStyleTitles.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {investmentProfile.previousStyleTitles
+                    .slice(0, 2)
+                    .map((title) => (
+                      <span
+                        key={title}
+                        className="bg-background/75 text-muted-foreground max-w-full truncate rounded-full border px-2 py-1 text-[10px] font-bold"
+                        title={title}
+                      >
+                        이전 · {title}
+                      </span>
+                    ))}
+                  {investmentProfile.previousStyleTitles.length > 2 && (
+                    <span className="bg-background/75 text-muted-foreground rounded-full border px-2 py-1 text-[10px] font-bold">
+                      +{investmentProfile.previousStyleTitles.length - 2}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-cyan-500/8 p-5">
+              <div className="absolute -top-4 -right-3 text-6xl opacity-10">
+                👣
+              </div>
+              <p className="text-xs font-black text-cyan-600 dark:text-cyan-400">
+                투자 발자국
+              </p>
+              <p className="mt-3 text-xl font-black">
+                {investmentProfile.recordedDayCount.toLocaleString("ko-KR")}일
+              </p>
+              <p className="text-muted-foreground mt-1 text-xs leading-5">
+                서로 다른 날짜에 분석을 남긴 횟수예요.
+              </p>
+            </div>
+
+            <div className="relative overflow-hidden rounded-2xl border border-amber-500/20 bg-amber-500/8 p-5">
+              <div className="absolute -top-4 -right-3 text-6xl opacity-10">
+                🏅
+              </div>
+              <p className="text-xs font-black text-amber-600 dark:text-amber-400">
+                수집한 도전과제
+              </p>
+              <p className="mt-3 text-xl font-black">
+                {investmentProfile.achievementCount.toLocaleString("ko-KR")}개
+              </p>
+              <p className="text-muted-foreground mt-1 text-xs leading-5">
+                투자 습관으로 획득한 뱃지 개수예요.
+              </p>
+            </div>
           </div>
         </section>
 
@@ -378,7 +524,7 @@ export default function Profile({ loaderData }: Route.ComponentProps) {
                 setBadgePickerOpen(true);
               }}
             >
-              <PencilIcon className="size-3.5" /> 장식 편집
+              <PencilIcon className="size-3.5" /> 편집
             </Button>
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
