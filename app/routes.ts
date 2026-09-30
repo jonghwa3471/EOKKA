@@ -36,6 +36,10 @@ export default [
       route("/social-avatar", "features/users/api/use-social-avatar.tsx"),
       route("/data", "features/users/api/reset-user-data.tsx"),
       route("/profile", "features/users/api/edit-profile.tsx"),
+      route(
+        "/featured-achievements",
+        "features/users/api/featured-achievements.tsx",
+      ),
       route("/providers", "features/users/api/connect-provider.tsx"),
       route(
         "/providers/:provider",

@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 
 import db from "~/core/db/drizzle-client.server";
+import { createNotification } from "~/features/notifications/notifications.server";
 import type { AnalysisResult } from "~/features/stocks/analysis.types";
 import { analysisSnapshots } from "~/features/stocks/history/schema";
 
@@ -21,7 +22,7 @@ async function awardAchievementIds(userId: string, completedIds: string[]) {
   const earnedIds = new Set(alreadyEarned.map((item) => item.id));
   const newIds = completedIds.filter((id) => !earnedIds.has(id));
   if (newIds.length) {
-    await db
+    const inserted = await db
       .insert(userAchievements)
       .values(
         newIds.map((achievementId) => ({
@@ -29,7 +30,22 @@ async function awardAchievementIds(userId: string, completedIds: string[]) {
           achievement_id: achievementId,
         })),
       )
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning({ achievementId: userAchievements.achievement_id });
+
+    await Promise.all(
+      inserted.map(async ({ achievementId }) => {
+        const achievement = achievementById(achievementId);
+        if (!achievement) return;
+        await createNotification({
+          userId,
+          type: "achievement_unlocked",
+          title: `도전과제 달성 · ${achievement.name}`,
+          message: `${achievement.emoji} ${achievement.description}`,
+          href: "/dashboard/achievements",
+        });
+      }),
+    );
   }
 }
 

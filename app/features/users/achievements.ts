@@ -11,6 +11,7 @@ export type AchievementCategory =
   | "분석 기록"
   | "포트폴리오"
   | "투자 성과"
+  | "버핏 지수"
   | "목표 달성"
   | "투자 습관"
   | "자산 성장";
@@ -23,7 +24,66 @@ export interface AchievementDefinition {
   description: string;
   tone: AchievementTone;
   category: AchievementCategory;
+  difficultyTier?: AchievementDifficultyTier;
 }
+
+export type AchievementDifficultyTier =
+  | "starter"
+  | "easy"
+  | "normal"
+  | "hard"
+  | "legendary";
+
+export const ACHIEVEMENT_DIFFICULTY_STYLES: Record<
+  AchievementDifficultyTier,
+  { label: string; badge: string; card: string; glow: string; text: string }
+> = {
+  starter: {
+    label: "입문",
+    badge: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300",
+    card: "border-emerald-500/35",
+    glow: "from-emerald-500/16",
+    text: "text-emerald-600 dark:text-emerald-300",
+  },
+  easy: {
+    label: "초급",
+    badge: "bg-blue-500/15 text-blue-600 dark:text-blue-300",
+    card: "border-blue-500/35",
+    glow: "from-blue-500/16",
+    text: "text-blue-600 dark:text-blue-300",
+  },
+  normal: {
+    label: "중급",
+    badge: "bg-violet-500/15 text-violet-600 dark:text-violet-300",
+    card: "border-violet-500/35",
+    glow: "from-violet-500/16",
+    text: "text-violet-600 dark:text-violet-300",
+  },
+  hard: {
+    label: "고급",
+    badge: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+    card: "border-amber-500/35",
+    glow: "from-amber-500/16",
+    text: "text-amber-700 dark:text-amber-300",
+  },
+  legendary: {
+    label: "최상급",
+    badge: "bg-rose-500/15 text-rose-600 dark:text-rose-300",
+    card: "border-rose-500/35",
+    glow: "from-rose-500/16",
+    text: "text-rose-600 dark:text-rose-300",
+  },
+};
+
+export const ACHIEVEMENT_CATEGORIES: AchievementCategory[] = [
+  "분석 기록",
+  "포트폴리오",
+  "투자 성과",
+  "버핏 지수",
+  "목표 달성",
+  "투자 습관",
+  "자산 성장",
+];
 
 export const ACHIEVEMENTS: AchievementDefinition[] = [
   {
@@ -144,67 +204,37 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     category: "포트폴리오",
   },
   {
-    id: "annual-return-5",
-    name: "예금 밖 첫걸음",
-    emoji: "🌤️",
-    mission: "연평균 수익률 5% 이상을 기록해요.",
-    description: "자산이 천천히 성장하는 속도를 만들었어요.",
-    tone: "blue",
-    category: "투자 성과",
-  },
-  {
-    id: "annual-return-10",
-    name: "두 자릿수 엔진",
-    emoji: "⚙️",
-    mission: "연평균 수익률 10% 이상을 기록해요.",
-    description: "연평균 성장률이 두 자릿수에 올라왔어요.",
-    tone: "cyan",
-    category: "투자 성과",
-  },
-  {
-    id: "annual-return-15",
-    name: "복리 가속",
-    emoji: "🚴",
-    mission: "연평균 수익률 15% 이상을 기록해요.",
-    description: "복리의 속도가 한 단계 빨라졌어요.",
-    tone: "emerald",
-    category: "투자 성과",
-  },
-  {
     id: "one-buffett",
     name: "1버핏",
     emoji: "🦬",
-    mission: "연평균 수익률 20% 이상을 기록해요.",
-    description: "버핏의 장기 연평균 수익률로 알려진 20% 선을 넘었어요.",
+    mission: "1년 이상 투자하고 연평균 수익률 20% 이상을 기록해요.",
+    description:
+      "1년 이상의 기록으로 버핏의 장기 연평균 수익률로 알려진 20% 선을 넘었어요.",
     tone: "amber",
-    category: "투자 성과",
-  },
-  {
-    id: "annual-return-25",
-    name: "복리 터보",
-    emoji: "🚀",
-    mission: "연평균 수익률 25% 이상을 기록해요.",
-    description: "빠른 성장일수록 위험 점검도 필요한 구간이에요.",
-    tone: "rose",
-    category: "투자 성과",
-  },
-  {
-    id: "annual-return-30",
-    name: "삼십의 질주",
-    emoji: "🏎️",
-    mission: "연평균 수익률 30% 이상을 기록해요.",
-    description: "강한 성과를 기록한 포트폴리오예요.",
-    tone: "violet",
-    category: "투자 성과",
+    category: "버핏 지수",
+    difficultyTier: "hard",
   },
   {
     id: "annual-return-40",
-    name: "번개의 해",
-    emoji: "⚡",
-    mission: "연평균 수익률 40% 이상을 기록해요.",
-    description: "눈에 띄는 성장과 함께 변동성도 확인할 때예요.",
-    tone: "amber",
-    category: "투자 성과",
+    name: "2버핏",
+    emoji: "🦬🦬",
+    mission: "1년 이상 투자하고 연평균 수익률 40% 이상을 기록해요.",
+    description:
+      "1년 이상의 기록으로 버핏의 장기 연평균 수익률로 알려진 속도의 두 배에 도달했어요.",
+    tone: "rose",
+    category: "버핏 지수",
+    difficultyTier: "legendary",
+  },
+  {
+    id: "annual-return-60",
+    name: "3버핏",
+    emoji: "🦬🦬🦬",
+    mission: "1년 이상 투자하고 연평균 수익률 60% 이상을 기록해요.",
+    description:
+      "1년 이상의 기록으로 버핏의 장기 연평균 수익률로 알려진 속도의 세 배에 도달했어요.",
+    tone: "rose",
+    category: "버핏 지수",
+    difficultyTier: "legendary",
   },
   {
     id: "profit-zone",
@@ -524,10 +554,16 @@ export function findCompletedAchievementIds(snapshots: AchievementSnapshot[]) {
     holdingCount >= 3 &&
       result.holdings.every((holding) => holding.returnRate > 0),
   );
-  for (const threshold of [5, 10, 15, 20, 25, 30, 40])
+  for (const [threshold, id] of [
+    [20, "one-buffett"],
+    [40, "annual-return-40"],
+    [60, "annual-return-60"],
+  ] as const)
     award(
-      threshold === 20 ? "one-buffett" : `annual-return-${threshold}`,
-      annualizedReturn != null && annualizedReturn >= threshold,
+      id,
+      investmentMonths >= 12 &&
+        annualizedReturn != null &&
+        annualizedReturn >= threshold,
     );
   for (const [threshold, id] of [
     [0, "profit-zone"],
@@ -582,4 +618,48 @@ export function findCompletedAchievementIds(snapshots: AchievementSnapshot[]) {
 
 export function achievementById(id: string) {
   return ACHIEVEMENTS.find((achievement) => achievement.id === id) ?? null;
+}
+
+export function achievementsInCategory(category: AchievementCategory) {
+  return ACHIEVEMENTS.filter(
+    (achievement) => achievement.category === category,
+  );
+}
+
+export function achievementDifficulty(achievement: AchievementDefinition) {
+  const categoryAchievements = achievementsInCategory(achievement.category);
+  const index = categoryAchievements.findIndex(
+    (candidate) => candidate.id === achievement.id,
+  );
+  const level = Math.max(1, index + 1);
+  const ratio = level / Math.max(1, categoryAchievements.length);
+  const tier: AchievementDifficultyTier =
+    ratio <= 0.2
+      ? "starter"
+      : ratio <= 0.4
+        ? "easy"
+        : ratio <= 0.6
+          ? "normal"
+          : ratio <= 0.8
+            ? "hard"
+            : "legendary";
+  return {
+    level,
+    total: categoryAchievements.length,
+    tier: achievement.difficultyTier ?? tier,
+  };
+}
+
+const ACHIEVEMENT_DIFFICULTY_ORDER: AchievementDifficultyTier[] = [
+  "starter",
+  "easy",
+  "normal",
+  "hard",
+  "legendary",
+];
+
+export function achievementDifficultyRank(achievement: AchievementDefinition) {
+  return ACHIEVEMENT_DIFFICULTY_ORDER.indexOf(
+    achievementDifficulty(achievement).tier,
+  );
 }

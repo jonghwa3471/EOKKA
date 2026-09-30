@@ -11,8 +11,15 @@ import {
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
 
-import { ACHIEVEMENTS, type AchievementTone } from "../achievements";
+import {
+  ACHIEVEMENTS,
+  ACHIEVEMENT_CATEGORIES,
+  ACHIEVEMENT_DIFFICULTY_STYLES,
+  achievementDifficulty,
+  achievementDifficultyRank,
+} from "../achievements";
 import { syncUserAchievements } from "../achievements.server";
+import { AchievementEmoji } from "../components/achievement-emoji";
 
 type AchievementFilter = "all" | "earned" | "locked";
 
@@ -25,42 +32,6 @@ const filters: Array<{ value: AchievementFilter; label: string }> = [
 export const meta: Route.MetaFunction = () => [
   { title: `도전과제 | ${import.meta.env.VITE_APP_NAME}` },
 ];
-
-const toneStyles: Record<
-  AchievementTone,
-  { badge: string; card: string; glow: string }
-> = {
-  emerald: {
-    badge: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300",
-    card: "border-emerald-500/35",
-    glow: "from-emerald-500/16",
-  },
-  amber: {
-    badge: "bg-amber-500/15 text-amber-600 dark:text-amber-300",
-    card: "border-amber-500/35",
-    glow: "from-amber-500/16",
-  },
-  violet: {
-    badge: "bg-violet-500/15 text-violet-600 dark:text-violet-300",
-    card: "border-violet-500/35",
-    glow: "from-violet-500/16",
-  },
-  rose: {
-    badge: "bg-rose-500/15 text-rose-600 dark:text-rose-300",
-    card: "border-rose-500/35",
-    glow: "from-rose-500/16",
-  },
-  cyan: {
-    badge: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-300",
-    card: "border-cyan-500/35",
-    glow: "from-cyan-500/16",
-  },
-  blue: {
-    badge: "bg-blue-500/15 text-blue-600 dark:text-blue-300",
-    card: "border-blue-500/35",
-    glow: "from-blue-500/16",
-  },
-};
 
 export async function loader({ request }: Route.LoaderArgs) {
   const [client] = makeServerClient(request);
@@ -99,6 +70,22 @@ export default function Achievements({ loaderData }: Route.ComponentProps) {
     earned: earnedCount,
     locked: ACHIEVEMENTS.length - earnedCount,
   };
+  const groupedAchievements = ACHIEVEMENT_CATEGORIES.map((category) => ({
+    category,
+    achievements: filteredAchievements
+      .filter((achievement) => achievement.category === category)
+      .sort(
+        (left, right) =>
+          achievementDifficultyRank(left) - achievementDifficultyRank(right),
+      ),
+    total: ACHIEVEMENTS.filter(
+      (achievement) => achievement.category === category,
+    ).length,
+    earned: ACHIEVEMENTS.filter(
+      (achievement) =>
+        achievement.category === category && earnedMap.has(achievement.id),
+    ).length,
+  })).filter((group) => group.achievements.length > 0);
 
   return (
     <main className="flex flex-1 flex-col px-5 pt-8 pb-12 md:px-8 md:pt-12">
@@ -179,81 +166,101 @@ export default function Achievements({ loaderData }: Route.ComponentProps) {
           ))}
         </div>
 
-        <section className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filteredAchievements.map((achievement) => {
-            const earned = earnedMap.get(achievement.id);
-            const styles = toneStyles[achievement.tone];
-            return (
-              <article
-                key={achievement.id}
-                className={cn(
-                  "bg-card relative overflow-hidden rounded-3xl border p-5 shadow-sm transition-transform hover:-translate-y-0.5 md:p-6",
-                  earned ? styles.card : "border-border/65",
-                )}
-              >
-                {earned && (
-                  <div
-                    className={cn(
-                      "pointer-events-none absolute inset-0 bg-gradient-to-br to-transparent",
-                      styles.glow,
-                    )}
-                  />
-                )}
-                <div className="relative">
-                  <div className="flex items-start justify-between gap-4">
-                    <div
-                      className={cn(
-                        "flex size-14 items-center justify-center rounded-2xl text-3xl shadow-sm",
-                        earned ? styles.badge : "bg-muted grayscale",
-                      )}
-                      aria-hidden="true"
-                    >
-                      {achievement.emoji}
-                    </div>
-                    <span
-                      className={cn(
-                        "flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-black",
-                        earned
-                          ? styles.badge
-                          : "bg-muted text-muted-foreground",
-                      )}
-                    >
-                      {earned ? (
-                        <CheckIcon className="size-3" />
-                      ) : (
-                        <LockKeyholeIcon className="size-3" />
-                      )}
-                      {earned ? "획득 완료" : "도전 중"}
-                    </span>
-                  </div>
-                  <p className="text-muted-foreground mt-4 text-[11px] font-black tracking-[0.12em]">
-                    {achievement.category}
+        <div className="mt-6 space-y-8">
+          {groupedAchievements.map((group) => (
+            <section key={group.category}>
+              <div className="mb-3 flex items-end justify-between gap-4 px-1">
+                <div>
+                  <h2 className="text-xl font-black">{group.category}</h2>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    쉬운 도전부터 차례대로 모아보세요.
                   </p>
-                  <h2 className="mt-1.5 text-xl font-black">
-                    {achievement.name}
-                  </h2>
-                  <p className="mt-2 text-sm leading-6 font-bold">
-                    {achievement.mission}
-                  </p>
-                  <p className="text-muted-foreground mt-2 text-sm leading-6">
-                    {achievement.description}
-                  </p>
-                  {earned && (
-                    <p className="text-muted-foreground mt-4 text-xs font-bold">
-                      {new Intl.DateTimeFormat("ko-KR", {
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                        timeZone: "Asia/Seoul",
-                      }).format(new Date(earned.unlockedAt))}{" "}
-                      획득
-                    </p>
-                  )}
                 </div>
-              </article>
-            );
-          })}
-        </section>
+                <span className="text-muted-foreground shrink-0 text-sm font-black tabular-nums">
+                  {group.earned}/{group.total} 획득
+                </span>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {group.achievements.map((achievement) => {
+                  const earned = earnedMap.get(achievement.id);
+                  const difficulty = achievementDifficulty(achievement);
+                  const styles = ACHIEVEMENT_DIFFICULTY_STYLES[difficulty.tier];
+                  return (
+                    <article
+                      key={achievement.id}
+                      className={cn(
+                        "bg-card relative overflow-hidden rounded-3xl border p-5 shadow-sm transition-transform hover:-translate-y-0.5 md:p-6",
+                        styles.card,
+                      )}
+                    >
+                      {earned && (
+                        <div
+                          className={cn(
+                            "pointer-events-none absolute inset-0 bg-gradient-to-br to-transparent",
+                            styles.glow,
+                          )}
+                        />
+                      )}
+                      <div className="relative">
+                        <div className="flex items-start justify-between gap-4">
+                          <div
+                            className={cn(
+                              "flex size-14 items-center justify-center rounded-2xl text-3xl shadow-sm",
+                              styles.badge,
+                              !earned && "opacity-65 grayscale",
+                            )}
+                            aria-hidden="true"
+                          >
+                            <AchievementEmoji achievement={achievement} />
+                          </div>
+                          <span
+                            className={cn(
+                              "flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-black",
+                              earned
+                                ? styles.badge
+                                : "bg-muted text-muted-foreground",
+                            )}
+                          >
+                            {earned ? (
+                              <CheckIcon className="size-3" />
+                            ) : (
+                              <LockKeyholeIcon className="size-3" />
+                            )}
+                            {earned ? "획득 완료" : "도전 중"}
+                          </span>
+                        </div>
+                        <p className="text-muted-foreground mt-4 text-[11px] font-black tracking-[0.12em]">
+                          <span className={styles.text}>{styles.label}</span>
+                          {" 난이도"}
+                        </p>
+                        <h3 className="mt-1.5 text-xl font-black">
+                          {achievement.name}
+                        </h3>
+                        <p className="mt-2 text-sm leading-6 font-bold">
+                          {achievement.mission}
+                        </p>
+                        <p className="text-muted-foreground mt-2 text-sm leading-6">
+                          {achievement.description}
+                        </p>
+                        {earned && (
+                          <p className="text-muted-foreground mt-4 text-xs font-bold">
+                            {new Intl.DateTimeFormat("ko-KR", {
+                              year: "numeric",
+                              month: "long",
+                              day: "numeric",
+                              timeZone: "Asia/Seoul",
+                            }).format(new Date(earned.unlockedAt))}{" "}
+                            획득
+                          </p>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+        </div>
         {filteredAchievements.length === 0 && (
           <div className="bg-muted/35 text-muted-foreground mt-4 rounded-3xl border border-dashed px-6 py-14 text-center">
             <TrophyIcon className="mx-auto size-8 opacity-40" />

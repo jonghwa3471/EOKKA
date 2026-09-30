@@ -15,6 +15,7 @@ export type NotificationType =
   | "analysis_updated"
   | "analysis_deleted"
   | "analysis_all_deleted"
+  | "achievement_unlocked"
   | "payment_completed"
   | "subscription_renewal_upcoming";
 

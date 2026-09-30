@@ -9,6 +9,7 @@ import {
   MessageSquareIcon,
   RefreshCwIcon,
   Trash2Icon,
+  TrophyIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, data, redirect, useFetcher } from "react-router";
@@ -266,6 +267,7 @@ function NotificationRow({
 function notificationIcon(type: string) {
   if (type.startsWith("support_")) return MessageSquareIcon;
   if (type === "site_announcement") return MegaphoneIcon;
+  if (type === "achievement_unlocked") return TrophyIcon;
   if (type.includes("deleted")) return Trash2Icon;
   return RefreshCwIcon;
 }

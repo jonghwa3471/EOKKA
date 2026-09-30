@@ -9,6 +9,8 @@ import {
 } from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
 
+import { syncUserAchievements } from "../achievements.server";
+import { FeaturedAchievementsSettings } from "../components/featured-achievements-settings";
 import ChangeEmailForm from "../components/forms/change-email-form";
 import ConnectSocialAccountsForm from "../components/forms/connect-social-accounts-form";
 import DeleteAccountForm from "../components/forms/delete-account-form";
@@ -52,12 +54,24 @@ export async function loader({ request }: Route.LoaderArgs) {
   } = await client.auth.getUser();
   const identities = await client.auth.getUserIdentities();
   const profile = await getUserProfile(client, { userId: user!.id });
+  const achievements = await syncUserAchievements(user!.id);
+  const earnedAchievementIds = new Set(
+    achievements.map((achievement) => achievement.id),
+  );
   const socialStatus = new URL(request.url).searchParams.get("social");
   const socialProvider = new URL(request.url).searchParams.get("provider");
   return {
     user,
     identities,
-    profile,
+    profile: profile
+      ? {
+          ...profile,
+          featured_achievement_ids: profile.featured_achievement_ids.filter(
+            (id) => earnedAchievementIds.has(id),
+          ),
+        }
+      : null,
+    achievements,
     socialStatus,
     socialProvider,
   };
@@ -73,8 +87,14 @@ export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
 
 export default function Account({ loaderData }: Route.ComponentProps) {
   usePrimeRouteDataCache("account", loaderData);
-  const { user, identities, profile, socialStatus, socialProvider } =
-    loaderData;
+  const {
+    user,
+    identities,
+    profile,
+    achievements,
+    socialStatus,
+    socialProvider,
+  } = loaderData;
 
   useLayoutEffect(() => {
     if (!socialStatus) return;
@@ -120,6 +140,10 @@ export default function Account({ loaderData }: Route.ComponentProps) {
           }}
         </Await>
       </Suspense>
+      <FeaturedAchievementsSettings
+        achievements={achievements}
+        initialSelectedIds={profile?.featured_achievement_ids ?? []}
+      />
       <ChangeEmailForm
         email={user?.email ?? ""}
         canChangeEmail={

@@ -862,15 +862,24 @@ function TrendChart({
   const historyEndX = padding.left + plotWidth * 0.78;
   const historyPlotWidth = historyEndX - padding.left;
   const maxZoom = Math.max(6, records.length / 10);
-  const visibleDateLabelCapacity = Math.max(
-    2,
-    Math.floor((historyPlotWidth * zoom) / 64),
+  const minimumDateLabelWidth =
+    interval === "monthly" ? 72 : interval === "yearly" ? 52 : 54;
+  const visibleDateLabelCount = Math.min(
+    records.length,
+    records.length <= 1
+      ? 1
+      : Math.max(
+          2,
+          Math.floor((historyPlotWidth * zoom) / minimumDateLabelWidth) + 1,
+        ),
   );
-  const dateLabelStep = Math.max(
-    1,
-    Math.ceil(
-      Math.max(1, records.length - 1) /
-        Math.max(1, visibleDateLabelCapacity - 1),
+  const dateLabelIndexes = new Set(
+    Array.from({ length: visibleDateLabelCount }, (_, labelIndex) =>
+      visibleDateLabelCount <= 1
+        ? 0
+        : Math.round(
+            (labelIndex * (records.length - 1)) / (visibleDateLabelCount - 1),
+          ),
     ),
   );
   const x = (index: number) => {
@@ -1279,9 +1288,7 @@ function TrendChart({
                       : "fill-muted-foreground",
                   )}
                 >
-                  {(index === 0 ||
-                    index === records.length - 1 ||
-                    index % dateLabelStep === 0) &&
+                  {dateLabelIndexes.has(index) &&
                     (interval === "yearly" ? (
                       item.savedOn.slice(0, 4)
                     ) : interval === "monthly" ? (

@@ -1,0 +1,2 @@
+ALTER TABLE "profiles" ADD COLUMN "featured_achievement_ids" text[] DEFAULT '{}'::text[] NOT NULL;--> statement-breakpoint
+ALTER TABLE "profiles" ADD CONSTRAINT "profiles_featured_achievements_limit_check" CHECK (cardinality("profiles"."featured_achievement_ids") <= 3);

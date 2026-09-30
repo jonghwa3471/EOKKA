@@ -16,7 +16,10 @@ import { createPortal } from "react-dom";
 import { EokkaLogo } from "~/core/components/eokka-logo";
 import { Skeleton } from "~/core/components/ui/skeleton";
 import { cn } from "~/core/lib/utils";
-import { ACHIEVEMENTS } from "~/features/users/achievements";
+import {
+  ACHIEVEMENTS,
+  ACHIEVEMENT_CATEGORIES,
+} from "~/features/users/achievements";
 
 export type RouteSkeletonVariant =
   | "dashboard"
@@ -630,30 +633,52 @@ function AchievementsSkeleton() {
         ))}
       </div>
 
-      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {ACHIEVEMENTS.slice(0, 9).map((achievement) => (
-          <div
-            key={achievement.id}
-            className="bg-card rounded-3xl border p-5 shadow-sm md:p-6"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div className="bg-muted flex size-14 items-center justify-center rounded-2xl text-3xl grayscale">
-                {achievement.emoji}
+      <div className="mt-6 space-y-8">
+        {ACHIEVEMENT_CATEGORIES.slice(0, 2).map((category) => {
+          const categoryAchievements = ACHIEVEMENTS.filter(
+            (achievement) => achievement.category === category,
+          );
+          return (
+            <section key={category}>
+              <div className="mb-3 flex items-end justify-between gap-4 px-1">
+                <div>
+                  <h2 className="text-xl font-black">{category}</h2>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    쉬운 도전부터 차례대로 모아보세요.
+                  </p>
+                </div>
+                <Skeleton className="h-5 w-20 rounded-full" />
               </div>
-              <Skeleton className="h-6 w-20 rounded-full" />
-            </div>
-            <p className="text-muted-foreground mt-4 text-[11px] font-black tracking-[0.12em]">
-              {achievement.category}
-            </p>
-            <h2 className="mt-1.5 text-xl font-black">{achievement.name}</h2>
-            <p className="mt-2 text-sm leading-6 font-bold">
-              {achievement.mission}
-            </p>
-            <p className="text-muted-foreground mt-2 text-sm leading-6">
-              {achievement.description}
-            </p>
-          </div>
-        ))}
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {categoryAchievements.slice(0, 3).map((achievement, index) => (
+                  <div
+                    key={achievement.id}
+                    className="bg-card rounded-3xl border p-5 shadow-sm md:p-6"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="bg-muted flex size-14 items-center justify-center rounded-2xl text-3xl grayscale">
+                        {achievement.emoji}
+                      </div>
+                      <Skeleton className="h-6 w-20 rounded-full" />
+                    </div>
+                    <p className="text-muted-foreground mt-4 text-[11px] font-black tracking-[0.12em]">
+                      난이도 {index + 1} / {categoryAchievements.length}
+                    </p>
+                    <h3 className="mt-1.5 text-xl font-black">
+                      {achievement.name}
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 font-bold">
+                      {achievement.mission}
+                    </p>
+                    <p className="text-muted-foreground mt-2 text-sm leading-6">
+                      {achievement.description}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          );
+        })}
       </div>
     </>
   );
@@ -714,6 +739,20 @@ function AccountSkeleton() {
           <Skeleton className="h-10 w-full rounded-md" />
         </div>
         <Skeleton className="mt-6 h-10 w-full rounded-md" />
+      </div>
+      <div className="bg-card w-full rounded-xl border p-6 shadow-sm">
+        <div className="flex items-center gap-2 font-black">
+          <TrophyIcon className="size-5 text-amber-500" /> 프로필 뱃지
+        </div>
+        <p className="text-muted-foreground mt-2 text-sm">
+          프로필에 장식할 도전과제 뱃지를 최대 3개까지 선택해요.
+        </p>
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          {Array.from({ length: 3 }, (_, index) => (
+            <Skeleton key={index} className="h-20 rounded-2xl" />
+          ))}
+        </div>
+        <Skeleton className="mt-4 h-10 w-full rounded-md" />
       </div>
       <AccountCardSkeleton height="min-h-[13rem]" />
       <AccountCardSkeleton height="min-h-[16rem]" fields={2} />

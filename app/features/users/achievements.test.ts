@@ -53,7 +53,7 @@ test("현재 분석 수치와 누적 기록 일수로 도전과제를 판정한�
     currentValue: 500_000_000,
     profit: 100_000_000,
     returnRate: 300,
-    annualizedReturnRate: 40,
+    annualizedReturnRate: 60,
     investmentPeriodMonths: 240,
     holdings: Array.from({ length: 20 }, (_, index) => ({
       name: `종목 ${index + 1}`,
@@ -75,13 +75,35 @@ test("현재 분석 수치와 누적 기록 일수로 도전과제를 판정한�
   })).reverse();
 
   const completed = findCompletedAchievementIds(snapshots);
-  assert.equal(ACHIEVEMENTS.length, 50);
-  assert.equal(new Set(ACHIEVEMENTS.map((item) => item.id)).size, 50);
-  assert.equal(completed.length, 50);
+  assert.equal(ACHIEVEMENTS.length, 46);
+  assert.equal(new Set(ACHIEVEMENTS.map((item) => item.id)).size, 46);
+  assert.equal(completed.length, 46);
   assert.ok(completed.includes("one-buffett"));
+  assert.ok(completed.includes("annual-return-40"));
+  assert.ok(completed.includes("annual-return-60"));
   assert.ok(completed.includes("thirty-day-witness"));
 });
 
 test("기록이 없으면 도전과제를 수여하지 않는다", () => {
   assert.deepEqual(findCompletedAchievementIds([]), []);
+});
+
+test("버핏 지수는 연평균 수익률이 높아도 투자 1년 전에는 수여하지 않는다", () => {
+  const shortTermResult = result({
+    annualizedReturnRate: 80,
+    investmentPeriodMonths: 11,
+  });
+  const completed = findCompletedAchievementIds([
+    {
+      savedOn: "2026-09-28",
+      goalAmount: 100_000_000,
+      currentValue: shortTermResult.currentValue,
+      monthlyContribution: 100_000,
+      result: shortTermResult,
+    },
+  ]);
+
+  assert.equal(completed.includes("one-buffett"), false);
+  assert.equal(completed.includes("annual-return-40"), false);
+  assert.equal(completed.includes("annual-return-60"), false);
 });

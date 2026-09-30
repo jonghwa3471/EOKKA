@@ -45,6 +45,10 @@ export const profiles = pgTable(
     username: text().notNull(),
     name: text().notNull(),
     avatar_url: text(),
+    featured_achievement_ids: text("featured_achievement_ids")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     marketing_consent: boolean("marketing_consent").notNull().default(false),
     preferred_goal_amount: bigint({ mode: "number" }),
     automatic_analysis_goal_amount: bigint({ mode: "number" }),
@@ -61,6 +65,10 @@ export const profiles = pgTable(
     check(
       "profiles_username_format_check",
       sql`${table.username} ~ '^[a-z0-9_]{5,20}$'`,
+    ),
+    check(
+      "profiles_featured_achievements_limit_check",
+      sql`cardinality(${table.featured_achievement_ids}) <= 3`,
     ),
     // RLS Policy: Authenticated users can create only their own profile.
     // The auth trigger normally creates it, while this policy lets the OAuth

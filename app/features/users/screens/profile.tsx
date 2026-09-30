@@ -3,15 +3,19 @@ import type { Route } from "./+types/profile";
 import {
   CalendarDaysIcon,
   ChartNoAxesCombinedIcon,
+  CheckIcon,
   CrownIcon,
   FingerprintIcon,
   Link2Icon,
+  LockKeyholeIcon,
   MailIcon,
+  PencilIcon,
   Settings2Icon,
   TrophyIcon,
   UserCircle2Icon,
 } from "lucide-react";
-import { Link, redirect } from "react-router";
+import { useEffect, useState } from "react";
+import { Link, redirect, useFetcher } from "react-router";
 
 import {
   Avatar,
@@ -20,14 +24,31 @@ import {
 } from "~/core/components/ui/avatar";
 import { Button } from "~/core/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "~/core/components/ui/dialog";
+import {
+  invalidateRouteDataCache,
   loadCachedRouteData,
   usePrimeRouteDataCache,
 } from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { getPayments } from "~/features/payments/queries";
 
+import {
+  ACHIEVEMENT_DIFFICULTY_STYLES,
+  type AchievementDefinition,
+  achievementDifficulty,
+  achievementDifficultyRank,
+  achievementsInCategory,
+} from "../achievements";
 import { syncUserAchievements } from "../achievements.server";
 import { getAutomaticAnalysisSettings } from "../automatic-analysis-settings.server";
+import { AchievementEmoji } from "../components/achievement-emoji";
+import { AchievementPickerDialog } from "../components/achievement-picker-dialog";
 import { ProTenureBadgeView } from "../components/pro-tenure-badge";
 import { proTenureBadge } from "../pro-tenure";
 import { getUserProfile } from "../queries";
@@ -91,6 +112,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   const proTenureMonths = isPro
     ? Math.max(1, completedPaymentCount)
     : completedPaymentCount;
+  const earnedAchievementIds = new Set(
+    achievements.map((achievement) => achievement.id),
+  );
 
   return {
     name:
@@ -115,6 +139,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     latestAnalysisOn: analysisRecords[0]?.saved_on ?? null,
     proTenureMonths,
     achievements,
+    featuredAchievementIds: (profile?.featured_achievement_ids ?? []).filter(
+      (id) => earnedAchievementIds.has(id),
+    ),
     providers:
       identities.data?.identities.map((identity) => identity.provider) ?? [],
   };
@@ -131,6 +158,14 @@ export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
 
 export default function Profile({ loaderData }: Route.ComponentProps) {
   usePrimeRouteDataCache("profile", loaderData);
+  const badgeFetcher = useFetcher<{
+    success?: boolean;
+    featuredAchievementIds?: string[];
+    error?: string;
+  }>();
+  const [selectedAchievement, setSelectedAchievement] =
+    useState<AchievementDefinition | null>(null);
+  const [badgePickerOpen, setBadgePickerOpen] = useState(false);
   const {
     name,
     email,
@@ -146,8 +181,40 @@ export default function Profile({ loaderData }: Route.ComponentProps) {
     proTenureMonths,
     username,
     achievements,
+    featuredAchievementIds,
   } = loaderData;
+  const [savedFeaturedIds, setSavedFeaturedIds] = useState(
+    featuredAchievementIds,
+  );
+  const [draftFeaturedIds, setDraftFeaturedIds] = useState(
+    featuredAchievementIds,
+  );
   const tenureBadge = proTenureBadge(proTenureMonths);
+  const earnedAchievementIds = new Set(
+    achievements.map((achievement) => achievement.id),
+  );
+  const featuredAchievements = savedFeaturedIds
+    .map((id) => achievements.find((achievement) => achievement.id === id))
+    .filter((achievement) => achievement !== undefined);
+
+  useEffect(() => {
+    if (!badgeFetcher.data?.success) return;
+    const saved = badgeFetcher.data.featuredAchievementIds ?? [];
+    setSavedFeaturedIds(saved);
+    setDraftFeaturedIds(saved);
+    setBadgePickerOpen(false);
+    invalidateRouteDataCache("profile");
+    invalidateRouteDataCache("account");
+  }, [badgeFetcher.data]);
+
+  const saveFeaturedAchievements = () => {
+    const formData = new FormData();
+    draftFeaturedIds.forEach((id) => formData.append("achievementId", id));
+    void badgeFetcher.submit(formData, {
+      method: "post",
+      action: "/api/users/featured-achievements",
+    });
+  };
 
   return (
     <main className="flex flex-1 flex-col px-5 pt-8 pb-10 md:px-8 md:pt-12">
@@ -295,45 +362,245 @@ export default function Profile({ loaderData }: Route.ComponentProps) {
           <div className="flex items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 font-black">
-                <TrophyIcon className="size-5 text-amber-500" /> 획득한 도전과제
+                <TrophyIcon className="size-5 text-amber-500" /> 프로필 뱃지
               </div>
               <p className="text-muted-foreground mt-1 text-sm">
-                투자 여정에서 모은 뱃지를 한곳에서 확인해요.
+                획득한 뱃지 중 마음에 드는 3개를 골라 장식해요.
               </p>
             </div>
             <Button
-              asChild
+              type="button"
               variant="outline"
               size="sm"
-              className="rounded-full"
+              className="cursor-pointer rounded-full"
+              onClick={() => {
+                setDraftFeaturedIds(savedFeaturedIds);
+                setBadgePickerOpen(true);
+              }}
             >
-              <Link to="/dashboard/achievements" viewTransition>
-                전체 보기
-              </Link>
+              <PencilIcon className="size-3.5" /> 장식 편집
             </Button>
           </div>
-          {achievements.length ? (
-            <div className="mt-5 flex flex-wrap gap-3">
-              {achievements.map((achievement) => (
-                <Link
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            {Array.from({ length: 3 }, (_, index) => {
+              const achievement = featuredAchievements[index];
+              const difficulty = achievement
+                ? achievementDifficulty(achievement)
+                : null;
+              const difficultyStyles = difficulty
+                ? ACHIEVEMENT_DIFFICULTY_STYLES[difficulty.tier]
+                : null;
+              return achievement ? (
+                <button
+                  type="button"
                   key={achievement.id}
-                  to="/dashboard/achievements"
-                  className="bg-muted/60 hover:bg-muted flex items-center gap-2 rounded-2xl border px-3 py-2.5 transition-colors"
+                  onClick={() => setSelectedAchievement(achievement)}
+                  className={`bg-muted/60 hover:bg-muted flex min-h-20 cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all hover:-translate-y-0.5 ${difficultyStyles?.card ?? ""}`}
                   title={achievement.mission}
                 >
-                  <span className="text-2xl" aria-hidden="true">
-                    {achievement.emoji}
+                  <span
+                    className={`flex size-11 shrink-0 items-center justify-center rounded-xl text-3xl ${difficultyStyles?.badge ?? ""}`}
+                    aria-hidden="true"
+                  >
+                    <AchievementEmoji achievement={achievement} />
                   </span>
-                  <span className="text-sm font-black">{achievement.name}</span>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <div className="bg-muted/45 text-muted-foreground mt-5 rounded-2xl border border-dashed px-4 py-5 text-sm">
-              첫 분석을 완료하면 첫 뱃지를 받을 수 있어요.
-            </div>
-          )}
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-black">
+                      {achievement.name}
+                    </span>
+                    <span
+                      className={`mt-1 block text-xs font-bold ${difficultyStyles?.text ?? "text-muted-foreground"}`}
+                    >
+                      {difficultyStyles?.label} · 설명 보기
+                    </span>
+                  </span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  key={`empty-badge-${index}`}
+                  onClick={() => {
+                    setDraftFeaturedIds(savedFeaturedIds);
+                    setBadgePickerOpen(true);
+                  }}
+                  className="text-muted-foreground hover:bg-muted/45 flex min-h-20 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed px-4 py-3 text-sm font-bold transition-colors"
+                >
+                  <span className="text-xl">＋</span> 뱃지 선택
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-4 text-right">
+            <Link
+              to="/dashboard/achievements"
+              viewTransition
+              className="text-muted-foreground hover:text-foreground text-xs font-black transition-colors"
+            >
+              모든 도전과제 보기 →
+            </Link>
+          </div>
         </section>
+
+        <AchievementPickerDialog
+          open={badgePickerOpen}
+          onOpenChange={setBadgePickerOpen}
+          achievements={achievements}
+          selectedIds={draftFeaturedIds}
+          onSelectedIdsChange={setDraftFeaturedIds}
+          onSave={saveFeaturedAchievements}
+          busy={badgeFetcher.state !== "idle"}
+          error={badgeFetcher.data?.error}
+        />
+
+        <Dialog
+          open={selectedAchievement !== null}
+          onOpenChange={(open) => !open && setSelectedAchievement(null)}
+        >
+          <DialogContent className="max-h-[90vh] overflow-y-auto rounded-3xl sm:max-w-5xl lg:overflow-hidden">
+            {selectedAchievement &&
+              (() => {
+                const difficulty = achievementDifficulty(selectedAchievement);
+                const difficultyStyles =
+                  ACHIEVEMENT_DIFFICULTY_STYLES[difficulty.tier];
+                const related = achievementsInCategory(
+                  selectedAchievement.category,
+                ).sort(
+                  (left, right) =>
+                    achievementDifficultyRank(left) -
+                    achievementDifficultyRank(right),
+                );
+                const earned = achievements.find(
+                  (achievement) => achievement.id === selectedAchievement.id,
+                );
+                return (
+                  <div className="grid gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)]">
+                    <div className="min-w-0 lg:flex lg:flex-col lg:justify-center">
+                      <DialogHeader className="items-center text-center sm:text-center">
+                        <div
+                          className={`mb-2 flex size-16 items-center justify-center rounded-2xl text-4xl ${difficultyStyles.badge}`}
+                        >
+                          <AchievementEmoji achievement={selectedAchievement} />
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-xs font-black ${
+                              earned
+                                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {earned ? "획득 완료" : "도전 중"}
+                          </span>
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-xs font-black ${difficultyStyles.badge}`}
+                          >
+                            {difficultyStyles.label} 난이도
+                          </span>
+                        </div>
+                        <DialogTitle className="pt-2 text-2xl font-black">
+                          {selectedAchievement.name}
+                        </DialogTitle>
+                        <DialogDescription className="text-sm leading-6">
+                          {selectedAchievement.category} 도전과제
+                        </DialogDescription>
+                      </DialogHeader>
+
+                      <div className="bg-muted/45 mt-5 rounded-2xl border p-4">
+                        <p className="text-center font-black">
+                          {selectedAchievement.mission}
+                        </p>
+                        <p className="text-muted-foreground mt-2 text-center text-sm leading-6">
+                          {selectedAchievement.description}
+                        </p>
+                        {earned && (
+                          <p className="text-muted-foreground mt-3 text-center text-xs font-bold">
+                            {formatDate(earned.unlockedAt)} 획득
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <section className="min-w-0 lg:border-l lg:pl-6">
+                      <div className="flex items-end justify-between gap-3">
+                        <div>
+                          <h3 className="font-black">같은 카테고리 도전과제</h3>
+                          <p className="text-muted-foreground mt-1 text-xs">
+                            위에서 아래로 갈수록 달성 난이도가 높아져요.
+                          </p>
+                        </div>
+                        <span className="text-muted-foreground shrink-0 text-xs font-black">
+                          {
+                            related.filter((item) =>
+                              earnedAchievementIds.has(item.id),
+                            ).length
+                          }
+                          /{related.length} 획득
+                        </span>
+                      </div>
+                      <div className="mt-3 max-h-[62vh] space-y-2 overflow-y-auto pr-1">
+                        {related.map((achievement) => {
+                          const itemDifficulty =
+                            achievementDifficulty(achievement);
+                          const itemStyles =
+                            ACHIEVEMENT_DIFFICULTY_STYLES[itemDifficulty.tier];
+                          const isEarned = earnedAchievementIds.has(
+                            achievement.id,
+                          );
+                          const isSelected =
+                            achievement.id === selectedAchievement.id;
+                          return (
+                            <button
+                              type="button"
+                              key={achievement.id}
+                              onClick={() =>
+                                setSelectedAchievement(achievement)
+                              }
+                              aria-pressed={isSelected}
+                              className={`flex w-full cursor-pointer items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-colors ${
+                                isSelected
+                                  ? `${itemStyles.card} ${itemStyles.badge}`
+                                  : "bg-card hover:bg-muted/55"
+                              }`}
+                            >
+                              <span
+                                className={`flex size-9 shrink-0 items-center justify-center rounded-xl text-lg ${itemStyles.badge}`}
+                              >
+                                <AchievementEmoji achievement={achievement} />
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p
+                                  className={`text-xs font-black ${itemStyles.text}`}
+                                >
+                                  {itemStyles.label} 난이도
+                                </p>
+                                <p className="truncate text-sm font-black">
+                                  {achievement.name}
+                                </p>
+                              </div>
+                              <span
+                                className={`flex shrink-0 items-center gap-1 text-xs font-black ${
+                                  isEarned
+                                    ? "text-emerald-600 dark:text-emerald-300"
+                                    : "text-muted-foreground"
+                                }`}
+                              >
+                                {isEarned ? (
+                                  <CheckIcon className="size-3.5" />
+                                ) : (
+                                  <LockKeyholeIcon className="size-3.5" />
+                                )}
+                                {isEarned ? "획득" : "도전 중"}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  </div>
+                );
+              })()}
+          </DialogContent>
+        </Dialog>
 
         <section className="mt-4 flex flex-col gap-4 rounded-3xl border border-dashed p-5 sm:flex-row sm:items-center sm:justify-between md:p-6">
           <div>
