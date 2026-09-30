@@ -664,19 +664,28 @@ function CommitteeMemberDialog({
   score?: number;
 }) {
   const [quoteIndex, setQuoteIndex] = useState(0);
+  const [quoteDirection, setQuoteDirection] = useState<-1 | 1>(1);
   const quotes =
     INVESTMENT_MASTERS.find((investor) => investor.author === member.name)
       ?.quotes ?? [];
   const quote = quotes[quoteIndex];
   const moveQuote = (direction: -1 | 1) => {
     if (quotes.length < 2) return;
+    setQuoteDirection(direction);
     setQuoteIndex(
       (current) => (current + direction + quotes.length) % quotes.length,
     );
   };
 
   return (
-    <Dialog onOpenChange={(open) => !open && setQuoteIndex(0)}>
+    <Dialog
+      onOpenChange={(open) => {
+        if (!open) {
+          setQuoteIndex(0);
+          setQuoteDirection(1);
+        }
+      }}
+    >
       <DialogTrigger asChild>
         <button
           type="button"
@@ -790,14 +799,27 @@ function CommitteeMemberDialog({
                 >
                   <ChevronLeftIcon className="size-4" />
                 </Button>
-                <blockquote className="min-w-0 text-center">
-                  <p className="text-base leading-7 font-black text-balance">
-                    “{quote[0]}”
-                  </p>
-                  <p className="text-muted-foreground mt-3 text-sm leading-6 text-balance">
-                    “{quote[1]}”
-                  </p>
-                </blockquote>
+                <div
+                  className="relative flex h-60 min-w-0 items-center justify-center overflow-hidden sm:h-52"
+                  aria-live="polite"
+                >
+                  <blockquote
+                    key={`${member.key}-${quoteIndex}`}
+                    className={cn(
+                      "w-full min-w-0 text-center motion-reduce:animate-none",
+                      quoteDirection === 1
+                        ? "animate-in fade-in-0 slide-in-from-right-6 duration-300"
+                        : "animate-in fade-in-0 slide-in-from-left-6 duration-300",
+                    )}
+                  >
+                    <p className="text-base leading-7 font-black text-balance">
+                      “{quote[0]}”
+                    </p>
+                    <p className="text-muted-foreground mt-3 text-sm leading-6 text-balance">
+                      “{quote[1]}”
+                    </p>
+                  </blockquote>
+                </div>
                 <Button
                   type="button"
                   variant="outline"
@@ -3353,7 +3375,7 @@ export function AnalysisResultView({
                           </div>
                           <div className="bg-muted/45 rounded-xl px-3 py-2.5">
                             <p className="text-muted-foreground text-[10px] font-bold">
-                              평균 매수가와 비교
+                              현재가와 평균 매수가 비교
                             </p>
                             <p
                               className={cn(
@@ -3368,8 +3390,8 @@ export function AnalysisResultView({
                               {priceGapPercent === null
                                 ? "비교 전"
                                 : priceGapPercent === 0
-                                  ? "평균 매수가와 같아요"
-                                  : `평균 매수가보다 ${Math.abs(priceGapPercent).toFixed(1)}% ${priceGapPercent > 0 ? "높아요" : "낮아요"}`}
+                                  ? "현재가가 평균 매수가와 같아요"
+                                  : `현재가가 평균 매수가보다 ${Math.abs(priceGapPercent).toFixed(1)}% ${priceGapPercent > 0 ? "높아요" : "낮아요"}`}
                             </p>
                           </div>
                         </div>
