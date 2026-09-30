@@ -1,6 +1,7 @@
 import type { Route } from "./+types/notifications";
 
 import {
+  ArrowRightIcon,
   BellIcon,
   CheckCheckIcon,
   CheckIcon,
@@ -15,6 +16,14 @@ import { toast } from "sonner";
 
 import ConfirmDialog from "~/core/components/confirm-dialog";
 import { Button } from "~/core/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "~/core/components/ui/dialog";
 import {
   invalidateRouteDataCache,
   loadCachedRouteData,
@@ -119,16 +128,31 @@ function NotificationRow({
   onOptimisticRead,
   onRollback,
   onDeleteRequest,
+  onOpen,
 }: {
   notification: NotificationItem;
   onOptimisticRead: (id: number) => void;
   onRollback: (id: number) => void;
   onDeleteRequest: (notification: NotificationItem) => void;
+  onOpen: (notification: NotificationItem) => void;
 }) {
   const fetcher = useFetcher<typeof action>();
   const submittedRef = useRef(false);
   const requestStartedRef = useRef(false);
   const Icon = notificationIcon(notification.type);
+
+  const markAsRead = () => {
+    if (notification.readAt || submittedRef.current) return;
+    invalidateRouteDataCache("notifications");
+    invalidateRouteDataCache("dashboard-layout");
+    submittedRef.current = true;
+    onOptimisticRead(notification.id);
+    updateUnreadBadge(-1);
+    const form = new FormData();
+    form.set("intent", "mark-read");
+    form.set("notificationId", String(notification.id));
+    void fetcher.submit(form, { method: "post" });
+  };
 
   useEffect(() => {
     if (!submittedRef.current) return;
@@ -168,8 +192,8 @@ function NotificationRow({
             />
           )}
         </div>
-        <p className="text-muted-foreground mt-1 text-sm leading-6 break-words whitespace-pre-wrap">
-          {notification.message}
+        <p className="text-muted-foreground mt-1 text-sm leading-6 break-words">
+          {notificationPreview(notification.message)}
         </p>
         <p className="text-muted-foreground mt-2 text-[11px]">
           {dateTime(notification.createdAt)}
@@ -185,26 +209,24 @@ function NotificationRow({
         !notification.readAt && "bg-emerald-500/[0.035]",
       )}
     >
-      {notification.href ? (
-        <Link
-          to={notification.href}
-          className="min-w-0 flex-1 transition-opacity hover:opacity-80"
-        >
-          {content}
-        </Link>
-      ) : (
-        content
-      )}
+      <button
+        type="button"
+        className="min-w-0 flex-1 cursor-pointer text-left transition-opacity hover:opacity-80 focus-visible:rounded-2xl focus-visible:ring-2 focus-visible:ring-emerald-500/50 focus-visible:outline-none"
+        onClick={() => {
+          onOpen(notification);
+          markAsRead();
+        }}
+        aria-label={`${notification.title} 알림 자세히 보기`}
+      >
+        {content}
+      </button>
       <div className="flex shrink-0 items-center gap-1">
         {!notification.readAt && (
           <fetcher.Form
             method="post"
-            onSubmit={() => {
-              invalidateRouteDataCache("notifications");
-              invalidateRouteDataCache("dashboard-layout");
-              submittedRef.current = true;
-              onOptimisticRead(notification.id);
-              updateUnreadBadge(-1);
+            onSubmit={(event) => {
+              event.preventDefault();
+              markAsRead();
             }}
           >
             <input
@@ -248,6 +270,19 @@ function notificationIcon(type: string) {
   return RefreshCwIcon;
 }
 
+function notificationPreview(message: string) {
+  const compact = message.replace(/\s+/g, " ").trim();
+  return compact.length > 92 ? `${compact.slice(0, 92).trimEnd()}...` : compact;
+}
+
+function hasNotificationDestination(notification: NotificationItem) {
+  return Boolean(
+    notification.href &&
+      notification.type !== "site_announcement" &&
+      notification.href !== "/dashboard/notifications",
+  );
+}
+
 function dateTime(value: string | Date) {
   return new Intl.DateTimeFormat("ko-KR", {
     timeZone: "Asia/Seoul",
@@ -267,6 +302,9 @@ export default function Notifications({ loaderData }: Route.ComponentProps) {
   const [deleteTarget, setDeleteTarget] = useState<
     NotificationItem | "all" | null
   >(null);
+  const [selectedNotificationId, setSelectedNotificationId] = useState<
+    number | null
+  >(null);
   const markAllSubmittedRef = useRef(false);
   const markAllRequestStartedRef = useRef(false);
   const previousNotificationsRef = useRef(loaderData.notifications);
@@ -275,6 +313,10 @@ export default function Notifications({ loaderData }: Route.ComponentProps) {
   const unreadCount = notifications.filter(
     (notification) => !notification.readAt,
   ).length;
+  const selectedNotification =
+    notifications.find(
+      (notification) => notification.id === selectedNotificationId,
+    ) ?? null;
 
   useEffect(() => {
     setNotifications(loaderData.notifications);
@@ -370,6 +412,8 @@ export default function Notifications({ loaderData }: Route.ComponentProps) {
     if (deleteTarget !== "all")
       form.set("notificationId", String(deleteTarget.id));
     void deleteFetcher.submit(form, { method: "post" });
+    if (deleteTarget === "all" || deleteTarget.id === selectedNotificationId)
+      setSelectedNotificationId(null);
     setDeleteTarget(null);
   };
 
@@ -459,12 +503,64 @@ export default function Notifications({ loaderData }: Route.ComponentProps) {
                   onOptimisticRead={markReadOptimistically}
                   onRollback={rollbackRead}
                   onDeleteRequest={setDeleteTarget}
+                  onOpen={(item) => setSelectedNotificationId(item.id)}
                 />
               ))}
             </div>
           )}
         </section>
       </div>
+      <Dialog
+        open={selectedNotification !== null}
+        onOpenChange={(open) => !open && setSelectedNotificationId(null)}
+      >
+        {selectedNotification && (
+          <DialogContent className="grid h-[min(82vh,760px)] max-h-[calc(100vh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-3xl p-0 sm:max-w-2xl">
+            <DialogHeader className="border-b bg-gradient-to-br from-emerald-500/10 via-transparent to-violet-500/10 p-6 pr-14 text-left">
+              <div className="flex items-center gap-3">
+                <span
+                  className={cn(
+                    "flex size-11 shrink-0 items-center justify-center rounded-2xl",
+                    selectedNotification.readAt
+                      ? "bg-muted text-muted-foreground"
+                      : "bg-emerald-500/12 text-emerald-500",
+                  )}
+                >
+                  {(() => {
+                    const Icon = notificationIcon(selectedNotification.type);
+                    return <Icon className="size-5" />;
+                  })()}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs font-black tracking-[0.12em] text-emerald-500 uppercase">
+                    Notification
+                  </p>
+                  <DialogTitle className="mt-1 text-xl leading-snug font-black">
+                    {selectedNotification.title}
+                  </DialogTitle>
+                </div>
+              </div>
+              <DialogDescription className="mt-3 text-xs">
+                {dateTime(selectedNotification.createdAt)}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="min-h-0 overflow-y-auto p-6 sm:p-7">
+              <p className="text-sm leading-7 break-words whitespace-pre-wrap">
+                {selectedNotification.message}
+              </p>
+            </div>
+            {hasNotificationDestination(selectedNotification) && (
+              <DialogFooter className="border-t p-5 sm:p-5">
+                <Button asChild className="w-full rounded-full sm:w-auto">
+                  <Link to={selectedNotification.href!}>
+                    이동하기 <ArrowRightIcon />
+                  </Link>
+                </Button>
+              </DialogFooter>
+            )}
+          </DialogContent>
+        )}
+      </Dialog>
       <ConfirmDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
