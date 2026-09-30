@@ -4,6 +4,10 @@ import { CheckIcon, LockKeyholeIcon, TrophyIcon } from "lucide-react";
 import { useState } from "react";
 import { redirect } from "react-router";
 
+import {
+  loadCachedRouteData,
+  usePrimeRouteDataCache,
+} from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
 
@@ -68,7 +72,17 @@ export async function loader({ request }: Route.LoaderArgs) {
   return { earned: await syncUserAchievements(user.id) };
 }
 
+type AchievementsLoaderData = Awaited<ReturnType<typeof loader>>;
+
+export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
+  return loadCachedRouteData<AchievementsLoaderData>(
+    "achievements",
+    async () => (await serverLoader()) as AchievementsLoaderData,
+  );
+}
+
 export default function Achievements({ loaderData }: Route.ComponentProps) {
+  usePrimeRouteDataCache("achievements", loaderData);
   const [filter, setFilter] = useState<AchievementFilter>("all");
   const earnedMap = new Map(
     loaderData.earned.map((achievement) => [achievement.id, achievement]),

@@ -12,15 +12,23 @@
 import { createCookieSessionStorage } from "react-router";
 import { createThemeSessionResolver } from "remix-themes";
 
+const cookieSecret = process.env.COOKIE_SECRET;
+
+if (process.env.NODE_ENV === "production" && !cookieSecret) {
+  throw new Error("COOKIE_SECRET 환경변수가 필요합니다.");
+}
+
 /**
  * Cookie-based session storage for theme preferences
- * 
+ *
  * This session storage is configured with the following settings:
  * - name: "theme" - The name of the cookie used to store theme preference
  * - path: "/" - Makes the cookie available across the entire application
  * - httpOnly: false - Allows JavaScript access to read the cookie (required for client-side theme switching)
  * - sameSite: "lax" - Provides some CSRF protection while allowing normal navigation
- * 
+ * - secure: production에서 HTTPS 연결로만 쿠키 전송
+ * - secrets: COOKIE_SECRET으로 쿠키에 서명해 클라이언트 변조 감지
+ *
  * Note: httpOnly is set to false intentionally to allow client-side theme detection
  * without requiring a server roundtrip. This is a common pattern for theme preferences
  * since they are not sensitive data.
@@ -31,16 +39,18 @@ const sessionStorage = createCookieSessionStorage({
     path: "/",
     httpOnly: false,
     sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    secrets: cookieSecret ? [cookieSecret] : undefined,
   },
 });
 
 /**
  * Theme session resolver for managing theme preferences
- * 
+ *
  * This resolver provides methods for getting and setting the theme preference
  * in both server and client contexts. It's used by the ThemeProvider component
  * to initialize the theme and by theme switching components to update it.
- * 
+ *
  * @example
  * // In a loader function
  * export async function loader({ request }: LoaderArgs) {
@@ -48,7 +58,7 @@ const sessionStorage = createCookieSessionStorage({
  *   const theme = getTheme();
  *   return json({ theme });
  * }
- * 
+ *
  * // In an action function for theme switching
  * export async function action({ request }: ActionArgs) {
  *   const { getTheme, setTheme } = await themeSessionResolver(request);

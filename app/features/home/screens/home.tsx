@@ -1130,7 +1130,8 @@ function MyEokkaSummary({ insight }: { insight: MoneyInsight }) {
                       <div className="mt-4 space-y-2 border-t pt-3 text-sm">
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-muted-foreground">
-                            이전 {formatKoreanMoney(holding.previousValue ?? 0)}
+                            이전 평가금액{" "}
+                            {formatKoreanMoney(holding.previousValue ?? 0)}
                           </span>
                           <strong
                             className={cn(
@@ -1723,6 +1724,7 @@ export default function Home() {
       window.sessionStorage.setItem(ANALYSIS_STORAGE_KEY, JSON.stringify(body));
       if (isAuthenticated) {
         invalidateRouteDataCache("home");
+        invalidateRouteDataCache("achievements");
         void revalidator.revalidate();
       }
     } catch (error) {

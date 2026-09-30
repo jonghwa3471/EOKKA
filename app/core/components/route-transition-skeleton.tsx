@@ -16,6 +16,7 @@ import { createPortal } from "react-dom";
 import { EokkaLogo } from "~/core/components/eokka-logo";
 import { Skeleton } from "~/core/components/ui/skeleton";
 import { cn } from "~/core/lib/utils";
+import { ACHIEVEMENTS } from "~/features/users/achievements";
 
 export type RouteSkeletonVariant =
   | "dashboard"
@@ -455,8 +456,37 @@ function PreciseAnalysisSkeleton() {
 function InsightsSkeleton() {
   return (
     <>
-      <PageHeading variant="insights" />
-      <div className="bg-card mt-7 grid grid-cols-3 gap-2 rounded-3xl border p-2">
+      <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-bold text-violet-500">
+            <SparklesIcon className="size-4" /> PORTFOLIO INSIGHTS
+          </div>
+          <h1 className="mt-2 text-3xl font-black tracking-tight md:text-4xl">
+            기록 속에서 찾은 투자 인사이트
+          </h1>
+          <p className="text-muted-foreground mt-2">
+            선택한 목표로 저장된 모든 기록을 함께 분석했어요.
+          </p>
+        </div>
+        <span className="hidden rounded-full border px-4 py-2 text-sm font-semibold sm:inline-flex">
+          날짜별 기록 보기
+        </span>
+      </div>
+
+      <div className="bg-card mt-7 flex flex-col gap-4 rounded-3xl border p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between md:p-5">
+        <div>
+          <p className="font-black">인사이트 기준 목표</p>
+          <p className="text-muted-foreground mt-1 text-xs leading-5">
+            선택한 목표와 연결된 기록만 모아서 분석해요.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Skeleton className="h-9 w-20 rounded-full" />
+          <Skeleton className="h-9 w-20 rounded-full" />
+        </div>
+      </div>
+
+      <div className="bg-card mt-7 grid grid-cols-3 gap-2 rounded-3xl border p-2 shadow-sm">
         {[
           ["주간 인사이트", "월요일부터 일요일"],
           ["월간 인사이트", "매월 1일부터 마지막 날"],
@@ -476,21 +506,153 @@ function InsightsSkeleton() {
           </div>
         ))}
       </div>
-      <Skeleton className="mt-5 h-16 w-full rounded-2xl" />
-      <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <ChartCard compact />
-        <div className="bg-card rounded-3xl border p-6">
-          <Skeleton className="h-6 w-28 rounded-lg" />
-          <div className="mt-7 flex h-40 items-end justify-center gap-3">
-            <Skeleton className="h-24 w-24 rounded-t-2xl" />
-            <Skeleton className="h-36 w-24 rounded-t-2xl" />
-            <Skeleton className="h-20 w-24 rounded-t-2xl" />
+
+      <div className="bg-card mt-4 rounded-3xl border p-4 shadow-sm md:p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="flex size-8 items-center justify-center rounded-xl bg-violet-500/10 text-violet-500">
+              <CalendarDaysIcon className="size-4" />
+            </span>
+            <div>
+              <p className="text-sm font-black">이번 주 기록 현황</p>
+              <Skeleton className="mt-1 h-3 w-32 rounded-full" />
+            </div>
+          </div>
+          <div className="text-muted-foreground flex gap-3 text-[11px] font-semibold">
+            <span>● 수익</span>
+            <span>● 손해</span>
+          </div>
+        </div>
+        <div className="mt-4 flex gap-2 overflow-hidden">
+          {[0, 1, 2, 3, 4].map((item) => (
+            <Skeleton key={item} className="h-[74px] min-w-28 rounded-2xl" />
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-card mt-5 rounded-3xl border p-5 shadow-sm md:p-7">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <p className="text-sm font-bold text-emerald-500">WEEKLY INSIGHT</p>
+            <h2 className="mt-2 text-2xl font-black">
+              주간 기록에서 발견한 투자 흐름
+            </h2>
+            <Skeleton className="mt-3 h-3 w-64 max-w-full rounded-full" />
+          </div>
+          <Skeleton className="h-11 w-28 rounded-2xl" />
+        </div>
+        <Skeleton className="mt-4 h-32 w-full rounded-2xl" />
+        <Skeleton className="mt-6 h-24 w-full rounded-2xl" />
+        <div className="mt-6 rounded-3xl border p-5 md:p-7">
+          <p className="text-xs font-black tracking-[0.14em] text-violet-500 uppercase">
+            이번 주 경기 리포트
+          </p>
+          <h3 className="mt-2 text-xl font-black">
+            짧은 승부에서 어떤 힘이 돋보였을까요?
+          </h3>
+          <Skeleton className="mt-3 h-3 w-3/4 rounded-full" />
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            {[0, 1, 2].map((item) => (
+              <Skeleton key={item} className="h-32 rounded-2xl" />
+            ))}
+          </div>
+        </div>
+        <div className="mt-8">
+          <p className="text-sm font-bold text-amber-500">WEEKLY AWARDS</p>
+          <h3 className="mt-2 text-xl font-black">주간 포트폴리오 시상식</h3>
+        </div>
+        <div className="mt-5 rounded-3xl border p-5">
+          <div className="flex items-end justify-center gap-3 pt-10">
+            <Skeleton className="h-28 w-1/4 rounded-t-2xl" />
+            <Skeleton className="h-40 w-1/4 rounded-t-2xl" />
+            <Skeleton className="h-20 w-1/4 rounded-t-2xl" />
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }, (_, item) => (
+            <Skeleton key={item} className="h-36 rounded-2xl" />
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function AchievementsSkeleton() {
+  return (
+    <>
+      <div>
+        <div className="flex items-center gap-2 text-sm font-bold text-emerald-500">
+          <TrophyIcon className="size-4" /> EOKKA CHALLENGES
+        </div>
+        <h1 className="mt-2 text-3xl font-black tracking-tight md:text-4xl">
+          도전과제
+        </h1>
+        <p className="text-muted-foreground mt-2 max-w-2xl leading-7">
+          분석과 기록을 이어가며 투자 습관을 뱃지로 모아보세요. 한 번 획득한
+          뱃지는 계속 보관되고 프로필에도 표시돼요.
+        </p>
+      </div>
+
+      <div className="bg-card relative mt-7 overflow-hidden rounded-[2rem] border p-6 shadow-sm md:p-8">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.16),transparent_42%),radial-gradient(circle_at_bottom_right,rgba(139,92,246,0.13),transparent_45%)]" />
+        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-muted-foreground text-sm font-bold">
+              지금까지 모은 뱃지
+            </p>
+            <Skeleton className="mt-3 h-10 w-24 rounded-xl" />
+          </div>
+          <div className="w-full max-w-md">
+            <div className="mb-2 flex items-center justify-between text-xs font-black">
+              <span>수집 진행도</span>
+              <Skeleton className="h-4 w-10 rounded-full" />
+            </div>
+            <Skeleton className="h-3 w-full rounded-full" />
           </div>
         </div>
       </div>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {[0, 1, 2].map((item) => (
-          <Skeleton key={item} className="h-32 rounded-3xl" />
+
+      <div className="bg-muted/55 mt-5 flex w-fit max-w-full gap-1 rounded-2xl border p-1.5">
+        {["전체", "획득 완료", "도전 중"].map((label, index) => (
+          <div
+            key={label}
+            className={cn(
+              "flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black",
+              index === 0
+                ? "bg-background text-foreground border shadow-sm"
+                : "text-muted-foreground",
+            )}
+          >
+            {label}
+            <Skeleton className="h-5 w-7 rounded-full" />
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {ACHIEVEMENTS.slice(0, 9).map((achievement) => (
+          <div
+            key={achievement.id}
+            className="bg-card rounded-3xl border p-5 shadow-sm md:p-6"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="bg-muted flex size-14 items-center justify-center rounded-2xl text-3xl grayscale">
+                {achievement.emoji}
+              </div>
+              <Skeleton className="h-6 w-20 rounded-full" />
+            </div>
+            <p className="text-muted-foreground mt-4 text-[11px] font-black tracking-[0.12em]">
+              {achievement.category}
+            </p>
+            <h2 className="mt-1.5 text-xl font-black">{achievement.name}</h2>
+            <p className="mt-2 text-sm leading-6 font-bold">
+              {achievement.mission}
+            </p>
+            <p className="text-muted-foreground mt-2 text-sm leading-6">
+              {achievement.description}
+            </p>
+          </div>
         ))}
       </div>
     </>
@@ -774,6 +936,8 @@ function SkeletonContent({ variant }: { variant: RouteSkeletonVariant }) {
       return <DashboardSkeleton />;
     case "history":
       return <HistorySkeleton />;
+    case "achievements":
+      return <AchievementsSkeleton />;
     case "portfolio":
       return <PortfolioSkeleton />;
     case "precise-analysis":
@@ -882,7 +1046,9 @@ export function RouteTransitionSkeleton({
             ? null
             : variant === "precise-analysis"
               ? "max-w-5xl"
-              : "max-w-7xl",
+              : variant === "achievements"
+                ? "max-w-6xl"
+                : "max-w-7xl",
         )}
       >
         <SkeletonContent variant={variant} />
