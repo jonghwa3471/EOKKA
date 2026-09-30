@@ -23,11 +23,8 @@ import { cn } from "~/core/lib/utils";
 import { getPayments } from "~/features/payments/queries";
 
 import { getAutomaticAnalysisSettings } from "../automatic-analysis-settings.server";
-import {
-  ProTenureBadgeView,
-  proTenureToneStyles,
-} from "../components/pro-tenure-badge";
-import { PRO_TENURE_BADGES, proTenureBadge } from "../pro-tenure";
+import { proTenureToneStyles } from "../components/pro-tenure-badge";
+import { PRO_TENURE_BADGES } from "../pro-tenure";
 
 export const meta: Route.MetaFunction = () => [
   { title: `EOKKA Pro | ${import.meta.env.VITE_APP_NAME}` },
@@ -86,7 +83,7 @@ const comparison = [
   },
   {
     feature: "분석 기록 보관",
-    free: "저장 불가",
+    free: "저장하지 않음",
     pro: "기간 제한 없음",
   },
   {
@@ -100,19 +97,14 @@ const comparison = [
     pro: "사용 가능",
   },
   {
-    feature: "자동 분석 목표",
+    feature: "자동 분석 범위",
     free: "-",
-    pro: "모든 목표 자동 분석",
+    pro: "저장한 모든 목표",
   },
   {
-    feature: "주간·월간 인사이트",
-    free: "-",
-    pro: "전체 기록 기준",
-  },
-  {
-    feature: "정밀 포트폴리오·매매일지",
-    free: "이용 가능",
-    pro: "이용 가능",
+    feature: "투자 인사이트",
+    free: "이용 불가",
+    pro: "주·월·연간별 제공",
   },
 ] as const;
 
@@ -127,7 +119,6 @@ function koreanDate(value: string) {
 
 export default function EokkaPro({ loaderData }: Route.ComponentProps) {
   usePrimeRouteDataCache("eokka-pro", loaderData);
-  const currentTenureBadge = proTenureBadge(loaderData.proTenureMonths);
   return (
     <main className="flex flex-1 flex-col px-5 pt-8 pb-12 md:px-8 md:pt-12">
       <div className="mx-auto w-full max-w-6xl">
@@ -149,7 +140,12 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
                 없는 가격으로 시작해요.
               </p>
               <div className="mt-6 flex flex-wrap gap-2">
-                {["자동 분석", "기간 제한 없음"].map((benefit) => (
+                {[
+                  "거래일 자동 분석",
+                  "기록 기간 제한 없음",
+                  "목표 최대 3개",
+                  "최대 20종목",
+                ].map((benefit) => (
                   <span
                     key={benefit}
                     className="bg-background/70 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold"
@@ -161,64 +157,40 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
               </div>
             </div>
 
-            <div className="bg-background/85 rounded-3xl border border-amber-500/25 p-6 shadow-xl backdrop-blur">
-              <p className="text-sm font-black text-amber-600 dark:text-amber-300">
-                베타 기간 한정 가격
-              </p>
-              <div className="mt-3 flex items-end gap-1">
-                <strong className="text-4xl font-black tracking-tight">
-                  990원
-                </strong>
-                <span className="text-muted-foreground pb-1 text-sm">/ 월</span>
-              </div>
-              <p className="text-muted-foreground mt-3 text-xs leading-5 break-keep">
-                매월 자동 결제되는 구독 상품이에요. 결제가 완료된 이용 기간은
-                환불되지 않으며, 구독을 해지하면 다음 결제부터 자동 결제가
-                중단돼요. 이미 결제한 기간까지는 Pro를 계속 이용할 수 있어요.
-              </p>
-              <div className="mt-4 rounded-2xl border border-amber-500/20 bg-amber-500/[0.07] p-4">
-                <p className="text-xs font-black text-amber-700 dark:text-amber-300">
-                  결제 및 구독 해지 안내
-                </p>
-                <p className="text-muted-foreground mt-1.5 text-[11px] leading-5 break-keep">
-                  결제 후 환불은 제공되지 않으며, 해지 신청은 다음 결제부터
-                  적용돼요.
-                </p>
+            <div className="bg-background/85 rounded-3xl border border-amber-500/25 p-5 shadow-xl backdrop-blur md:p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-black text-amber-600 dark:text-amber-300">
+                    베타 기간 한정
+                  </p>
+                  <div className="mt-2 flex items-end gap-1">
+                    <strong className="text-4xl font-black tracking-tight">
+                      990원
+                    </strong>
+                    <span className="text-muted-foreground pb-1 text-sm">
+                      / 월
+                    </span>
+                  </div>
+                </div>
+                <span className="rounded-full bg-amber-500/10 px-3 py-1.5 text-[11px] font-black text-amber-700 dark:text-amber-300">
+                  월 자동결제
+                </span>
               </div>
               {loaderData.isPro ? (
                 <div className="mt-5 space-y-3">
                   <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-4">
-                    <p className="text-sm font-black text-emerald-700 dark:text-emerald-300">
-                      현재 EOKKA Pro를 이용하고 있어요
+                    <p className="flex items-center gap-2 text-sm font-black text-emerald-700 dark:text-emerald-300">
+                      <span className="size-2 rounded-full bg-emerald-500" />
+                      Pro 이용 중
                     </p>
                     {loaderData.proExpiresAt ? (
-                      <dl className="mt-3 grid gap-2 text-xs">
-                        <div className="flex items-center justify-between gap-4">
-                          <dt className="text-muted-foreground">
-                            다음 결제 예정일
-                          </dt>
-                          <dd className="font-black tabular-nums">
-                            {koreanDate(loaderData.proExpiresAt)}
-                          </dd>
-                        </div>
-                        <div className="flex items-center justify-between gap-4">
-                          <dt className="text-muted-foreground">
-                            이용 가능 기간
-                          </dt>
-                          <dd className="font-black tabular-nums">
-                            {koreanDate(loaderData.proExpiresAt)}까지
-                          </dd>
-                        </div>
-                      </dl>
+                      <p className="text-muted-foreground mt-2 text-xs">
+                        다음 결제 ·{" "}
+                        <strong className="text-foreground tabular-nums">
+                          {koreanDate(loaderData.proExpiresAt)}
+                        </strong>
+                      </p>
                     ) : null}
-                    {currentTenureBadge && (
-                      <div className="mt-3 border-t border-emerald-500/15 pt-3">
-                        <p className="text-muted-foreground mb-2 text-[11px] font-bold">
-                          현재 구독 배지
-                        </p>
-                        <ProTenureBadgeView badge={currentTenureBadge} />
-                      </div>
-                    )}
                   </div>
                   <Button
                     type="button"
@@ -226,34 +198,17 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
                     className="w-full cursor-not-allowed rounded-2xl"
                     disabled
                   >
-                    구독 해지 준비 중
+                    구독 관리 준비 중
                   </Button>
-                  <p className="text-muted-foreground text-center text-[11px] leading-5 break-keep">
-                    자동결제 연동이 완료되면 여기에서 다음 결제 전까지 구독을
-                    해지할 수 있어요.
-                  </p>
                 </div>
               ) : (
                 <div className="mt-5 space-y-3">
                   <div className="bg-muted/35 rounded-2xl border p-4">
-                    <p className="text-xs font-black">오늘 구독을 시작한다면</p>
-                    <dl className="mt-3 grid gap-2 text-xs">
-                      <div className="flex items-center justify-between gap-4">
-                        <dt className="text-muted-foreground">첫 이용 기간</dt>
-                        <dd className="font-black tabular-nums">
-                          {koreanDate(loaderData.checkoutStartsAt)} ~{" "}
-                          {koreanDate(loaderData.checkoutRenewsAt)}
-                        </dd>
-                      </div>
-                      <div className="flex items-center justify-between gap-4">
-                        <dt className="text-muted-foreground">
-                          다음 결제 예정일
-                        </dt>
-                        <dd className="font-black tabular-nums">
-                          {koreanDate(loaderData.checkoutRenewsAt)}
-                        </dd>
-                      </div>
-                    </dl>
+                    <p className="text-xs font-black">오늘 시작하면</p>
+                    <p className="text-muted-foreground mt-2 text-xs leading-5">
+                      {koreanDate(loaderData.checkoutRenewsAt)}까지 이용하고,
+                      같은 날 다음 결제가 진행돼요.
+                    </p>
                   </div>
                   <Button
                     type="button"
@@ -265,9 +220,18 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
                   </Button>
                 </div>
               )}
-              <p className="text-muted-foreground mt-3 text-center text-[11px] leading-5">
-                토스페이먼츠 자동결제 계약이 완료되면 이곳에서 바로 구독할 수
-                있어요.
+              <details className="group mt-3 text-[11px]">
+                <summary className="text-muted-foreground hover:text-foreground flex cursor-pointer list-none items-center justify-center gap-1 font-bold transition-colors">
+                  결제 및 해지 안내
+                  <ArrowRightIcon className="size-3 transition-transform group-open:rotate-90" />
+                </summary>
+                <p className="text-muted-foreground bg-muted/35 mt-2 rounded-xl px-3 py-2.5 text-center leading-5 break-keep">
+                  결제 완료 후 환불은 제공되지 않아요. 구독을 해지하면 다음
+                  결제부터 중단되며, 결제한 기간까지 Pro를 이용할 수 있어요.
+                </p>
+              </details>
+              <p className="text-muted-foreground mt-3 text-center text-[10px] leading-4">
+                토스페이먼츠 자동결제 연동 준비 중
               </p>
             </div>
           </div>
@@ -339,8 +303,9 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
               무료와 Pro, 무엇이 다른가요?
             </h2>
             <p className="text-muted-foreground mt-2 text-sm">
-              무료로 분석 결과를 바로 확인하고, Pro에서는 결과를 저장해 시간에
-              따른 변화까지 이어서 확인할 수 있어요.
+              무료에서는 최대 10종목을 직접 분석하고 결과를 바로 확인해요.
+              Pro에서는 더 많은 종목과 목표를 기록으로 남기고, 최신 종가 분석과
+              기간별 인사이트까지 자동으로 이어가요.
             </p>
           </div>
           <div className="bg-card mt-6 overflow-x-auto rounded-3xl border">
@@ -361,7 +326,6 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
                 </span>
               </div>
               {comparison.map((item) => {
-                const isProBenefit = item.free !== item.pro;
                 return (
                   <div
                     key={item.feature}
@@ -371,14 +335,8 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
                     <span className="text-muted-foreground flex justify-center text-center">
                       {item.free}
                     </span>
-                    <span
-                      className={
-                        isProBenefit
-                          ? "flex items-center justify-center gap-1.5 text-center font-black text-amber-700 dark:text-amber-300"
-                          : "text-muted-foreground flex items-center justify-center text-center"
-                      }
-                    >
-                      {isProBenefit && <CheckIcon className="size-4" />}
+                    <span className="flex items-center justify-center gap-1.5 text-center font-black text-amber-700 dark:text-amber-300">
+                      <CheckIcon className="size-4" />
                       {item.pro}
                     </span>
                   </div>
@@ -398,7 +356,7 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
             },
             {
               icon: RefreshCwIcon,
-              title: "세 가지 목표를 매일 확인해요",
+              title: "세 가지 목표를 거래일마다 확인해요",
               detail:
                 "목표 금액을 최대 3개까지 저장하면 거래일마다 모든 목표를 최신 종가와 각 목표에서 마지막으로 사용한 월 투자금으로 자동 분석해요.",
             },
