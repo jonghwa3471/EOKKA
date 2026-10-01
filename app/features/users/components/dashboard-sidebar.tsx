@@ -149,7 +149,7 @@ export default function DashboardSidebar({
         {((isPro && (developerPortfolioGiftRevealed || isAdmin)) ||
           giftJustOpened) && (
           <SidebarGroup
-            className={`gap-1 group-data-[collapsible=icon]:p-1 ${giftJustOpened ? "animate-gift-reveal motion-reduce:animate-none" : ""}`}
+            className={`gap-1 group-data-[collapsible=icon]:p-1 ${giftJustOpened ? "gift-reveal-magic motion-reduce:animate-none" : ""}`}
           >
             <SidebarGroupLabel>
               <span className="mr-2 size-1.5 rounded-full bg-violet-500 shadow-[0_0_10px_rgba(139,92,246,0.7)]" />

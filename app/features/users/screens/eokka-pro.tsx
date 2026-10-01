@@ -12,6 +12,7 @@ import {
   SparklesIcon,
   UserRoundIcon,
 } from "lucide-react";
+import { useState } from "react";
 import { Form, Link } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
@@ -21,9 +22,11 @@ import {
 } from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
+import { isAdmin } from "~/features/admin/admin.server";
 import { getPayments } from "~/features/payments/queries";
 
 import { getAutomaticAnalysisSettings } from "../automatic-analysis-settings.server";
+import { DeveloperPortfolioGiftDialog } from "../components/developer-portfolio-gift-dialog";
 import { proTenureToneStyles } from "../components/pro-tenure-badge";
 import { PRO_TENURE_BADGES } from "../pro-tenure";
 
@@ -52,6 +55,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   const nextBillingDate = new Date(now);
   nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
   return {
+    canPreviewGiftWorkflow:
+      process.env.NODE_ENV !== "production" &&
+      Boolean(user && (await isAdmin(user.id))),
     isPro: settings.isPro,
     giftRequested: new URL(request.url).searchParams.get("gift") === "1",
     developerPortfolioGiftRevealed:
@@ -123,10 +129,32 @@ function koreanDate(value: string) {
 }
 
 export default function EokkaPro({ loaderData }: Route.ComponentProps) {
+  const [giftPreviewOpen, setGiftPreviewOpen] = useState(false);
   usePrimeRouteDataCache("eokka-pro", loaderData);
   return (
     <main className="flex flex-1 flex-col px-5 pt-8 pb-12 md:px-8 md:pt-12">
       <div className="mx-auto w-full max-w-6xl">
+        {loaderData.canPreviewGiftWorkflow && (
+          <section className="mb-7 flex flex-col gap-4 rounded-2xl border border-dashed border-amber-500/30 bg-amber-500/[0.05] p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <div>
+              <p className="text-xs font-black text-amber-600 dark:text-amber-300">
+                로컬 관리자 테스트 도구
+              </p>
+              <p className="text-muted-foreground mt-1 text-xs leading-5 font-medium">
+                결제 완료 후 나타나는 감사 선물과 메뉴 공개 연출을 데이터 변경
+                없이 확인해요.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0 rounded-full border-amber-500/30 font-black hover:bg-amber-500/10"
+              onClick={() => setGiftPreviewOpen(true)}
+            >
+              <GiftIcon className="size-4" /> 선물 워크플로우 미리보기
+            </Button>
+          </section>
+        )}
         {loaderData.isPro &&
           loaderData.giftRequested &&
           !loaderData.developerPortfolioGiftRevealed && (
@@ -436,6 +464,11 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
           </Button>
         </div>
       </div>
+      <DeveloperPortfolioGiftDialog
+        open={giftPreviewOpen}
+        onOpenChange={setGiftPreviewOpen}
+        preview
+      />
     </main>
   );
 }

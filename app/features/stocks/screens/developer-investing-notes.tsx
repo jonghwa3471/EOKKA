@@ -21,7 +21,7 @@ import { isAdmin } from "~/features/admin/admin.server";
 import { getAutomaticAnalysisSettings } from "~/features/users/automatic-analysis-settings.server";
 
 export const meta: Route.MetaFunction = () => [
-  { title: `개발자의 투자 노하우 | ${import.meta.env.VITE_APP_NAME}` },
+  { title: `초보 투자자를 위한 노하우 | ${import.meta.env.VITE_APP_NAME}` },
   {
     name: "description",
     content:

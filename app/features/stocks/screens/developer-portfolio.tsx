@@ -480,7 +480,7 @@ export default function DeveloperPortfolio({
               to="/dashboard/developer-portfolio/investing-notes"
               viewTransition
             >
-              개발자의 투자 노하우 보기
+              초보 투자자를 위한 노하우
               <ArrowUpRightIcon className="size-4" />
             </Link>
           </Button>

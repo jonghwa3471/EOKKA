@@ -158,22 +158,112 @@ body {
     }
   }
 
-  --animate-gift-reveal: gift-reveal 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
   @keyframes gift-reveal {
     0% {
-      opacity: 0;
-      filter: blur(8px);
-      transform: translateX(-18px) scale(0.94);
+      opacity: 0.18;
+      clip-path: inset(0 100% 0 0);
+      filter: blur(5px) brightness(1.45);
+      transform: translateX(-8px);
     }
-    55% {
+    24% {
       opacity: 1;
-      filter: blur(0);
-      transform: translateX(3px) scale(1.02);
+    }
+    78% {
+      clip-path: inset(0 0 0 0);
+      filter: blur(0) brightness(1.08);
+      transform: translateX(0);
     }
     100% {
       opacity: 1;
+      clip-path: inset(0 0 0 0);
       filter: blur(0);
-      transform: translateX(0) scale(1);
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes gift-magic-dust {
+    0% {
+      opacity: 0;
+      transform: translateX(-45%) scale(0.72) rotate(-4deg);
+    }
+    12% {
+      opacity: 0.9;
+    }
+    72% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateX(245%) scale(1.12) rotate(7deg);
+    }
+  }
+}
+
+@layer utilities {
+  .gift-reveal-magic {
+    position: relative;
+    isolation: isolate;
+    overflow: clip;
+    contain: paint;
+    animation: gift-reveal 1800ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .gift-reveal-magic::before {
+    position: absolute;
+    z-index: 5;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 42%;
+    pointer-events: none;
+    content: "";
+    background:
+      radial-gradient(
+        circle at 12% 24%,
+        rgb(251 191 36) 0 1.5px,
+        transparent 2.5px
+      ),
+      radial-gradient(
+        circle at 31% 67%,
+        rgb(167 139 250) 0 2px,
+        transparent 3px
+      ),
+      radial-gradient(
+        circle at 48% 17%,
+        rgb(52 211 153) 0 1px,
+        transparent 2px
+      ),
+      radial-gradient(
+        circle at 66% 78%,
+        rgb(253 224 71) 0 1.5px,
+        transparent 2.5px
+      ),
+      radial-gradient(
+        circle at 82% 42%,
+        rgb(196 181 253) 0 2px,
+        transparent 3px
+      ),
+      radial-gradient(
+        circle at 96% 62%,
+        rgb(110 231 183) 0 1px,
+        transparent 2px
+      ),
+      linear-gradient(
+        90deg,
+        transparent 5%,
+        rgb(245 158 11 / 0.08) 45%,
+        rgb(139 92 246 / 0.22) 74%,
+        transparent 100%
+      );
+    filter: drop-shadow(0 0 4px rgb(245 158 11 / 0.75))
+      drop-shadow(0 0 7px rgb(139 92 246 / 0.4));
+    animation: gift-magic-dust 1750ms ease-in-out both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .gift-reveal-magic,
+    .gift-reveal-magic::before {
+      animation: none;
     }
   }
 }
