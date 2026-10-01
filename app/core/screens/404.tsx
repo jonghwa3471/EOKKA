@@ -1,15 +1,13 @@
-import { Link } from "react-router";
-
-import { Button } from "../components/ui/button";
+import { ErrorState } from "../components/error-state";
 
 export default function NotFound() {
   return (
-    <div className="flex h-screen flex-col items-center justify-center gap-2.5">
-      <h1 className="text-5xl font-semibold">Page not found</h1>
-      <h2 className="text-2xl">The page you are looking for does not exist.</h2>
-      <Button variant="outline" asChild>
-        <Link to="/">Go home &rarr;</Link>
-      </Button>
-    </div>
+    <ErrorState
+      code="404"
+      eyebrow="찾으시는 페이지가 없어요"
+      title="이 길에는 투자 기록이 없네요"
+      description="주소가 바뀌었거나 페이지가 사라졌을 수 있어요. 홈으로 돌아가 다시 시작해 주세요."
+      canGoBack
+    />
   );
 }

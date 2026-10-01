@@ -1,13 +1,13 @@
 import type { Route } from "./+types/error";
 
-import { Link, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 
-import { Button } from "~/core/components/ui/button";
+import { ErrorState } from "~/core/components/error-state";
 
 export const meta: Route.MetaFunction = () => {
   return [
     {
-      title: `Server Error | ${import.meta.env.VITE_APP_NAME}`,
+      title: `오류가 발생했어요 | ${import.meta.env.VITE_APP_NAME}`,
     },
   ];
 };
@@ -17,13 +17,12 @@ export default function ErrorPage() {
   const errorCode = searchParams.get("error_code");
   const errorDescription = searchParams.get("error_description");
   return (
-    <div className="flex flex-col items-center justify-center gap-2">
-      <h1 className="text-3xl font-semibold text-red-700">Error</h1>
-      <p className="text-muted-foreground">Error code: {errorCode}</p>
-      <p className="text-muted-foreground">{errorDescription}</p>
-      <Button variant={"link"} asChild>
-        <Link to="/">Go to home &rarr;</Link>
-      </Button>
-    </div>
+    <ErrorState
+      code={errorCode ?? "ERROR"}
+      eyebrow="요청을 마치지 못했어요"
+      title="연결 과정에서 문제가 생겼어요"
+      description="잠시 후 다시 시도해 주세요. 같은 문제가 이어지면 문의하기에서 상황을 알려주세요."
+      detail={errorDescription}
+    />
   );
 }

@@ -41,6 +41,7 @@ import {
 } from "remix-themes";
 import { Toaster } from "sonner";
 
+import { ErrorState } from "./core/components/error-state";
 import {
   ANALYSIS_PROGRESS_MESSAGES,
   InvestmentActionLoader,
@@ -577,8 +578,12 @@ export default function App() {
  * @param error - The error that was caught by React Router
  */
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  let message = "Oops!";
-  let details = "An unexpected error occurred.";
+  let code: string | number = "ERROR";
+  let eyebrow = "예상하지 못한 문제가 생겼어요";
+  let title = "분석을 잠시 멈췄어요";
+  let description =
+    "입력한 정보는 그대로 두고 잠시 후 다시 시도해 주세요. 문제가 계속되면 문의하기에서 알려주세요.";
+  let detail: string | undefined;
   let stack: string | undefined;
 
   if (isRouteErrorResponse(error)) {
@@ -587,8 +592,36 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       // Show custom 404 page for "not found" errors
       return <NotFound />;
     }
-    message = "Error";
-    details = error.statusText || details;
+    code = error.status;
+    if (error.status === 400) {
+      eyebrow = "요청을 확인해 주세요";
+      title = "보낸 정보를 처리하지 못했어요";
+      description =
+        "입력값을 한 번 확인한 뒤 다시 시도해 주세요. 이전 화면으로 돌아가도 입력 내용은 가능한 한 유지돼요.";
+    } else if (error.status === 401) {
+      eyebrow = "로그인이 필요해요";
+      title = "계정을 확인한 뒤 이용해 주세요";
+      description =
+        "로그인 상태가 만료됐거나 회원 전용 페이지예요. 다시 로그인하면 이어서 이용할 수 있어요.";
+    } else if (error.status === 403) {
+      eyebrow = "접근할 수 없는 페이지예요";
+      title = "이 기능을 사용할 권한이 없어요";
+      description =
+        "현재 계정에서 이용할 수 있는 메뉴인지 확인해 주세요. 권한이 필요하다면 운영자에게 문의해 주세요.";
+    } else if (error.status === 429) {
+      eyebrow = "요청이 잠시 몰렸어요";
+      title = "조금만 쉬었다가 다시 해볼까요?";
+      description =
+        "안정적인 분석을 위해 잠시 요청을 제한하고 있어요. 잠시 후 다시 시도해 주세요.";
+    } else if (error.status >= 500) {
+      eyebrow = "서버가 잠시 숨을 고르고 있어요";
+      title = "요청을 끝까지 처리하지 못했어요";
+      description =
+        "잠시 후 다시 시도해 주세요. 같은 문제가 반복되면 문의하기에서 알려주세요.";
+    }
+    if (import.meta.env.DEV) {
+      detail = error.statusText || undefined;
+    }
   } else if (error && error instanceof Error) {
     // Handle JavaScript errors
     if (
@@ -599,22 +632,19 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       Sentry.captureException(error);
     }
     if (import.meta.env.DEV) {
-      // Show detailed error information in development
-      details = error.message;
+      detail = error.message;
       stack = error.stack;
     }
   }
 
-  // Render a simple error page with available information
   return (
-    <main className="container mx-auto p-4 pt-16">
-      <h1>{message}</h1>
-      <p>{details}</p>
-      {stack && (
-        <pre className="w-full overflow-x-auto p-4">
-          <code>{stack}</code>
-        </pre>
-      )}
-    </main>
+    <ErrorState
+      code={code}
+      eyebrow={eyebrow}
+      title={title}
+      description={description}
+      detail={detail}
+      stack={stack}
+    />
   );
 }
