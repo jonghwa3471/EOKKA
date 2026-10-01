@@ -364,7 +364,6 @@ export function NavigationBar({
           >
             분석 방법
           </Link>
-
           <Separator orientation="vertical" />
 
           {/* Settings and theme switcher */}

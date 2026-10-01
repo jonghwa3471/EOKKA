@@ -15,16 +15,34 @@
  */
 import type { Route } from "./+types/success";
 
-import { useEffect } from "react";
-import { redirect } from "react-router";
+import {
+  CheckCircle2Icon,
+  GiftIcon,
+  PartyPopperIcon,
+  SparklesIcon,
+} from "lucide-react";
+import { useEffect, useState } from "react";
+import { Form, Link, redirect } from "react-router";
 import { z } from "zod";
 
+import { Button } from "~/core/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "~/core/components/ui/dialog";
 import { consumePendingAnalyticsEvent } from "~/core/lib/analytics.client";
 import { requireAuthentication } from "~/core/lib/guards.server";
 import adminClient from "~/core/lib/supa-admin-client.server";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { recordAdminActivity } from "~/features/admin/activity.server";
 import { createNotification } from "~/features/notifications/notifications.server";
+import {
+  activateProMembership,
+  createDeveloperPortfolioGiftNotification,
+} from "~/features/users/developer-portfolio-gift.server";
 
 /**
  * Meta function for setting page metadata
@@ -171,7 +189,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   // CRITICAL SECURITY CHECK: Validate payment amount
   // This prevents attackers from manipulating the payment amount
   // 🚨⚠️ In a production app, you would compare against the expected amount from your database
-  if (paymentResponse.data.totalAmount !== 10_000) {
+  if (paymentResponse.data.totalAmount !== 990) {
     throw redirect(
       `/payments/failure?code=${encodeURIComponent("validation-error")}&message=${encodeURIComponent("Invalid amount")}`,
     );
@@ -211,6 +229,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     message: `${paymentResponse.data.orderName} ${paymentResponse.data.totalAmount.toLocaleString("ko-KR")}원 결제가 정상적으로 완료됐어요.`,
     href: "/dashboard/payments",
   });
+  const proExpiresAt = await activateProMembership(user.id);
+  await createDeveloperPortfolioGiftNotification(user.id);
   await recordAdminActivity({
     eventType: "payment_completed",
     userId: user.id,
@@ -219,7 +239,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   });
 
   // Return payment data for the success page
-  return { data };
+  return {
+    payment: {
+      orderName: paymentResponse.data.orderName,
+      totalAmount: paymentResponse.data.totalAmount,
+      approvedAt: paymentResponse.data.approvedAt,
+      proExpiresAt: proExpiresAt.toISOString(),
+    },
+  };
 }
 
 /**
@@ -238,44 +265,86 @@ export async function loader({ request }: Route.LoaderArgs) {
  * @returns JSX element representing the payment success page
  */
 export default function Success({ loaderData }: Route.ComponentProps) {
+  const [giftOpen, setGiftOpen] = useState(true);
   useEffect(() => {
     consumePendingAnalyticsEvent("purchase");
   }, []);
 
   return (
-    <div className="flex flex-col items-center gap-20">
-      {/* Main content grid - single column on mobile, two columns on desktop */}
-      <div className="grid w-full grid-cols-1 gap-10 md:grid-cols-2">
-        {/* Product image section */}
-        <div>
-          <img
-            src="/nft-2.jpg"
-            alt="nft"
-            className="w-full rounded-2xl object-cover"
-          />
+    <main className="mx-auto flex min-h-[60vh] w-full max-w-3xl items-center justify-center">
+      <section className="w-full rounded-[2rem] border border-emerald-500/20 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.16),transparent_42%)] p-8 text-center shadow-sm sm:p-12">
+        <span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-500">
+          <CheckCircle2Icon className="size-7" />
+        </span>
+        <p className="mt-5 text-xs font-black tracking-[0.18em] text-emerald-500">
+          EOKKA PRO
+        </p>
+        <h1 className="mt-2 text-3xl font-black tracking-[-0.04em]">
+          결제가 완료됐어요
+        </h1>
+        <p className="text-muted-foreground mt-3 text-sm leading-6 font-medium">
+          {loaderData.payment.orderName} 결제가 정상적으로 확인됐어요.
+          <br />
+          이제 EOKKA Pro의 모든 기능을 이용할 수 있어요.
+        </p>
+        <div className="mt-7 flex flex-col justify-center gap-2 sm:flex-row">
+          <Button
+            onClick={() => setGiftOpen(true)}
+            className="rounded-full bg-emerald-500 font-black text-white hover:bg-emerald-600"
+          >
+            <GiftIcon className="size-4" /> 감사 선물 열어보기
+          </Button>
+          <Button asChild variant="outline" className="rounded-full font-black">
+            <Link to="/dashboard">대시보드로 이동</Link>
+          </Button>
         </div>
+      </section>
 
-        {/* Payment confirmation section */}
-        <div className="flex flex-col items-start gap-10 overflow-x-scroll">
-          {/* Success message */}
-          <h1 className="text-center text-4xl font-semibold tracking-tight lg:text-5xl">
-            Payment Complete
-          </h1>
-
-          {/* Explanation text */}
-          <p className="text-muted-foreground text-lg font-medium">
-            We have verified the payment with the Toss API.
-            <br />
-            <br />
-            Here is the data we got from Toss.
-          </p>
-
-          {/* Raw payment data (for demonstration purposes) */}
-          <pre className="break-all">
-            {JSON.stringify(loaderData.data, null, 2)}
-          </pre>
-        </div>
-      </div>
-    </div>
+      <Dialog open={giftOpen} onOpenChange={setGiftOpen}>
+        <DialogContent className="overflow-hidden rounded-[2rem] border-amber-500/25 p-0 sm:max-w-lg">
+          <div className="relative bg-[radial-gradient(circle_at_top,rgba(245,158,11,0.25),transparent_48%),linear-gradient(145deg,rgba(16,185,129,0.1),transparent)] px-7 pt-9 pb-7 text-center">
+            <SparklesIcon className="absolute top-7 left-7 size-5 text-amber-400" />
+            <PartyPopperIcon className="absolute top-8 right-7 size-6 text-violet-400" />
+            <span className="mx-auto flex size-16 items-center justify-center rounded-[1.4rem] border border-amber-400/30 bg-amber-400/15 text-amber-500 shadow-[0_15px_45px_-20px_rgba(245,158,11,0.8)]">
+              <GiftIcon className="size-8" />
+            </span>
+            <DialogHeader className="mt-5 text-center sm:text-center">
+              <p className="text-xs font-black tracking-[0.18em] text-amber-600 dark:text-amber-300">
+                A GIFT FOR YOU
+              </p>
+              <DialogTitle className="mt-2 text-2xl font-black tracking-[-0.035em]">
+                결제해 주셔서 감사합니다!
+              </DialogTitle>
+              <DialogDescription className="mt-3 text-sm leading-6 font-medium">
+                감사의 마음을 담아 작은 선물을 준비했어요. 개발자가 실제로
+                투자하고 있는 주식 포트폴리오와 편안하게 장기 투자하는 이야기를
+                Pro 회원님께만 공개할게요.
+              </DialogDescription>
+            </DialogHeader>
+            <Form
+              method="post"
+              action="/api/users/developer-portfolio-gift"
+              className="mt-6"
+            >
+              <Button
+                type="submit"
+                className="h-auto w-full rounded-2xl bg-gradient-to-r from-amber-500 to-emerald-500 px-5 py-4 text-left font-black text-white shadow-[0_15px_35px_-18px_rgba(16,185,129,0.9)] hover:from-amber-400 hover:to-emerald-400"
+              >
+                <GiftIcon className="size-5 shrink-0" />
+                <span className="flex-1">
+                  <span className="block">선물 받고 구경하러 가기</span>
+                  <span className="mt-1 block text-xs font-semibold text-white/75">
+                    개발자의 실제 주식 포트폴리오가 열려요
+                  </span>
+                </span>
+              </Button>
+            </Form>
+            <p className="text-muted-foreground mt-4 text-xs font-medium">
+              선물을 열면 대시보드 사이드 메뉴에 새로운 메뉴가 나타나요.
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </main>
   );
 }

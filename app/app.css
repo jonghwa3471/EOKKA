@@ -157,6 +157,25 @@ body {
       transform: translateY(0) rotate(6deg) scale(1.06);
     }
   }
+
+  --animate-gift-reveal: gift-reveal 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  @keyframes gift-reveal {
+    0% {
+      opacity: 0;
+      filter: blur(8px);
+      transform: translateX(-18px) scale(0.94);
+    }
+    55% {
+      opacity: 1;
+      filter: blur(0);
+      transform: translateX(3px) scale(1.02);
+    }
+    100% {
+      opacity: 1;
+      filter: blur(0);
+      transform: translateX(0) scale(1);
+    }
+  }
 }
 
 @layer base {

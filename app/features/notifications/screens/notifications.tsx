@@ -5,6 +5,7 @@ import {
   BellIcon,
   CheckCheckIcon,
   CheckIcon,
+  GiftIcon,
   MegaphoneIcon,
   MessageSquareIcon,
   RefreshCwIcon,
@@ -178,7 +179,9 @@ function NotificationRow({
           "mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl",
           notification.readAt
             ? "bg-muted text-muted-foreground"
-            : "bg-emerald-500/12 text-emerald-500",
+            : notification.type === "pro_gift_unlocked"
+              ? "bg-gradient-to-br from-amber-500/20 to-violet-500/15 text-amber-500 ring-1 ring-amber-500/20"
+              : "bg-emerald-500/12 text-emerald-500",
         )}
       >
         <Icon className="size-5" />
@@ -268,6 +271,7 @@ function notificationIcon(type: string) {
   if (type.startsWith("support_")) return MessageSquareIcon;
   if (type === "site_announcement") return MegaphoneIcon;
   if (type === "achievement_unlocked") return TrophyIcon;
+  if (type === "pro_gift_unlocked") return GiftIcon;
   if (type.includes("deleted")) return Trash2Icon;
   return RefreshCwIcon;
 }

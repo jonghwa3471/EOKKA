@@ -232,6 +232,20 @@
       "when": 1790739713000,
       "tag": "0032_lean_skin",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790821188863,
+      "tag": "0033_dazzling_baron_strucker",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1790825694008,
+      "tag": "0034_awesome_midnight",
+      "breakpoints": true
     }
   ]
 }

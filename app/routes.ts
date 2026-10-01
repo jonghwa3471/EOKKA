@@ -40,6 +40,10 @@ export default [
         "/featured-achievements",
         "features/users/api/featured-achievements.tsx",
       ),
+      route(
+        "/developer-portfolio-gift",
+        "features/users/api/reveal-developer-portfolio-gift.ts",
+      ),
       route("/providers", "features/users/api/connect-provider.tsx"),
       route(
         "/providers/:provider",
@@ -127,6 +131,14 @@ export default [
         route("/insights", "features/users/screens/investment-insights.tsx"),
         route("/history", "features/users/screens/analysis-history.tsx"),
         route("/achievements", "features/users/screens/achievements.tsx"),
+        route(
+          "/developer-portfolio",
+          "features/stocks/screens/developer-portfolio.tsx",
+        ),
+        route(
+          "/developer-portfolio/investing-notes",
+          "features/stocks/screens/developer-investing-notes.tsx",
+        ),
         route("/pro", "features/users/screens/eokka-pro.tsx"),
         route("/payments", "features/payments/screens/payments.tsx"),
         route(

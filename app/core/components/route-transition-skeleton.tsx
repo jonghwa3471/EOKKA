@@ -940,28 +940,79 @@ function HomeSkeleton() {
   return (
     <div className="min-h-svh">
       <div className="border-border/60 flex h-16 items-center border-b px-5 md:px-8">
-        <Skeleton className="h-9 w-32 rounded-xl" />
+        <div className="flex items-center gap-2.5">
+          <Skeleton className="size-9 rounded-xl" />
+          <Skeleton className="h-5 w-20 rounded-lg" />
+        </div>
         <div className="ml-auto flex items-center gap-3">
-          <Skeleton className="hidden h-9 w-20 rounded-full sm:block" />
+          <Skeleton className="hidden h-9 w-24 rounded-full sm:block" />
+          <Skeleton className="size-9 rounded-xl" />
           <Skeleton className="size-9 rounded-full" />
         </div>
       </div>
-      <div className="mx-auto w-full max-w-7xl px-5 py-10 md:px-8 md:py-16">
-        <div className="mx-auto max-w-4xl text-center">
-          <Skeleton className="mx-auto h-7 w-36 rounded-full" />
-          <Skeleton className="mx-auto mt-6 h-14 w-4/5 rounded-2xl md:h-20" />
-          <Skeleton className="mx-auto mt-4 h-5 w-full max-w-2xl rounded-full" />
-          <Skeleton className="mx-auto mt-2 h-5 w-3/5 rounded-full" />
-          <div className="mt-8 flex justify-center gap-3">
-            <Skeleton className="h-12 w-36 rounded-full" />
-            <Skeleton className="h-12 w-32 rounded-full" />
+      <div className="relative overflow-hidden border-b">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(16,185,129,0.09),transparent_36%),radial-gradient(circle_at_92%_20%,rgba(56,189,248,0.07),transparent_26%)]" />
+        <div className="relative mx-auto w-full max-w-6xl px-5 pt-20 pb-20 md:pt-28 md:pb-28">
+          <div className="mx-auto max-w-3xl text-center">
+            <Skeleton className="mx-auto h-7 w-32 rounded-full" />
+            <Skeleton className="mx-auto mt-6 h-12 w-[86%] rounded-2xl sm:h-16 md:h-20" />
+            <Skeleton className="mx-auto mt-3 h-12 w-[62%] rounded-2xl sm:hidden" />
+            <Skeleton className="mx-auto mt-6 h-5 w-full max-w-xl rounded-full" />
+            <Skeleton className="mx-auto mt-5 h-10 w-80 max-w-full rounded-xl" />
           </div>
-        </div>
-        <div className="mt-14 grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
-          <Skeleton className="h-[25rem] rounded-[2rem]" />
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
-            <Skeleton className="h-[12rem] rounded-[2rem]" />
-            <Skeleton className="h-[12rem] rounded-[2rem]" />
+
+          <div className="mx-auto mt-12 max-w-4xl">
+            <div className="mb-4 flex justify-center">
+              <div className="bg-muted/70 flex rounded-xl p-1">
+                <Skeleton className="h-10 w-24 rounded-lg" />
+                <Skeleton className="h-10 w-24 rounded-lg" />
+              </div>
+            </div>
+            <div className="bg-card/90 overflow-hidden rounded-3xl border shadow-2xl shadow-black/5">
+              <div className="flex items-start justify-between gap-5 border-b px-5 py-5 sm:px-8">
+                <div className="flex min-w-0 items-start gap-3">
+                  <Skeleton className="size-10 shrink-0 rounded-xl" />
+                  <div className="space-y-2.5 pt-0.5">
+                    <Skeleton className="h-5 w-40 rounded-full" />
+                    <Skeleton className="h-3.5 w-72 max-w-full rounded-full" />
+                  </div>
+                </div>
+                <Skeleton className="hidden h-9 w-32 rounded-lg sm:block" />
+              </div>
+              <div className="border-b px-5 py-4 sm:px-8">
+                <Skeleton className="h-16 w-full rounded-2xl" />
+              </div>
+              <div className="space-y-7 px-5 py-6 sm:px-8 sm:py-8">
+                <Skeleton className="h-[4.5rem] w-full rounded-2xl" />
+                <div className="bg-muted/35 rounded-2xl border p-4 sm:p-5">
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="size-6 rounded-full" />
+                    <Skeleton className="h-4 w-20 rounded-full" />
+                  </div>
+                  <div className="mt-4 grid gap-4 md:grid-cols-[1.35fr_1fr_1fr]">
+                    {[0, 1, 2].map((item) => (
+                      <div key={item} className="space-y-2">
+                        <Skeleton className="h-3.5 w-24 rounded-full" />
+                        <Skeleton className="h-11 w-full rounded-md" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Skeleton className="h-28 rounded-2xl" />
+                  <Skeleton className="h-28 rounded-2xl" />
+                </div>
+                <Skeleton className="h-12 w-full rounded-lg" />
+              </div>
+            </div>
+            <div className="mt-8 grid gap-3 sm:grid-cols-3">
+              {[0, 1, 2].map((item) => (
+                <Skeleton
+                  key={item}
+                  className="mx-auto h-5 w-40 rounded-full"
+                />
+              ))}
+            </div>
           </div>
         </div>
       </div>

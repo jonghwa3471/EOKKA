@@ -20,6 +20,7 @@ import { isAdmin } from "~/features/admin/admin.server";
 import { getUnreadNotificationCount } from "~/features/notifications/notifications.server";
 
 import { markUserActive } from "../activity.server";
+import { getAutomaticAnalysisSettings } from "../automatic-analysis-settings.server";
 import DashboardSidebar from "../components/dashboard-sidebar";
 import { getUserProfile } from "../queries";
 
@@ -36,6 +37,9 @@ function DashboardRouteTransitionSkeleton() {
     !navigation.formData &&
     targetStaysInDashboard &&
     targetPath !== location.pathname;
+  const usesInlineDataSkeleton = targetPath.startsWith(
+    "/dashboard/developer-portfolio",
+  );
   const variant: RouteSkeletonVariant = targetPath.startsWith(
     "/dashboard/history",
   )
@@ -70,7 +74,7 @@ function DashboardRouteTransitionSkeleton() {
     return () => window.clearTimeout(timer);
   }, [isRouteLoading]);
 
-  return visible ? (
+  return visible && !usesInlineDataSkeleton ? (
     <RouteTransitionSkeleton
       withinDashboard
       dashboardSidebarCollapsed={sidebarState === "collapsed"}
@@ -85,14 +89,19 @@ export async function loader({ request }: Route.LoaderArgs) {
     data: { user },
   } = await client.auth.getUser();
   if (user) await markUserActive(user.id);
-  const [unreadNotificationCount, profile] = user
+  const [unreadNotificationCount, profile, accountSettings] = user
     ? await Promise.all([
         getUnreadNotificationCount(user.id),
         getUserProfile(client, { userId: user.id }),
+        getAutomaticAnalysisSettings(user.id),
       ])
-    : [0, null];
+    : [0, null, { isPro: false }];
   return {
     isAdmin: user ? await isAdmin(user.id) : false,
+    isPro: accountSettings.isPro,
+    developerPortfolioGiftRevealed: Boolean(
+      accountSettings.developerPortfolioGiftRevealedAt,
+    ),
     unreadNotificationCount,
     user: user
       ? {
@@ -191,17 +200,23 @@ export default function DashboardLayout({ loaderData }: Route.ComponentProps) {
                 ? "분석 기록"
                 : pathname.startsWith("/dashboard/achievements")
                   ? "도전과제"
-                  : pathname.startsWith("/dashboard/pro")
-                    ? "EOKKA Pro"
-                    : pathname.startsWith("/dashboard/payments")
-                      ? "결제내역"
-                      : pathname.startsWith("/dashboard/notifications")
-                        ? "알림"
-                        : "내 투자 대시보드";
+                  : pathname.startsWith("/dashboard/developer-portfolio")
+                    ? "저는 이렇게 투자해요"
+                    : pathname.startsWith("/dashboard/pro")
+                      ? "EOKKA Pro"
+                      : pathname.startsWith("/dashboard/payments")
+                        ? "결제내역"
+                        : pathname.startsWith("/dashboard/notifications")
+                          ? "알림"
+                          : "내 투자 대시보드";
   return (
     <SidebarProvider>
       <DashboardSidebar
         isAdmin={loaderData.isAdmin}
+        isPro={loaderData.isPro}
+        developerPortfolioGiftRevealed={
+          loaderData.developerPortfolioGiftRevealed
+        }
         user={user}
         unreadNotificationCount={unreadNotificationCount}
       />

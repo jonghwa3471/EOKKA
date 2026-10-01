@@ -54,6 +54,7 @@ export const profiles = pgTable(
     automatic_analysis_goal_amount: bigint({ mode: "number" }),
     automatic_analysis_monthly_contribution: bigint({ mode: "number" }),
     pro_expires_at: timestamp({ withTimezone: true }),
+    developer_portfolio_gift_revealed_at: timestamp({ withTimezone: true }),
     last_active_on: date()
       .notNull()
       .default(sql`current_date`),

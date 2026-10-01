@@ -2,6 +2,7 @@ import {
   BriefcaseBusinessIcon,
   CalendarDaysIcon,
   ChartNoAxesCombinedIcon,
+  EyeIcon,
   MicroscopeIcon,
   ShieldCheckIcon,
   SparklesIcon,
@@ -54,15 +55,20 @@ export default function DashboardSidebar({
   user,
   unreadNotificationCount,
   isAdmin = false,
+  isPro = false,
+  developerPortfolioGiftRevealed = false,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   user: { name: string; email: string; avatarUrl: string };
   unreadNotificationCount: number;
   isAdmin?: boolean;
+  isPro?: boolean;
+  developerPortfolioGiftRevealed?: boolean;
 }) {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const routeNavigation = useNavigation();
   const activePathname = routeNavigation.location?.pathname ?? pathname;
+  const giftJustOpened = new URLSearchParams(search).get("gift") === "1";
 
   return (
     <Sidebar
@@ -121,7 +127,11 @@ export default function DashboardSidebar({
                 <SidebarMenuButton
                   asChild
                   tooltip={item.title}
-                  isActive={activePathname === item.url}
+                  isActive={
+                    activePathname === item.url ||
+                    (item.url === "/dashboard/developer-portfolio" &&
+                      activePathname.startsWith(`${item.url}/`))
+                  }
                   className="hover:[&>svg]:animate-sidebar-menu-icon hover:[&>svg]:text-emerald-500 motion-reduce:hover:[&>svg]:animate-none"
                 >
                   <Link
@@ -136,6 +146,41 @@ export default function DashboardSidebar({
             ))}
           </SidebarMenu>
         </SidebarGroup>
+        {((isPro && (developerPortfolioGiftRevealed || isAdmin)) ||
+          giftJustOpened) && (
+          <SidebarGroup
+            className={`gap-1 group-data-[collapsible=icon]:p-1 ${giftJustOpened ? "animate-gift-reveal motion-reduce:animate-none" : ""}`}
+          >
+            <SidebarGroupLabel>
+              <span className="mr-2 size-1.5 rounded-full bg-violet-500 shadow-[0_0_10px_rgba(139,92,246,0.7)]" />
+              개발자의 투자 노트
+            </SidebarGroupLabel>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  tooltip="저는 이렇게 투자해요"
+                  isActive={activePathname.startsWith(
+                    "/dashboard/developer-portfolio",
+                  )}
+                  className="hover:[&>svg]:animate-sidebar-menu-icon hover:[&>svg]:text-violet-500 motion-reduce:hover:[&>svg]:animate-none"
+                >
+                  <Link
+                    to="/dashboard/developer-portfolio"
+                    aria-current={
+                      pathname.startsWith("/dashboard/developer-portfolio")
+                        ? "page"
+                        : undefined
+                    }
+                  >
+                    <EyeIcon />
+                    <span>저는 이렇게 투자해요</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroup>
+        )}
       </SidebarContent>
       <SidebarFooter className="border-sidebar-border/60 border-t bg-gradient-to-t from-emerald-500/4 to-transparent p-3 group-data-[collapsible=icon]:p-1">
         <SidebarUser

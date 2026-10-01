@@ -17,6 +17,7 @@ export type NotificationType =
   | "analysis_all_deleted"
   | "achievement_unlocked"
   | "payment_completed"
+  | "pro_gift_unlocked"
   | "subscription_renewal_upcoming";
 
 export async function createNotification(input: {

@@ -1,0 +1,1 @@
+ALTER TABLE "profiles" ADD COLUMN "developer_portfolio_gift_revealed_at" timestamp with time zone;

@@ -112,7 +112,7 @@ export default function Checkout({ loaderData }: Route.ComponentProps) {
    * This effect runs once on component mount and performs the following steps:
    * 1. Loads the Toss Payments SDK with the client key
    * 2. Initializes the payment widgets with the user's ID as the customer key
-   * 3. Sets the payment amount (10,000 KRW)
+   * 3. Sets the payment amount (990 KRW)
    * 4. Renders the payment method selection and agreement widgets
    * 5. Sets up event listeners for agreement status changes
    */
@@ -134,7 +134,7 @@ export default function Checkout({ loaderData }: Route.ComponentProps) {
 
       // Set the payment amount and currency
       await widgets.current.setAmount({
-        value: 10_000,
+        value: 990,
         currency: "KRW",
       });
 
@@ -177,7 +177,7 @@ export default function Checkout({ loaderData }: Route.ComponentProps) {
     try {
       trackEvent("begin_checkout", {
         currency: "KRW",
-        value: 10_000,
+        value: 990,
         plan: "pro_beta_monthly",
       });
       markPendingAnalyticsEvent("purchase");

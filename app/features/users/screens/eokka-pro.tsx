@@ -6,12 +6,13 @@ import {
   CheckIcon,
   Clock3Icon,
   CrownIcon,
+  GiftIcon,
   RefreshCwIcon,
   ShieldCheckIcon,
   SparklesIcon,
   UserRoundIcon,
 } from "lucide-react";
-import { Link } from "react-router";
+import { Form, Link } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
 import {
@@ -52,6 +53,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
   return {
     isPro: settings.isPro,
+    giftRequested: new URL(request.url).searchParams.get("gift") === "1",
+    developerPortfolioGiftRevealed:
+      "developerPortfolioGiftRevealedAt" in settings &&
+      Boolean(settings.developerPortfolioGiftRevealedAt),
     proExpiresAt:
       "proExpiresAt" in settings && settings.proExpiresAt
         ? settings.proExpiresAt.toISOString()
@@ -122,6 +127,42 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
   return (
     <main className="flex flex-1 flex-col px-5 pt-8 pb-12 md:px-8 md:pt-12">
       <div className="mx-auto w-full max-w-6xl">
+        {loaderData.isPro &&
+          loaderData.giftRequested &&
+          !loaderData.developerPortfolioGiftRevealed && (
+            <section className="mb-7 overflow-hidden rounded-3xl border border-amber-500/25 bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.2),transparent_42%),linear-gradient(135deg,rgba(139,92,246,0.08),rgba(16,185,129,0.08))] p-6 shadow-sm sm:p-8">
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex gap-4">
+                  <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-500 ring-1 ring-amber-500/20">
+                    <GiftIcon className="size-6" />
+                  </span>
+                  <div>
+                    <p className="text-xs font-black text-amber-600 dark:text-amber-300">
+                      PRO 감사 선물
+                    </p>
+                    <h2 className="mt-1 text-xl font-black">
+                      아직 열지 않은 선물이 있어요
+                    </h2>
+                    <p className="text-muted-foreground mt-2 text-sm leading-6 font-medium">
+                      개발자의 실제 주식 포트폴리오와 투자 이야기를 Pro
+                      회원님께만 공개할게요.
+                    </p>
+                  </div>
+                </div>
+                <Form
+                  method="post"
+                  action="/api/users/developer-portfolio-gift"
+                >
+                  <Button
+                    type="submit"
+                    className="w-full rounded-full bg-gradient-to-r from-amber-500 to-emerald-500 font-black text-white sm:w-auto"
+                  >
+                    <GiftIcon className="size-4" /> 선물 열어보기
+                  </Button>
+                </Form>
+              </div>
+            </section>
+          )}
         <section className="via-background relative overflow-hidden rounded-[2rem] border border-amber-500/20 bg-gradient-to-br from-amber-500/[0.12] to-violet-500/[0.08] p-7 shadow-sm md:p-10">
           <div className="pointer-events-none absolute -top-28 -right-20 size-72 rounded-full bg-amber-400/10 blur-3xl" />
           <div className="relative grid items-center gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
