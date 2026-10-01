@@ -21,6 +21,10 @@ import * as Sentry from "@sentry/node";
 import { data } from "react-router";
 import WelcomeEmail from "transactional-emails/emails/welcome";
 
+import {
+  isEmailDeliveryEnabled,
+  resolveEmailRecipient,
+} from "~/core/lib/app-environment.server";
 import resendClient from "~/core/lib/resend-client.server";
 import adminClient from "~/core/lib/supa-admin-client.server";
 
@@ -65,6 +69,9 @@ export async function action({ request }: Route.LoaderArgs) {
     return data(null, { status: 401 });
   }
 
+  if (!isEmailDeliveryEnabled())
+    return data({ skipped: "Email delivery is disabled." }, { status: 200 });
+
   // Pop a message from the Postgres message queue (PGMQ)
   // Note: Using admin client is necessary to access the queue
   const queueClient = adminClient as unknown as SupabaseClient;
@@ -90,11 +97,17 @@ export async function action({ request }: Route.LoaderArgs) {
 
     // Process different email templates
     if (template === "welcome") {
+      const recipient = resolveEmailRecipient(to);
+      if (!recipient)
+        return data(
+          { skipped: "EMAIL_TEST_RECIPIENT is required outside production." },
+          { status: 200 },
+        );
       // Send welcome email using the Resend client
       const { error } = await resendClient.emails.send({
         // Make sure this domain is the Resend domain.
         from: "Supaplate <hello@supaplate.com>",
-        to: [to],
+        to: [recipient],
         subject: "Welcome to Supaplate!",
         react: WelcomeEmail({ profile: JSON.stringify(emailData, null, 2) }),
       });

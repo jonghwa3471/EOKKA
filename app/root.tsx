@@ -54,6 +54,7 @@ import {
   consumePendingAnalyticsEvent,
   isAnalyticsEventName,
 } from "./core/lib/analytics.client";
+import { validateEnvironmentConfiguration } from "./core/lib/app-environment.server";
 import i18next from "./core/lib/i18next.server";
 import { hasCachedRouteData } from "./core/lib/route-data-cache";
 import { themeSessionResolver } from "./core/lib/theme-session.server";
@@ -112,6 +113,7 @@ export const links: Route.LinksFunction = () => [
  * @returns Object containing theme and locale preferences
  */
 export async function loader({ request }: Route.LoaderArgs) {
+  validateEnvironmentConfiguration();
   // Validate that all required Supabase environment variables are present
   // This prevents the application from starting with incomplete configuration
   if (

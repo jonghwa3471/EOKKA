@@ -246,6 +246,20 @@
       "when": 1790825694008,
       "tag": "0034_awesome_midnight",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1790832000000,
+      "tag": "0035_grant_authenticated_profile_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790832600000,
+      "tag": "0036_grant_data_api_policy_permissions",
+      "breakpoints": true
     }
   ]
 }

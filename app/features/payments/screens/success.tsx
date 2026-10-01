@@ -22,6 +22,7 @@ import { z } from "zod";
 
 import { Button } from "~/core/components/ui/button";
 import { consumePendingAnalyticsEvent } from "~/core/lib/analytics.client";
+import { requireTossPaymentsSecretKey } from "~/core/lib/app-environment.server";
 import { requireAuthentication } from "~/core/lib/guards.server";
 import adminClient from "~/core/lib/supa-admin-client.server";
 import makeServerClient from "~/core/lib/supa-client.server";
@@ -138,7 +139,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   // Prepare authorization header for Toss Payments API
   const encryptedSecretKey =
     "Basic " +
-    Buffer.from(process.env.TOSS_PAYMENTS_SECRET_KEY + ":").toString("base64");
+    Buffer.from(requireTossPaymentsSecretKey() + ":").toString("base64");
 
   // Verify payment with Toss Payments API
   const response = await fetch(

@@ -16,6 +16,7 @@ import { useState } from "react";
 import { Form, Link } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
+import { isLocalDevelopmentEnvironment } from "~/core/lib/app-environment.server";
 import {
   loadCachedRouteData,
   usePrimeRouteDataCache,
@@ -56,7 +57,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
   return {
     canPreviewGiftWorkflow:
-      process.env.NODE_ENV !== "production" &&
+      isLocalDevelopmentEnvironment() &&
       Boolean(user && (await isAdmin(user.id))),
     isPro: settings.isPro,
     giftRequested: new URL(request.url).searchParams.get("gift") === "1",

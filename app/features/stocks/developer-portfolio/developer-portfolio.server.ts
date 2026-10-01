@@ -1,6 +1,7 @@
 import { desc } from "drizzle-orm";
 
 import db from "~/core/db/drizzle-client.server";
+import { isLocalDevelopmentEnvironment } from "~/core/lib/app-environment.server";
 import { generateAiStrategy } from "~/features/stocks/ai-strategy.server";
 import { analyzePortfolio } from "~/features/stocks/analysis.server";
 import type { AnalysisResult } from "~/features/stocks/analysis.types";
@@ -118,5 +119,5 @@ export async function publishDeveloperPortfolio(
 }
 
 export function isLocalDeveloperPortfolioPublishingEnabled() {
-  return process.env.NODE_ENV !== "production";
+  return isLocalDevelopmentEnvironment();
 }

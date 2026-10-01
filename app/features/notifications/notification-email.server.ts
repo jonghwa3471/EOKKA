@@ -1,5 +1,9 @@
 import type { NotificationType } from "./notifications.server";
 
+import {
+  isEmailDeliveryEnabled,
+  resolveEmailRecipient,
+} from "~/core/lib/app-environment.server";
 import resendClient from "~/core/lib/resend-client.server";
 import adminClient from "~/core/lib/supa-admin-client.server";
 
@@ -87,6 +91,10 @@ export async function sendNotificationEmail(input: {
   href?: string | null;
 }) {
   if (!EMAIL_NOTIFICATION_TYPES.has(input.type)) return;
+  if (!isEmailDeliveryEnabled()) {
+    console.info("Notification email skipped: delivery is disabled.");
+    return;
+  }
   if (!process.env.RESEND_API_KEY) {
     console.warn(
       "Notification email skipped: RESEND_API_KEY is not configured.",
@@ -102,11 +110,18 @@ export async function sendNotificationEmail(input: {
       console.error("Notification email recipient lookup failed", userError);
       return;
     }
+    const recipient = resolveEmailRecipient(data.user.email);
+    if (!recipient) {
+      console.warn(
+        "Notification email skipped: EMAIL_TEST_RECIPIENT is required outside production.",
+      );
+      return;
+    }
     const { error } = await resendClient.emails.send({
       from:
         process.env.NOTIFICATION_EMAIL_FROM ??
         "EOKKA <notifications@mail.jjongstudio.co>",
-      to: [data.user.email],
+      to: [recipient],
       subject: `[EOKKA] ${input.title}`,
       html: notificationEmailHtml({
         type: input.type,
