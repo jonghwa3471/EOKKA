@@ -226,8 +226,9 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
                   <ArrowRightIcon className="size-3 transition-transform group-open:rotate-90" />
                 </summary>
                 <p className="text-muted-foreground bg-muted/35 mt-2 rounded-xl px-3 py-2.5 text-center leading-5 break-keep">
-                  결제 완료 후 환불은 제공되지 않아요. 구독을 해지하면 다음
-                  결제부터 중단되며, 결제한 기간까지 Pro를 이용할 수 있어요.
+                  구독을 해지하면 다음 결제부터 중단되며, 결제한 기간까지 Pro를
+                  이용할 수 있어요. 청약철회·과오금·서비스 하자에 따른 환불은
+                  관련 법령과 결제 화면에 안내된 조건을 따라요.
                 </p>
               </details>
               <p className="text-muted-foreground mt-3 text-center text-[10px] leading-4">

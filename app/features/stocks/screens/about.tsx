@@ -8,6 +8,7 @@ import {
   CalendarDaysIcon,
   ChartNoAxesCombinedIcon,
   CheckIcon,
+  ChevronDownIcon,
   CircleDollarSignIcon,
   Clock3Icon,
   CrownIcon,
@@ -268,7 +269,7 @@ function PrecisePreview({ phase }: { phase: number }) {
         <div className="mt-4 grid gap-2 sm:grid-cols-3">
           {[
             ["종목명 또는 티커", "삼성전자 (005930)"],
-            ["거래 유형", "매수⌄"],
+            ["거래 유형", "매수"],
             ["거래 날짜", "2026.09.29"],
             ["수량", "5"],
             ["주당 체결 가격", "72,500원"],
@@ -284,7 +285,22 @@ function PrecisePreview({ phase }: { phase: number }) {
               <span className="text-muted-foreground block text-[10px]">
                 {label}
               </span>
-              <span className="mt-1 block truncate">{value}</span>
+              <span
+                className={cn(
+                  "mt-1 truncate",
+                  label === "거래 유형"
+                    ? "flex items-center justify-between gap-2"
+                    : "block",
+                )}
+              >
+                {value}
+                {label === "거래 유형" && (
+                  <ChevronDownIcon
+                    aria-hidden="true"
+                    className="text-muted-foreground size-3.5 shrink-0"
+                  />
+                )}
+              </span>
             </div>
           ))}
         </div>

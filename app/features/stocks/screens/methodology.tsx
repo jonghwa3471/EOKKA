@@ -2,6 +2,7 @@ import type { Route } from "./+types/methodology";
 
 import {
   ArrowRightIcon,
+  BrainCircuitIcon,
   CalculatorIcon,
   ChartSplineIcon,
   CircleAlertIcon,
@@ -24,6 +25,12 @@ export const meta: Route.MetaFunction = () => [
 ];
 
 const steps = [
+  {
+    icon: DatabaseIcon,
+    title: "분석 기준일 확정",
+    description:
+      "실시간 가격 대신 분석 시점에 확인할 수 있는 가장 최근 종가를 사용해요. 같은 종가 날짜로 다시 분석하면 새 날짜 기록을 만들지 않고 해당 기준일의 기록을 갱신해, 장중 가격 변화가 장기 통계를 흔들지 않게 합니다.",
+  },
   {
     icon: CalculatorIcon,
     title: "현재 평가금액 계산",
@@ -65,6 +72,18 @@ const steps = [
     title: "시나리오와 목표 기간 계산",
     description:
       "각 시점 결과의 P20·P50·P80을 보수적·평균·낙관적으로 표시하고, 목표 금액을 처음 넘는 시점은 최대 30년까지 확인해요.",
+  },
+  {
+    icon: GitCompareArrowsIcon,
+    title: "시장과 같은 시간축으로 비교",
+    description:
+      "시장 실제 추이는 분석 기준일마다 대표 시장 지수의 변화를 이어 붙여 내 평가금액과 같은 구간에서 비교해요. 미래 시장 기준선은 과거 지수 흐름을 별도로 시뮬레이션하므로, 고정된 장기 시장 가정과 실제 시장 움직임을 구분해 볼 수 있어요.",
+  },
+  {
+    icon: BrainCircuitIcon,
+    title: "AI 투자위원회 해설",
+    description:
+      "포트폴리오 구조, 가격 변동 위험, 확인 가능한 기업 재무정보, 현재가와 평균 매수가의 차이를 먼저 코드로 계산해요. AI는 익명화된 계산 결과를 10가지 투자 원칙으로 풀어 설명하며, 서버가 정한 점수와 종목별 컨센서스를 임의로 바꾸지 않아요.",
   },
 ];
 
@@ -218,6 +237,14 @@ export default function MethodologyScreen() {
             <li>• 30·50년 결과는 기간이 길수록 불확실성이 커져요.</li>
             <li>• 개별 기업의 상장폐지와 사업 변화는 직접 예측하지 않아요.</li>
             <li>• 국내 종가는 기업행사를 완전히 보정하지 못할 수 있어요.</li>
+            <li>
+              • 기업 재무정보가 확인되지 않는 종목은 해당 항목을 추측하지 않고,
+              확보된 가격·비중 정보 안에서만 설명해요.
+            </li>
+            <li>
+              • 투자위원회는 실제 투자 대가의 견해가 아니라, 공개적으로 알려진
+              투자 원칙을 적용한 AI 시뮬레이션이에요.
+            </li>
             <li>• 모든 결과는 투자 권유나 수익 보장이 아니에요.</li>
           </ul>
         </div>
