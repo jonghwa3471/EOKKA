@@ -129,19 +129,22 @@ export async function action({ request }: Route.ActionArgs) {
       }
     }
 
+    request.signal.throwIfAborted();
     const durableLimit = await consumeManualAnalysisLimit(
       request,
       user?.id ?? null,
     );
     if (!durableLimit.allowed) return manualAnalysisLimitResponse(durableLimit);
 
-    const result = await analyzePortfolio(input);
+    const result = await analyzePortfolio(input, request.signal);
     let aiStrategy = null;
     try {
-      aiStrategy = await generateAiStrategy(result);
+      aiStrategy = await generateAiStrategy(result, request.signal);
     } catch (error) {
+      request.signal.throwIfAborted();
       console.error("AI strategy generation failed", error);
     }
+    request.signal.throwIfAborted();
     const completeResult = { ...result, aiStrategy };
 
     // Anonymous and free analyses remain ephemeral. Pro users get one snapshot
@@ -187,6 +190,7 @@ export async function action({ request }: Route.ActionArgs) {
       },
     );
   } catch (error) {
+    if (request.signal.aborted) return new Response(null, { status: 499 });
     console.error("Stock analysis failed", error);
     return data(
       {

@@ -239,7 +239,9 @@ function simulatePaths(
 
 export async function analyzePortfolio(
   input: AnalysisInput,
+  signal?: AbortSignal,
 ): Promise<AnalysisResult> {
+  signal?.throwIfAborted();
   if (
     !Number.isInteger(input.goalAmount) ||
     input.goalAmount < 100_000_000 ||
@@ -299,8 +301,10 @@ export async function analyzePortfolio(
 
   const marketData = [];
   for (const holding of input.holdings) {
+    signal?.throwIfAborted();
     const stock = stockRows.find((row) => row.stock_id === holding.stockId)!;
     const data = await getMarketData(stock);
+    signal?.throwIfAborted();
     marketData.push({ holding, stock, data });
   }
 

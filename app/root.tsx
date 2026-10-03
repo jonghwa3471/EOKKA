@@ -346,11 +346,8 @@ export default function App() {
     requestIntent === "refresh-managed-analysis"
       ? 35_000
       : 8_000;
-  const { progress: loadingProgress } = useAdaptiveProgress(
-    isActionBusy,
-    progressKey,
-    progressEstimateMs,
-  );
+  const { progress: loadingProgress, cancel: cancelLoadingProgress } =
+    useAdaptiveProgress(isActionBusy, progressKey, progressEstimateMs);
   const [showBlockingLoader, setShowBlockingLoader] = useState(false);
   const [showRouteSkeleton, setShowRouteSkeleton] = useState(false);
   const actionInvalidationRef = useRef(false);
@@ -550,6 +547,20 @@ export default function App() {
             title={loadingCopy.title}
             description={loadingCopy.description}
             progress={loadingProgress}
+            onCancel={
+              navigation.state === "submitting" &&
+              requestIntent === "analyze-managed"
+                ? () => {
+                    cancelLoadingProgress();
+                    setShowBlockingLoader(false);
+                    NProgress.done();
+                    void navigate(location.pathname + location.search, {
+                      replace: true,
+                      preventScrollReset: true,
+                    });
+                  }
+                : undefined
+            }
             progressMessages={
               requestIntent === "analyze-managed" ||
               requestIntent === "refresh-managed-analysis"

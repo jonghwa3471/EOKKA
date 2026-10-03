@@ -113,5 +113,15 @@ export function useAdaptiveProgress(
     return () => window.clearInterval(timer);
   }, [active, defaultEstimateMs, key]);
 
-  return state;
+  const cancel = () => {
+    // Canceled runs are neither successful completions nor timing samples.
+    startedAtRef.current = null;
+    setState({
+      progress: 0,
+      remainingSeconds: 0,
+      overtime: false,
+      completing: false,
+    });
+  };
+  return { ...state, cancel };
 }

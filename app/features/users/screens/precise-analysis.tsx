@@ -183,6 +183,7 @@ export async function action({ request }: Route.ActionArgs) {
         goalAmount: parsed.goalAmount,
         replaceExistingGoal: parsed.replaceExistingGoal === "on",
       });
+    request.signal.throwIfAborted();
     const durableLimit = await consumeManualAnalysisLimit(request, user.id);
     if (!durableLimit.allowed) return manualAnalysisLimitResponse(durableLimit);
 
@@ -200,28 +201,36 @@ export async function action({ request }: Route.ActionArgs) {
     if (!firstBoughtOn)
       throw new Error("투자 기간을 계산할 매수 기록이 없어요.");
 
-    const result = await analyzePortfolio({
-      goalAmount: parsed.goalAmount,
-      monthlyContribution: parsed.monthlyContribution,
-      investmentPeriodMonths: investmentMonthsSince(firstBoughtOn, seoulDate()),
-      cashFlows: managedPortfolioCashFlows(managed.transactions),
-      holdings: holdings.map((holding) => ({
-        stockId: holding.stockId,
-        averagePrice: holding.averagePrice,
-        quantity: holding.quantity,
-        currency: holding.currency,
-        costKrw: holding.costKrw,
-      })),
-    });
+    const result = await analyzePortfolio(
+      {
+        goalAmount: parsed.goalAmount,
+        monthlyContribution: parsed.monthlyContribution,
+        investmentPeriodMonths: investmentMonthsSince(
+          firstBoughtOn,
+          seoulDate(),
+        ),
+        cashFlows: managedPortfolioCashFlows(managed.transactions),
+        holdings: holdings.map((holding) => ({
+          stockId: holding.stockId,
+          averagePrice: holding.averagePrice,
+          quantity: holding.quantity,
+          currency: holding.currency,
+          costKrw: holding.costKrw,
+        })),
+      },
+      request.signal,
+    );
     // AI receives only the already-calculated, alias-based summary created by
     // generateAiStrategy. Raw transactions and user identity stay on-server.
     let aiStrategy = null;
     try {
-      aiStrategy = await generateAiStrategy(result);
+      aiStrategy = await generateAiStrategy(result, request.signal);
     } catch (error) {
       // A failed AI explanation must not discard the deterministic analysis.
+      request.signal.throwIfAborted();
       console.error("Managed AI strategy generation failed", error);
     }
+    request.signal.throwIfAborted();
     const completeResult = { ...result, aiStrategy };
     await recordAdminActivity({
       eventType: "precise_analysis_completed",
@@ -243,6 +252,7 @@ export async function action({ request }: Route.ActionArgs) {
         historySaved: false,
       });
 
+    request.signal.throwIfAborted();
     const saved =
       managed.portfolio.status === "active"
         ? await saveDailyAnalysisSnapshot({

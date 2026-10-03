@@ -1315,6 +1315,8 @@ export default function Home() {
   const displayedAnalysisDate = analysis?.asOf ?? analysisAsOfPreview;
   const [analysisError, setAnalysisError] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const analysisController = useRef<AbortController | null>(null);
+  useEffect(() => () => analysisController.current?.abort(), []);
   const [analysisUsage, setAnalysisUsage] = useState<{
     limit: number;
     used: number;
@@ -1325,6 +1327,7 @@ export default function Home() {
     remainingSeconds: analysisSecondsLeft,
     overtime: analysisOvertime,
     completing: analysisCompleting,
+    cancel: cancelAnalysisProgress,
   } = useAdaptiveProgress(isAnalyzing, "quick-analysis", ANALYSIS_ESTIMATED_MS);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
@@ -1659,11 +1662,14 @@ export default function Home() {
     );
 
   const analyze = async (replaceExistingGoal = false) => {
-    if (!canAnalyze) return;
+    if (!canAnalyze || analysisController.current) return;
+    const controller = new AbortController();
+    analysisController.current = controller;
     setIsAnalyzing(true);
     setAnalysisError("");
     try {
       const response = await fetch("/api/stocks/analyze", {
+        signal: controller.signal,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1690,6 +1696,7 @@ export default function Home() {
             currentGoalAmount?: number;
             remaining?: number;
           };
+      controller.signal.throwIfAborted();
       const remainingHeader = response.headers.get("X-RateLimit-Remaining");
       if (remainingHeader !== null) {
         const remaining = Number(remainingHeader);
@@ -1728,11 +1735,15 @@ export default function Home() {
         void revalidator.revalidate();
       }
     } catch (error) {
+      if (controller.signal.aborted) return;
       setAnalysisError(
         error instanceof Error ? error.message : "분석에 실패했습니다.",
       );
     } finally {
-      setIsAnalyzing(false);
+      if (analysisController.current === controller) {
+        analysisController.current = null;
+        setIsAnalyzing(false);
+      }
     }
   };
 
@@ -1782,6 +1793,16 @@ export default function Home() {
           title="포트폴리오를 분석하고 있어요"
           description="시세와 목표 달성 시점, 투자 인사이트를 차례로 계산하고 있어요."
           progress={analysisProgress}
+          onCancel={
+            isAnalyzing
+              ? () => {
+                  analysisController.current?.abort();
+                  analysisController.current = null;
+                  cancelAnalysisProgress();
+                  setIsAnalyzing(false);
+                }
+              : undefined
+          }
           progressMessages={ANALYSIS_PROGRESS_MESSAGES}
         />
       )}

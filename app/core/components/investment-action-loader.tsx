@@ -27,12 +27,14 @@ export function InvestmentActionLoader({
   progress,
   progressMessages,
   className,
+  onCancel,
 }: {
   title: string;
   description: string;
   progress?: number;
   progressMessages?: readonly ProgressMessage[];
   className?: string;
+  onCancel?: () => void;
 }) {
   const safeProgress =
     progress === undefined ? undefined : Math.min(100, Math.max(0, progress));
@@ -135,6 +137,17 @@ export function InvestmentActionLoader({
                 {wisdom.author}
               </footer>
             </blockquote>
+            {onCancel && (
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="border-border hover:bg-muted focus-visible:ring-ring cursor-pointer rounded-xl border px-4 py-2 text-sm font-semibold transition-colors focus-visible:ring-2"
+                >
+                  분석 취소
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
