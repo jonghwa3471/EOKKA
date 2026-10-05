@@ -1,5 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
-import "dotenv/config";
+
+import { assertSafeDatabaseCommand } from "./scripts/load-environment";
+
+assertSafeDatabaseCommand("playwright");
 
 const PORT = process.env.PORT || 4000;
 const BASE_URL = `http://localhost:${PORT}`;

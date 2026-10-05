@@ -260,6 +260,13 @@
       "when": 1790832600000,
       "tag": "0036_grant_data_api_policy_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1791086400000,
+      "tag": "0037_harden_authenticated_data_access",
+      "breakpoints": true
     }
   ]
 }

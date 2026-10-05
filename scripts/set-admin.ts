@@ -1,7 +1,10 @@
 // Server/operator CLI only. Never import this into application routes.
-import "dotenv/config";
 import postgres from "postgres";
 import { z } from "zod";
+
+import { assertSafeDatabaseCommand } from "./load-environment";
+
+assertSafeDatabaseCommand("set-admin");
 
 const [operation, userId, email] = process.argv.slice(2);
 if (

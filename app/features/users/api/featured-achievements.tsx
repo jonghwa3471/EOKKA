@@ -1,11 +1,14 @@
 import type { Route } from "./+types/featured-achievements";
 
+import { eq } from "drizzle-orm";
 import { data } from "react-router";
 import { z } from "zod";
 
+import db from "~/core/db/drizzle-client.server";
 import makeServerClient from "~/core/lib/supa-client.server";
 
 import { ACHIEVEMENTS } from "../achievements";
+import { profiles } from "../schema";
 
 const schema = z.object({
   achievementIds: z
@@ -60,12 +63,14 @@ export async function action({ request }: Route.ActionArgs) {
       );
   }
 
-  const { error } = await client
-    .from("profiles")
-    .update({ featured_achievement_ids: parsed.data.achievementIds })
-    .eq("profile_id", user.id);
-  if (error)
+  try {
+    await db
+      .update(profiles)
+      .set({ featured_achievement_ids: parsed.data.achievementIds })
+      .where(eq(profiles.profile_id, user.id));
+  } catch {
     return data({ error: "뱃지 설정을 저장하지 못했어요." }, { status: 500 });
+  }
 
   return { success: true, featuredAchievementIds: parsed.data.achievementIds };
 }

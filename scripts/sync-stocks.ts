@@ -1,5 +1,8 @@
-import "dotenv/config";
 import postgres from "postgres";
+
+import { assertSafeDatabaseCommand } from "./load-environment";
+
+assertSafeDatabaseCommand("sync-stocks");
 
 type Exchange = "KOSPI" | "KOSDAQ";
 type SecurityType = "STOCK" | "ETF" | "ETN";

@@ -1,8 +1,11 @@
 import AdmZip from "adm-zip";
-import "dotenv/config";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import postgres from "postgres";
+
+import { assertSafeDatabaseCommand } from "./load-environment";
+
+assertSafeDatabaseCommand("sync-kis-us-stocks");
 
 type Exchange = "NASDAQ" | "NYSE" | "AMEX";
 

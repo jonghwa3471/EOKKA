@@ -55,6 +55,45 @@ export function validateEnvironmentConfiguration() {
       process.env.SITE_URL?.includes("127.0.0.1"))
   )
     throw new Error("운영 환경의 SITE_URL에는 로컬 주소를 사용할 수 없습니다.");
+
+  const supabaseUrl = process.env.SUPABASE_URL?.trim();
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  if (supabaseUrl && databaseUrl) {
+    const supabaseProjectRef = getSupabaseProjectRef(supabaseUrl);
+    const databaseProjectRef = getDatabaseProjectRef(databaseUrl);
+    if (
+      supabaseProjectRef &&
+      databaseProjectRef &&
+      supabaseProjectRef !== databaseProjectRef
+    )
+      throw new Error(
+        "DATABASE_URL과 SUPABASE_URL이 서로 다른 Supabase 프로젝트를 가리킵니다.",
+      );
+  }
+}
+
+function getSupabaseProjectRef(value: string) {
+  try {
+    const hostname = new URL(value).hostname;
+    const match = hostname.match(/^([a-z0-9]+)\.supabase\.co$/i);
+    return match?.[1]?.toLowerCase() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function getDatabaseProjectRef(value: string) {
+  try {
+    const url = new URL(value);
+    const directMatch = url.hostname.match(/^db\.([a-z0-9]+)\.supabase\.co$/i);
+    if (directMatch?.[1]) return directMatch[1].toLowerCase();
+    const poolerMatch = decodeURIComponent(url.username).match(
+      /^postgres\.([a-z0-9]+)$/i,
+    );
+    return poolerMatch?.[1]?.toLowerCase() ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function isEmailDeliveryEnabled() {
