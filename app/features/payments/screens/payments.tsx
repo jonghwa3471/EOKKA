@@ -271,9 +271,13 @@ export default function Payments({ loaderData }: Route.ComponentProps) {
 
         <div className="bg-muted/25 text-muted-foreground mt-5 flex items-start gap-3 rounded-2xl border p-4 text-xs leading-5">
           <RotateCcwIcon className="mt-0.5 size-4 shrink-0" />
-          결제 취소와 구독 해지는 자동결제 기능이 정식으로 연결된 뒤 이
-          페이지에서 제공할 예정이에요. 현재는 자동결제 준비 중이므로 새로
-          청구되는 금액이 없습니다.
+          <p>
+            결제 취소와 구독 해지는 자동결제 기능이 정식으로 연결된 뒤 이
+            페이지에서 제공할 예정이에요. 현재는 자동결제 준비 중이므로 새로
+            청구되는 금액이 없습니다. 구독이 끝나도 기존 분석 기록과
+            포트폴리오는 삭제되지 않으며, 재구독하면 이전 기록부터 이어서 이용할
+            수 있어요.
+          </p>
         </div>
       </div>
     </main>

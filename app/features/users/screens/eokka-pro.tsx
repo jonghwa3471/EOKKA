@@ -297,7 +297,10 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
                 </summary>
                 <p className="text-muted-foreground bg-muted/35 mt-2 rounded-xl px-3 py-2.5 text-center leading-5 break-keep">
                   구독을 해지하면 다음 결제부터 중단되며, 결제한 기간까지 Pro를
-                  이용할 수 있어요. 청약철회·과오금·서비스 하자에 따른 환불은
+                  이용할 수 있어요. 구독이 끝나도 기존 분석 기록과 포트폴리오는
+                  삭제되지 않으며, 재구독하면 이전 기록부터 이어서 이용할 수
+                  있어요. Pro 이용 기간이 끝난 동안에는 자동 분석과 새 분석 기록
+                  저장이 중단돼요. 청약철회·과오금·서비스 하자에 따른 환불은
                   관련 법령과 결제 화면에 안내된 조건을 따라요.
                 </p>
               </details>
