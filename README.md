@@ -102,6 +102,13 @@ RATE_LIMIT_IP_HEADER=cf-connecting-ip
 
 프록시가 해당 헤더를 덮어쓴다는 보장 없이 `x-forwarded-for` 또는 `x-real-ip`를 신뢰하면 사용자가 요청 제한을 우회할 수 있습니다. 운영 환경에서는 Cloudflare 등의 외부 Rate Limiting도 함께 사용합니다.
 
+## 페이지 로딩과 캐시
+
+새 화면은 고정 UI를 즉시 렌더링하고 데이터가 필요한 영역만 실제 레이아웃과 같은
+스켈레톤으로 표시합니다. 재방문 가능한 조회 데이터는 공통 라우트 캐시를
+사용합니다. 자세한 구현 원칙은 [페이지 로딩과 캐시 원칙](./docs/loading-and-cache.md)을
+따릅니다.
+
 ## License
 
 See [LICENSE.md](./LICENSE.md) for details.

@@ -4,6 +4,7 @@ import {
   CalendarDaysIcon,
   ChartNoAxesCombinedIcon,
   CheckIcon,
+  CreditCardIcon,
   CrownIcon,
   MicroscopeIcon,
   PanelLeftIcon,
@@ -31,6 +32,7 @@ export type RouteSkeletonVariant =
   | "account"
   | "pro"
   | "payments"
+  | "checkout"
   | "notifications"
   | "admin"
   | "home"
@@ -864,6 +866,52 @@ function PaymentsSkeleton() {
   );
 }
 
+function CheckoutSkeleton() {
+  const features = [
+    "분석 기록 제한 없이 보관",
+    "목표 금액 최대 3개 저장",
+    "거래일마다 모든 목표 자동 분석",
+    "수동 분석 하루 15회",
+  ];
+
+  return (
+    <main className="mx-auto w-full max-w-3xl px-5 py-12 md:py-20">
+      <section className="overflow-hidden rounded-[2rem] border border-amber-500/25 bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.18),transparent_40%)] shadow-xl">
+        <div className="p-7 sm:p-10">
+          <span className="inline-flex items-center gap-2 rounded-full bg-amber-500/12 px-3 py-1.5 text-xs font-black text-amber-600 dark:text-amber-300">
+            <CreditCardIcon className="size-3.5" /> 월 자동결제
+          </span>
+          <h1 className="mt-5 text-3xl font-black tracking-tight sm:text-4xl">
+            EOKKA Pro 베타
+          </h1>
+          <div className="mt-3 flex items-end gap-1">
+            <strong className="text-4xl font-black">990원</strong>
+            <span className="text-muted-foreground pb-1 text-sm">/ 월</span>
+          </div>
+          <ul className="mt-7 grid gap-3 text-sm font-semibold sm:grid-cols-2">
+            {features.map((feature) => (
+              <li key={feature} className="flex items-center gap-2">
+                <CheckIcon className="size-4 text-emerald-500" /> {feature}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="bg-muted/35 border-t p-6 sm:p-8">
+          <p className="text-muted-foreground text-xs leading-5 break-keep">
+            카드를 한 번 등록하면 매월 같은 날짜에 990원이 자동 결제됩니다.
+            언제든 해지할 수 있으며, 해지 후에도 현재 결제 기간까지 Pro를 이용할
+            수 있어요. 이미 결제된 이용 기간은 단순 변심으로 환불되지 않습니다.
+          </p>
+          <Skeleton className="mt-5 h-11 w-full rounded-2xl" />
+          <div className="mt-2 flex h-9 w-full items-center justify-center text-sm font-medium">
+            돌아가기
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 function NotificationsSkeleton() {
   return (
     <div className="mx-auto w-full max-w-5xl">
@@ -1040,6 +1088,8 @@ function SkeletonContent({ variant }: { variant: RouteSkeletonVariant }) {
       return <ProSkeleton />;
     case "payments":
       return <PaymentsSkeleton />;
+    case "checkout":
+      return <CheckoutSkeleton />;
     case "notifications":
       return <NotificationsSkeleton />;
     case "admin":
@@ -1131,14 +1181,18 @@ export function RouteTransitionSkeleton({
         className={cn(
           variant === "home"
             ? "w-full"
-            : "mx-auto w-full px-5 py-8 md:px-8 md:py-12",
+            : variant === "checkout"
+              ? "w-full"
+              : "mx-auto w-full px-5 py-8 md:px-8 md:py-12",
           variant === "home"
             ? null
-            : variant === "precise-analysis"
-              ? "max-w-5xl"
-              : variant === "achievements"
-                ? "max-w-6xl"
-                : "max-w-7xl",
+            : variant === "checkout"
+              ? null
+              : variant === "precise-analysis"
+                ? "max-w-5xl"
+                : variant === "achievements"
+                  ? "max-w-6xl"
+                  : "max-w-7xl",
         )}
       >
         <SkeletonContent variant={variant} />

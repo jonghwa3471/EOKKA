@@ -7,6 +7,10 @@ import { Link, redirect } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
 import { requireAuthentication } from "~/core/lib/guards.server";
+import {
+  loadCachedRouteData,
+  usePrimeRouteDataCache,
+} from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { getSubscription } from "~/features/payments/subscription.server";
 
@@ -36,9 +40,19 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+type SubscriptionCheckoutLoaderData = Awaited<ReturnType<typeof loader>>;
+
+export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
+  return loadCachedRouteData<SubscriptionCheckoutLoaderData>(
+    "subscription-checkout",
+    async () => serverLoader() as Promise<SubscriptionCheckoutLoaderData>,
+  );
+}
+
 export default function SubscriptionCheckout({
   loaderData,
 }: Route.ComponentProps) {
+  usePrimeRouteDataCache("subscription-checkout", loaderData);
   const [loading, setLoading] = useState(false);
   const subscribe = async () => {
     setLoading(true);

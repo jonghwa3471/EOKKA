@@ -312,32 +312,34 @@ export default function App() {
               ? "account"
               : targetPath.startsWith("/dashboard/pro")
                 ? "pro"
-                : targetPath.startsWith("/dashboard/payments")
-                  ? "payments"
-                  : targetPath.startsWith("/dashboard/notifications")
-                    ? "notifications"
-                    : targetPath.startsWith("/dashboard/admin")
-                      ? "admin"
-                      : targetPath.startsWith("/dashboard")
-                        ? "dashboard"
-                        : targetPath === "/"
-                          ? "home"
-                          : targetPath.startsWith("/contact")
-                            ? "contact"
-                            : targetPath.startsWith("/about")
-                              ? "about"
-                              : targetPath.startsWith("/methodology")
-                                ? "methodology"
-                                : targetPath.startsWith("/legal")
-                                  ? "legal"
-                                  : targetPath.startsWith("/login") ||
-                                      targetPath.startsWith("/join") ||
-                                      targetPath.startsWith(
-                                        "/forgot-password",
-                                      ) ||
-                                      targetPath.startsWith("/auth/")
-                                    ? "auth"
-                                    : "generic";
+                : targetPath.startsWith("/payments/checkout")
+                  ? "checkout"
+                  : targetPath.startsWith("/dashboard/payments")
+                    ? "payments"
+                    : targetPath.startsWith("/dashboard/notifications")
+                      ? "notifications"
+                      : targetPath.startsWith("/dashboard/admin")
+                        ? "admin"
+                        : targetPath.startsWith("/dashboard")
+                          ? "dashboard"
+                          : targetPath === "/"
+                            ? "home"
+                            : targetPath.startsWith("/contact")
+                              ? "contact"
+                              : targetPath.startsWith("/about")
+                                ? "about"
+                                : targetPath.startsWith("/methodology")
+                                  ? "methodology"
+                                  : targetPath.startsWith("/legal")
+                                    ? "legal"
+                                    : targetPath.startsWith("/login") ||
+                                        targetPath.startsWith("/join") ||
+                                        targetPath.startsWith(
+                                          "/forgot-password",
+                                        ) ||
+                                        targetPath.startsWith("/auth/")
+                                      ? "auth"
+                                      : "generic";
   const requestIntent = String(requestFormData?.get("intent") ?? "");
   const progressKey =
     requestIntent || (isAuthAction ? "authentication" : "action");

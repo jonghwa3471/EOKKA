@@ -284,7 +284,7 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
                     size="lg"
                     className="w-full rounded-2xl bg-amber-500 text-black hover:bg-amber-400"
                   >
-                    <Link to="/payments/checkout">
+                    <Link to="/payments/checkout" prefetch="intent">
                       <Clock3Icon /> 월 990원으로 시작하기
                     </Link>
                   </Button>
