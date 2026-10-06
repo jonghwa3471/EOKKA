@@ -3,6 +3,7 @@ import { useEffect } from "react";
 type CacheEntry = {
   version: string;
   data: unknown;
+  cachedAt: number;
 };
 
 const routeDataCache = new Map<string, CacheEntry>();
@@ -16,12 +17,17 @@ function currentVersion() {
 export async function loadCachedRouteData<T>(
   key: string,
   serverLoader: () => Promise<T>,
+  options?: { maxAgeMs?: number },
 ) {
   const version = currentVersion();
   const cached = routeDataCache.get(key);
-  if (cached?.version === version) return cached.data as T;
+  const isFresh =
+    cached?.version === version &&
+    (options?.maxAgeMs === undefined ||
+      Date.now() - cached.cachedAt < options.maxAgeMs);
+  if (isFresh) return cached.data as T;
   const data = await serverLoader();
-  routeDataCache.set(key, { version, data });
+  routeDataCache.set(key, { version, data, cachedAt: Date.now() });
   return data;
 }
 
@@ -32,7 +38,11 @@ export function hasCachedRouteData(key: string) {
 
 export function usePrimeRouteDataCache<T>(key: string, data: T) {
   useEffect(() => {
-    routeDataCache.set(key, { version: currentVersion(), data });
+    routeDataCache.set(key, {
+      version: currentVersion(),
+      data,
+      cachedAt: Date.now(),
+    });
   }, [data, key]);
 }
 

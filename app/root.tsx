@@ -293,6 +293,8 @@ export default function App() {
     !isActionBusy &&
     Boolean(targetPath) &&
     targetPath !== location.pathname;
+  const isStaticContentTarget =
+    targetPath.startsWith("/about") || targetPath.startsWith("/methodology");
   const isInsideDashboardShell =
     location.pathname.startsWith("/dashboard") ||
     location.pathname.startsWith("/account");
@@ -396,6 +398,10 @@ export default function App() {
       NProgress.done();
       return;
     }
+    if (isStaticContentTarget) {
+      setShowRouteSkeleton(false);
+      return;
+    }
     const isUncachedHomeNavigation =
       targetPath === "/" && !hasCachedRouteData("home");
     if (isUncachedHomeNavigation) {
@@ -408,7 +414,7 @@ export default function App() {
       NProgress.start();
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [isRouteBusy, targetPath]);
+  }, [isRouteBusy, isStaticContentTarget, targetPath]);
 
   useEffect(() => {
     if (!showBlockingLoader) return;

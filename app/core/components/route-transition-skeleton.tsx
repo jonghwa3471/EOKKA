@@ -1,4 +1,5 @@
 import {
+  ArrowLeftIcon,
   BookOpenIcon,
   BriefcaseBusinessIcon,
   CalendarDaysIcon,
@@ -6,6 +7,7 @@ import {
   CheckIcon,
   CreditCardIcon,
   CrownIcon,
+  MessageSquareHeartIcon,
   MicroscopeIcon,
   PanelLeftIcon,
   SparklesIcon,
@@ -984,6 +986,82 @@ function GenericPageSkeleton() {
   );
 }
 
+function ContactSkeleton() {
+  return (
+    <main className="mx-auto min-h-[70vh] w-full max-w-5xl px-5 py-32 md:py-48">
+      <header className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+        <div>
+          <MessageSquareHeartIcon className="mb-4 size-9 text-emerald-500" />
+          <h1 className="text-3xl font-black">함께 만드는 EOKKA</h1>
+          <p className="text-muted-foreground mt-3">
+            불편했던 점이나 바라는 기능을 함께 나눠 주세요. 문의와 운영자의
+            답변은 모든 사용자가 볼 수 있어요.
+          </p>
+        </div>
+        <Skeleton className="h-10 w-36 shrink-0 rounded-md" />
+      </header>
+
+      <section className="bg-card overflow-hidden rounded-3xl border">
+        <div className="border-b px-5 py-4 sm:px-7">
+          <h2 className="font-bold">전체 문의</h2>
+          <div className="mt-2 flex items-center gap-2">
+            <Skeleton className="h-3 w-20 rounded-full" />
+            <span className="text-muted-foreground text-xs">· 최신 작성순</span>
+          </div>
+        </div>
+        <div className="divide-y">
+          {[0, 1, 2, 3, 4].map((item) => (
+            <div
+              key={item}
+              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-5 py-3.5 sm:grid-cols-[100px_minmax(0,1fr)_88px_100px_100px_16px] sm:px-7"
+            >
+              <Skeleton className="hidden h-3 w-16 rounded-full sm:block" />
+              <Skeleton className="h-4 w-3/4 rounded-full" />
+              <Skeleton className="h-7 min-w-20 rounded-full" />
+              <Skeleton className="hidden h-3 w-16 rounded-full sm:block" />
+              <Skeleton className="hidden h-3 w-20 rounded-full sm:block" />
+              <Skeleton className="hidden size-4 rounded sm:block" />
+            </div>
+          ))}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function LegalSkeleton() {
+  return (
+    <main className="mx-auto w-full max-w-4xl px-5 py-10 md:px-10 md:py-16">
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+        <div className="inline-flex h-9 items-center gap-2 rounded-md border px-4 text-sm font-medium">
+          <ArrowLeftIcon className="size-4" /> 홈으로
+        </div>
+        <div className="text-muted-foreground flex items-center gap-2 text-xs">
+          <span className="border-border bg-muted rounded-full border px-2.5 py-1 font-semibold tracking-[0.12em]">
+            LEGAL
+          </span>
+          <Skeleton className="h-3 w-24 rounded-full" />
+        </div>
+      </div>
+      <article className="border-border bg-card rounded-3xl border px-6 py-8 shadow-sm md:px-12 md:py-12">
+        <Skeleton className="h-10 w-2/3 rounded-xl" />
+        <Skeleton className="mt-5 h-4 w-full rounded-full" />
+        <Skeleton className="mt-2 h-4 w-5/6 rounded-full" />
+        {[0, 1, 2].map((section) => (
+          <div key={section} className="mt-10">
+            <Skeleton className="h-7 w-48 rounded-lg" />
+            <div className="mt-4 space-y-3">
+              <Skeleton className="h-4 w-full rounded-full" />
+              <Skeleton className="h-4 w-full rounded-full" />
+              <Skeleton className="h-4 w-4/5 rounded-full" />
+            </div>
+          </div>
+        ))}
+      </article>
+    </main>
+  );
+}
+
 function HomeSkeleton() {
   return (
     <div className="min-h-svh">
@@ -1097,10 +1175,12 @@ function SkeletonContent({ variant }: { variant: RouteSkeletonVariant }) {
     case "home":
       return <HomeSkeleton />;
     case "contact":
+      return <ContactSkeleton />;
+    case "legal":
+      return <LegalSkeleton />;
     case "about":
     case "methodology":
     case "auth":
-    case "legal":
       return <GenericPageSkeleton />;
     case "coming-soon":
       return <ComingSoonSkeleton />;
@@ -1163,14 +1243,16 @@ export function RouteTransitionSkeleton({
         "bg-background overflow-hidden",
         variant === "home"
           ? "fixed inset-0 z-[9998]"
-          : withinDashboard
-            ? cn(
-                "fixed inset-x-0 top-16 bottom-0 z-40",
-                dashboardSidebarCollapsed
-                  ? "md:left-[4.5rem]"
-                  : "md:left-[17rem]",
-              )
-            : "fixed inset-x-0 top-16 bottom-0 z-[9998]",
+          : variant === "legal"
+            ? "fixed inset-0 z-[9998]"
+            : withinDashboard
+              ? cn(
+                  "fixed inset-x-0 top-16 bottom-0 z-40",
+                  dashboardSidebarCollapsed
+                    ? "md:left-[4.5rem]"
+                    : "md:left-[17rem]",
+                )
+              : "fixed inset-x-0 top-16 bottom-0 z-[9998]",
       )}
       role="status"
       aria-live="polite"
@@ -1181,9 +1263,11 @@ export function RouteTransitionSkeleton({
         className={cn(
           variant === "home"
             ? "w-full"
-            : variant === "checkout"
+            : variant === "legal" || variant === "contact"
               ? "w-full"
-              : "mx-auto w-full px-5 py-8 md:px-8 md:py-12",
+              : variant === "checkout"
+                ? "w-full"
+                : "mx-auto w-full px-5 py-8 md:px-8 md:py-12",
           variant === "home"
             ? null
             : variant === "checkout"

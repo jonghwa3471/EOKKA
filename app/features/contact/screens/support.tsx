@@ -6,7 +6,14 @@ import {
   PlusIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Form, Link, data, redirect, useNavigation } from "react-router";
+import {
+  Form,
+  Link,
+  data,
+  redirect,
+  useLocation,
+  useNavigation,
+} from "react-router";
 import { z } from "zod";
 
 import { Button } from "~/core/components/ui/button";
@@ -27,6 +34,10 @@ import {
 } from "~/core/components/ui/select";
 import { Textarea } from "~/core/components/ui/textarea";
 import { markPendingAnalyticsEvent } from "~/core/lib/analytics.client";
+import {
+  loadCachedRouteData,
+  usePrimeRouteDataCache,
+} from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { recordAdminActivity } from "~/features/admin/activity.server";
 import {
@@ -87,6 +98,20 @@ export async function loader({ request }: Route.LoaderArgs) {
     initialTicketId,
     focusTicketId,
   };
+}
+
+type SupportLoaderData = Awaited<ReturnType<typeof loader>>;
+
+export async function clientLoader({
+  request,
+  serverLoader,
+}: Route.ClientLoaderArgs) {
+  const cacheKey = `support:${new URL(request.url).search}`;
+  return loadCachedRouteData<SupportLoaderData>(
+    cacheKey,
+    async () => serverLoader() as Promise<SupportLoaderData>,
+    { maxAgeMs: 30_000 },
+  );
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -189,6 +214,8 @@ export default function Support({
   loaderData: d,
   actionData,
 }: Route.ComponentProps) {
+  const location = useLocation();
+  usePrimeRouteDataCache(`support:${location.search}`, d);
   const busy = useNavigation().state !== "idle";
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(
     d.initialTicketId,

@@ -3,7 +3,7 @@ import type { Route } from "./+types/policy";
 import { bundleMDX } from "mdx-bundler";
 import { getMDXComponent } from "mdx-bundler/client";
 import path from "node:path";
-import { Link, data } from "react-router";
+import { Link, data, useLocation } from "react-router";
 
 import {
   TypographyBlockquote,
@@ -17,6 +17,10 @@ import {
   TypographyP,
 } from "~/core/components/mdx-typography";
 import { Button } from "~/core/components/ui/button";
+import {
+  loadCachedRouteData,
+  usePrimeRouteDataCache,
+} from "~/core/lib/route-data-cache";
 
 const LEGAL_DOCUMENTS = new Set(["privacy-policy", "terms-of-service"]);
 
@@ -63,9 +67,25 @@ export async function loader({ params }: Route.LoaderArgs) {
   }
 }
 
+type PolicyLoaderData = Awaited<ReturnType<typeof loader>>;
+
+export async function clientLoader({
+  request,
+  serverLoader,
+}: Route.ClientLoaderArgs) {
+  const slug = new URL(request.url).pathname.split("/").filter(Boolean).at(-1);
+  return loadCachedRouteData<PolicyLoaderData>(
+    `legal:${slug ?? "unknown"}`,
+    async () => serverLoader() as Promise<PolicyLoaderData>,
+  );
+}
+
 export default function Policy({
   loaderData: { frontmatter, code },
 }: Route.ComponentProps) {
+  const location = useLocation();
+  const slug = location.pathname.split("/").filter(Boolean).at(-1);
+  usePrimeRouteDataCache(`legal:${slug ?? "unknown"}`, { frontmatter, code });
   const MDXContent = getMDXComponent(code);
 
   return (
