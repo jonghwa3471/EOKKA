@@ -8,6 +8,7 @@
  */
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   doublePrecision,
   jsonb,
   pgPolicy,
@@ -75,3 +76,33 @@ export const payments = pgTable(
     }),
   ],
 );
+
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    subscription_id: uuid().primaryKey().defaultRandom(),
+    user_id: uuid()
+      .notNull()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    customer_key: text().notNull(),
+    billing_key_ciphertext: text().notNull(),
+    billing_key_iv: text().notNull(),
+    billing_key_tag: text().notNull(),
+    status: text().notNull().default("active"),
+    cancel_at_period_end: boolean().notNull().default(false),
+    current_period_end: timestamp({ withTimezone: true }).notNull(),
+    last_charged_at: timestamp({ withTimezone: true }),
+    card_company: text(),
+    card_number: text(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("subscriptions_user_unique").on(table.user_id),
+    uniqueIndex("subscriptions_customer_key_unique").on(table.customer_key),
+    pgPolicy("select-own-subscription", {
+      for: "select",
+      to: authenticatedRole,
+      using: sql`${authUid} = ${table.user_id}`,
+    }),
+  ],
+).enableRLS();

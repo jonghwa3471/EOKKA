@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Link, redirect } from "react-router";
 
+import { DestructiveConfirmDialog } from "~/core/components/destructive-confirm-dialog";
 import { Button } from "~/core/components/ui/button";
 import {
   loadCachedRouteData,
@@ -18,9 +19,15 @@ import {
 } from "~/core/lib/route-data-cache";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
+import { assertSameOrigin } from "~/features/admin/validation";
 import { getAutomaticAnalysisSettings } from "~/features/users/automatic-analysis-settings.server";
 
 import { getPayments } from "../queries";
+import {
+  cancelSubscription,
+  getSubscription,
+  resumeSubscription,
+} from "../subscription.server";
 
 export const meta: Route.MetaFunction = () => [
   { title: `결제내역 | ${import.meta.env.VITE_APP_NAME}` },
@@ -33,13 +40,15 @@ export async function loader({ request }: Route.LoaderArgs) {
   } = await client.auth.getUser();
   if (!user) throw redirect("/login");
 
-  const [payments, settings] = await Promise.all([
+  const [payments, settings, subscription] = await Promise.all([
     getPayments(client, { userId: user.id }),
     getAutomaticAnalysisSettings(user.id),
+    getSubscription(user.id),
   ]);
 
   return {
     isPro: settings.isPro,
+    subscription,
     payments: payments.map((payment) => ({
       id: payment.payment_id,
       orderName: payment.order_name,
@@ -50,6 +59,20 @@ export async function loader({ request }: Route.LoaderArgs) {
       receiptUrl: payment.receipt_url,
     })),
   };
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  assertSameOrigin(request);
+  const [client] = makeServerClient(request);
+  const {
+    data: { user },
+  } = await client.auth.getUser();
+  if (!user) throw new Response("Unauthorized", { status: 401 });
+  const intent = String((await request.formData()).get("intent") ?? "");
+  if (intent === "cancel-subscription") await cancelSubscription(user.id);
+  else if (intent === "resume-subscription") await resumeSubscription(user.id);
+  else throw new Response("Invalid action", { status: 400 });
+  return redirect("/dashboard/payments");
 }
 
 type PaymentsLoaderData = Awaited<ReturnType<typeof loader>>;
@@ -178,6 +201,66 @@ export default function Payments({ loaderData }: Route.ComponentProps) {
             </p>
           </article>
         </section>
+
+        {loaderData.subscription && (
+          <section className="bg-card mt-7 flex flex-col gap-4 rounded-3xl border p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            <div>
+              <p className="font-black">
+                {loaderData.subscription.cancelAtPeriodEnd
+                  ? "구독 해지가 예약되어 있어요"
+                  : "월 자동결제 이용 중"}
+              </p>
+              <p className="text-muted-foreground mt-1 text-sm">
+                {new Date(
+                  loaderData.subscription.currentPeriodEnd,
+                ).toLocaleDateString("ko-KR")}
+                {loaderData.subscription.cancelAtPeriodEnd
+                  ? "까지 Pro를 이용할 수 있어요."
+                  : "에 990원이 다음 결제돼요."}
+              </p>
+              {loaderData.subscription.cardNumber && (
+                <p className="text-muted-foreground mt-1 text-xs">
+                  등록 카드 · {loaderData.subscription.cardNumber}
+                </p>
+              )}
+            </div>
+            {loaderData.subscription.status !== "active" ? (
+              <Button asChild className="rounded-full">
+                <Link to="/payments/checkout">다시 구독하기</Link>
+              </Button>
+            ) : loaderData.subscription.cancelAtPeriodEnd ? (
+              <form method="post">
+                <input
+                  type="hidden"
+                  name="intent"
+                  value="resume-subscription"
+                />
+                <Button
+                  type="submit"
+                  variant="outline"
+                  className="rounded-full"
+                >
+                  구독 계속 이용하기
+                </Button>
+              </form>
+            ) : (
+              <DestructiveConfirmDialog
+                title="EOKKA Pro 구독을 해지할까요?"
+                description="다음 자동결제가 중단됩니다. 현재 결제 기간까지 Pro를 이용할 수 있고, 분석 기록과 포트폴리오는 삭제되지 않아요."
+                confirmLabel="구독 해지"
+                fields={{ intent: "cancel-subscription" }}
+                trigger={
+                  <Button
+                    variant="outline"
+                    className="rounded-full text-red-500"
+                  >
+                    구독 해지
+                  </Button>
+                }
+              />
+            )}
+          </section>
+        )}
 
         <section className="bg-card mt-7 overflow-hidden rounded-3xl border shadow-sm">
           <div className="flex items-center justify-between gap-4 border-b px-5 py-5 sm:px-6">

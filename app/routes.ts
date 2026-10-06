@@ -54,6 +54,7 @@ export default [
       route("/mailer", "features/cron/api/mailer.tsx"),
       route("/analyze-portfolios", "features/cron/api/analyze-portfolios.ts"),
       route("/notification-emails", "features/cron/api/notification-emails.ts"),
+      route("/renew-subscriptions", "features/cron/api/renew-subscriptions.ts"),
     ]),
     ...prefix("/blog", [route("/og", "features/blog/api/og.tsx")]),
     ...prefix("/admin", [
@@ -110,9 +111,9 @@ export default [
     ]),
     route("/contact", "features/contact/screens/support.tsx"),
     ...prefix("/payments", [
-      route("/checkout", "features/payments/screens/checkout.tsx"),
+      route("/checkout", "features/payments/screens/subscription-checkout.tsx"),
       layout("core/layouts/private.layout.tsx", { id: "private-payments" }, [
-        route("/success", "features/payments/screens/success.tsx"),
+        route("/success", "features/payments/screens/subscription-success.tsx"),
         route("/failure", "features/payments/screens/failure.tsx"),
       ]),
     ]),

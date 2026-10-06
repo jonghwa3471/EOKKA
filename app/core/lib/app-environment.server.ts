@@ -55,6 +55,13 @@ export function validateEnvironmentConfiguration() {
       process.env.SITE_URL?.includes("127.0.0.1"))
   )
     throw new Error("운영 환경의 SITE_URL에는 로컬 주소를 사용할 수 없습니다.");
+  if (
+    appEnvironment === "production" &&
+    (process.env.BILLING_ENCRYPTION_KEY?.trim().length ?? 0) < 32
+  )
+    throw new Error(
+      "운영 환경에는 32자 이상의 BILLING_ENCRYPTION_KEY가 필요합니다.",
+    );
 
   const supabaseUrl = process.env.SUPABASE_URL?.trim();
   const databaseUrl = process.env.DATABASE_URL?.trim();

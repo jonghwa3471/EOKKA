@@ -11,7 +11,6 @@
  * - Provides clear visual feedback with error styling
  * - Sets appropriate page metadata for error state
  */
-
 import { type MetaFunction, useSearchParams } from "react-router";
 
 /**
@@ -48,19 +47,19 @@ export default function Failure() {
   const [searchParams] = useSearchParams();
   const errorCode = searchParams.get("code");
   const errorDescription = searchParams.get("message");
-  
+
   return (
     <div className="flex flex-col items-center justify-center gap-2">
       {/* Error heading with distinct error styling */}
       <h1 className="text-center text-3xl font-semibold tracking-tight text-red-500 md:text-5xl dark:text-red-400">
         Payment VerificationError
       </h1>
-      
+
       {/* Error code display */}
       <p className="text-muted-foreground text-center">
         Error code: {errorCode}
       </p>
-      
+
       {/* Error description display */}
       <p className="text-muted-foreground text-center">{errorDescription}</p>
     </div>

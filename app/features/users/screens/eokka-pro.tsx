@@ -263,12 +263,11 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
                     ) : null}
                   </div>
                   <Button
-                    type="button"
+                    asChild
                     variant="outline"
-                    className="w-full cursor-not-allowed rounded-2xl"
-                    disabled
+                    className="w-full rounded-2xl"
                   >
-                    구독 관리 준비 중
+                    <Link to="/dashboard/payments">구독 관리</Link>
                   </Button>
                 </div>
               ) : (
@@ -281,12 +280,13 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
                     </p>
                   </div>
                   <Button
-                    type="button"
+                    asChild
                     size="lg"
-                    className="w-full cursor-not-allowed rounded-2xl bg-amber-500 text-black opacity-80 hover:bg-amber-500"
-                    disabled
+                    className="w-full rounded-2xl bg-amber-500 text-black hover:bg-amber-400"
                   >
-                    <Clock3Icon /> 자동결제 준비 중
+                    <Link to="/payments/checkout">
+                      <Clock3Icon /> 월 990원으로 시작하기
+                    </Link>
                   </Button>
                 </div>
               )}
@@ -305,7 +305,7 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
                 </p>
               </details>
               <p className="text-muted-foreground mt-3 text-center text-[10px] leading-4">
-                토스페이먼츠 자동결제 연동 준비 중
+                토스페이먼츠를 통해 안전하게 결제해요
               </p>
             </div>
           </div>
@@ -458,8 +458,8 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
           <p className="mt-3 font-black">EOKKA Pro는 아직 베타 단계예요</p>
           <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-6 break-keep">
             완벽한 서비스라고 약속하기보다 실제 사용 경험을 바탕으로 분석과 기록
-            기능을 꾸준히 개선하겠습니다. 자동결제가 열리기 전에는 비용이
-            청구되지 않아요.
+            기능을 꾸준히 개선하겠습니다. 구독은 언제든 해지할 수 있고 결제한
+            기간까지 계속 이용할 수 있어요.
           </p>
           <Button asChild variant="outline" className="mt-5 rounded-full">
             <Link to="/dashboard">

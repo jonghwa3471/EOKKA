@@ -1,6 +1,7 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
 import db from "~/core/db/drizzle-client.server";
+import { subscriptions } from "~/features/payments/schema";
 import { profiles } from "~/features/users/schema";
 
 import { notifications } from "./schema";
@@ -17,8 +18,10 @@ export type NotificationType =
   | "analysis_all_deleted"
   | "achievement_unlocked"
   | "payment_completed"
+  | "payment_failed"
   | "pro_gift_unlocked"
-  | "subscription_renewal_upcoming";
+  | "subscription_renewal_upcoming"
+  | "subscription_cancelled";
 
 export async function createNotification(input: {
   userId: string;
@@ -47,7 +50,10 @@ export async function notifyUpcomingSubscriptionRenewals() {
         renewsAt: profiles.pro_expires_at,
       })
       .from(profiles)
-      .where(sql`${profiles.pro_expires_at} >= now() + (${reminderDays} * interval '1 day')
+      .innerJoin(subscriptions, eq(subscriptions.user_id, profiles.profile_id))
+      .where(sql`${subscriptions.status} = 'active'
+        and ${subscriptions.cancel_at_period_end} = false
+        and ${profiles.pro_expires_at} >= now() + (${reminderDays} * interval '1 day')
         and ${profiles.pro_expires_at} < now() + (${reminderDays + 1} * interval '1 day')`);
 
     for (const account of upcoming) {

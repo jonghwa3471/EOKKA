@@ -10,6 +10,7 @@ import adminClient from "~/core/lib/supa-admin-client.server";
 const EMAIL_NOTIFICATION_TYPES = new Set<NotificationType>([
   "support_reply",
   "payment_completed",
+  "payment_failed",
   "subscription_renewal_upcoming",
   "site_announcement",
 ]);
@@ -46,6 +47,7 @@ function notificationEmailHtml(input: {
   > = {
     support_reply: { badge: "문의 답변", button: "답변 확인하기" },
     payment_completed: { badge: "결제 완료", button: "결제 내역 확인하기" },
+    payment_failed: { badge: "결제 확인", button: "결제 상태 확인하기" },
     subscription_renewal_upcoming: {
       badge: "구독 안내",
       button: "EOKKA Pro 확인하기",
