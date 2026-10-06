@@ -416,6 +416,96 @@ export async function deleteAllAnalysisSnapshots(userId: string) {
     });
 }
 
+export async function deleteActiveAnalysisGoal({
+  userId,
+  goalAmount,
+}: {
+  userId: string;
+  goalAmount: number;
+}) {
+  const [portfolio] = await db
+    .select({
+      id: managedPortfolios.managed_portfolio_id,
+      status: managedPortfolios.status,
+    })
+    .from(managedPortfolios)
+    .where(eq(managedPortfolios.user_id, userId))
+    .limit(1);
+  const isManaged = portfolio?.status === "active";
+  const activeScope = isManaged
+    ? and(
+        eq(analysisSnapshots.analysis_mode, "managed"),
+        eq(analysisSnapshots.managed_portfolio_id, portfolio.id),
+      )
+    : eq(analysisSnapshots.analysis_mode, "quick");
+
+  const result = await db.transaction(async (transaction) => {
+    const deleted = await transaction
+      .delete(analysisSnapshots)
+      .where(
+        and(
+          eq(analysisSnapshots.user_id, userId),
+          eq(analysisSnapshots.goal_amount, goalAmount),
+          activeScope,
+        ),
+      )
+      .returning({ id: analysisSnapshots.analysis_snapshot_id });
+    if (deleted.length === 0) return { deletedCount: 0, nextGoalAmount: null };
+
+    const [profile] = await transaction
+      .select({
+        preferredGoalAmount: profiles.preferred_goal_amount,
+        automaticGoalAmount: profiles.automatic_analysis_goal_amount,
+      })
+      .from(profiles)
+      .where(eq(profiles.profile_id, userId))
+      .limit(1);
+    let nextGoalAmount = profile?.preferredGoalAmount ?? null;
+    if (
+      profile?.preferredGoalAmount === goalAmount ||
+      profile?.automaticGoalAmount === goalAmount
+    ) {
+      const [remaining] = await transaction
+        .select({ goalAmount: analysisSnapshots.goal_amount })
+        .from(analysisSnapshots)
+        .where(and(eq(analysisSnapshots.user_id, userId), activeScope))
+        .orderBy(
+          desc(analysisSnapshots.saved_on),
+          desc(analysisSnapshots.analysis_snapshot_id),
+        )
+        .limit(1);
+      const remainingGoalAmount = remaining?.goalAmount ?? null;
+      nextGoalAmount =
+        profile.preferredGoalAmount === goalAmount
+          ? remainingGoalAmount
+          : profile.preferredGoalAmount;
+      await transaction
+        .update(profiles)
+        .set({
+          preferred_goal_amount: nextGoalAmount,
+          automatic_analysis_goal_amount:
+            profile.automaticGoalAmount === goalAmount
+              ? remainingGoalAmount
+              : profile.automaticGoalAmount,
+          updated_at: new Date(),
+        })
+        .where(eq(profiles.profile_id, userId));
+    }
+    return { deletedCount: deleted.length, nextGoalAmount };
+  });
+
+  if (result.deletedCount > 0)
+    await createNotification({
+      userId,
+      type: "analysis_deleted",
+      title: "저장 목표를 삭제했어요",
+      message: `${notificationGoalLabel(goalAmount)} 목표와 연결된 분석 기록 ${result.deletedCount.toLocaleString("ko-KR")}개를 삭제했어요.`,
+      href: "/dashboard/precise-analysis",
+    });
+
+  return result;
+}
+
 export async function getPreferredGoalAmount(userId: string) {
   const [profile] = await db
     .select({ goalAmount: profiles.preferred_goal_amount })
