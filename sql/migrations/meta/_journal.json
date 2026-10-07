@@ -288,6 +288,13 @@
       "when": 1791336120221,
       "tag": "0040_magical_princess_powerful",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1791340000000,
+      "tag": "0041_limit_beta_members",
+      "breakpoints": true
     }
   ]
 }

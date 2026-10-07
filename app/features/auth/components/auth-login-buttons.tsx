@@ -14,12 +14,25 @@ function SocialAuthButton({
   label,
   href,
   analyticsEvent,
+  disabled = false,
 }: {
   logo: React.ReactNode;
   label: string;
   href: string;
   analyticsEvent: AnalyticsEventName;
+  disabled?: boolean;
 }) {
+  if (disabled)
+    return (
+      <Button
+        variant="outline"
+        className="w-full justify-center gap-2"
+        disabled
+      >
+        {logo}
+        <span>{label}</span>
+      </Button>
+    );
   return (
     <Button variant="outline" className="w-full justify-center gap-2" asChild>
       <Link to={href} onClick={() => markPendingAnalyticsEvent(analyticsEvent)}>
@@ -42,8 +55,10 @@ export function AuthDivider() {
 
 export function SocialAuthButtons({
   mode = "login",
+  disabled = false,
 }: {
   mode?: "login" | "signup";
+  disabled?: boolean;
 }) {
   const suffix = mode === "signup" ? "시작하기" : "계속하기";
   return (
@@ -53,12 +68,14 @@ export function SocialAuthButtons({
         label={`카카오로 ${suffix}`}
         href={`/auth/social/start/kakao?mode=${mode}`}
         analyticsEvent={mode === "signup" ? "sign_up" : "login"}
+        disabled={disabled}
       />
       <SocialAuthButton
         logo={<GoogleLogo className="size-4" />}
         label={`Google로 ${suffix}`}
         href={`/auth/social/start/google?mode=${mode}`}
         analyticsEvent={mode === "signup" ? "sign_up" : "login"}
+        disabled={disabled}
       />
     </div>
   );

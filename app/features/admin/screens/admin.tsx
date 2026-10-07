@@ -30,6 +30,7 @@ import {
   AvatarImage,
 } from "~/core/components/ui/avatar";
 import { Button } from "~/core/components/ui/button";
+import { DatePicker } from "~/core/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
@@ -38,6 +39,13 @@ import {
   DialogTitle,
 } from "~/core/components/ui/dialog";
 import { Input } from "~/core/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/core/components/ui/select";
 import { Textarea } from "~/core/components/ui/textarea";
 import {
   loadCachedRouteData,
@@ -129,6 +137,26 @@ const activityLabels: Record<string, string> = {
   account_deleted: "회원탈퇴",
 };
 
+const activityStyles: Record<string, string> = {
+  account_created: "bg-sky-500/12 text-sky-700 dark:text-sky-300",
+  login_completed: "bg-slate-500/12 text-slate-700 dark:text-slate-300",
+  quick_analysis_completed:
+    "bg-violet-500/12 text-violet-700 dark:text-violet-300",
+  precise_analysis_completed:
+    "bg-indigo-500/12 text-indigo-700 dark:text-indigo-300",
+  portfolio_transaction_added:
+    "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300",
+  portfolio_transaction_updated:
+    "bg-amber-500/12 text-amber-700 dark:text-amber-300",
+  portfolio_transaction_deleted:
+    "bg-rose-500/12 text-rose-700 dark:text-rose-300",
+  support_ticket_created: "bg-cyan-500/12 text-cyan-700 dark:text-cyan-300",
+  payment_completed: "bg-green-500/12 text-green-700 dark:text-green-300",
+  subscription_cancelled:
+    "bg-orange-500/12 text-orange-700 dark:text-orange-300",
+  account_deleted: "bg-red-500/12 text-red-700 dark:text-red-300",
+};
+
 function getAnnouncementKindMeta(kind: string) {
   return announcementKindMeta[
     kind in announcementKindMeta
@@ -149,9 +177,24 @@ export async function loader({ request }: Route.LoaderArgs) {
     .enum(["all", "open", "answered", "closed"])
     .catch("all")
     .parse(url.searchParams.get("status") ?? "all");
+  const activityEvent = (url.searchParams.get("activityEvent") ?? "").slice(
+    0,
+    64,
+  );
+  const normalizedActivityEvent = activityEvent === "all" ? "" : activityEvent;
+  const activityTarget = (url.searchParams.get("activityTarget") ?? "").slice(
+    0,
+    100,
+  );
+  const activityDateValue = url.searchParams.get("activityDate") ?? "";
+  const activityDate = z.string().date().catch("").parse(activityDateValue);
   if (ticket && !z.string().uuid().safeParse(ticket).success)
     throw new Response("잘못된 문의 주소예요.", { status: 400 });
-  const overview = await getAdminOverview(search, page, statusFilter);
+  const overview = await getAdminOverview(search, page, statusFilter, {
+    event: normalizedActivityEvent,
+    target: activityTarget,
+    date: activityDate,
+  });
   if (ticket && !overview.tickets.some((item) => item.id === ticket))
     throw new Response("문의를 찾을 수 없어요.", { status: 404 });
   return {
@@ -160,6 +203,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     page,
     initialTicketId: ticket,
     statusFilter,
+    activityEvent: normalizedActivityEvent,
+    activityTarget,
+    activityDate,
     tab: url.searchParams.get("tab") ?? "inbox",
   };
 }
@@ -168,6 +214,17 @@ type AdminLoaderData = Awaited<ReturnType<typeof loader>>;
 type AdminAnnouncementPage = {
   announcements: AdminLoaderData["announcements"];
   hasMore: boolean;
+};
+type AdminUserTicketsPage = {
+  userId: string;
+  tickets: Array<{
+    id: string;
+    title: string;
+    status: string;
+    category: string;
+    created_at: string;
+    updated_at: string;
+  }>;
 };
 export async function clientLoader({
   request,
@@ -291,10 +348,14 @@ export default function Admin({
     d.initialTicketId,
   );
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [ticketListUserId, setTicketListUserId] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const requestId = useRef<string | null>(null);
   const submit = useSubmit();
   const announcementFetcher = useFetcher<AdminAnnouncementPage>();
+  const activityFetcher = useFetcher<AdminLoaderData>();
+  const userTicketsFetcher = useFetcher<AdminUserTicketsPage>();
+  const activityFormRef = useRef<HTMLFormElement>(null);
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
   const hasMoreAnnouncements =
@@ -304,6 +365,7 @@ export default function Admin({
       ? (new URLSearchParams(navigation.location.search).get("tab") ?? "inbox")
       : null;
   const activeTab = pendingTab ?? d.tab;
+  const activityData = activityFetcher.data ?? d;
   const selectedTicket = useMemo(
     () => d.tickets.find((ticket) => ticket.id === selectedTicketId) ?? null,
     [d.tickets, selectedTicketId],
@@ -354,24 +416,44 @@ export default function Admin({
         joined_at: user.created_at,
       };
     const ticket = d.tickets.find((item) => item.user_id === selectedUserId);
-    return ticket
+    if (ticket)
+      return {
+        id: ticket.user_id,
+        name: ticket.name,
+        email: ticket.email,
+        avatar_url: ticket.avatar_url,
+        username: ticket.username,
+        admin: ticket.admin,
+        pro: ticket.pro,
+        ticket_count: ticket.ticket_count,
+        last_active_on: ticket.last_active_on,
+        joined_at: ticket.joined_at,
+      };
+    const activity = activityData.activities.find(
+      (item) => item.user_id === selectedUserId,
+    );
+    return activity?.user_id
       ? {
-          id: ticket.user_id,
-          name: ticket.name,
-          email: ticket.email,
-          avatar_url: ticket.avatar_url,
-          username: ticket.username,
-          admin: ticket.admin,
-          pro: ticket.pro,
-          ticket_count: ticket.ticket_count,
-          last_active_on: ticket.last_active_on,
-          joined_at: ticket.joined_at,
+          id: activity.user_id,
+          name: activity.name ?? "사용자",
+          email: activity.email ?? "",
+          avatar_url: activity.avatar_url,
+          username: activity.username ?? "-",
+          admin: activity.admin,
+          pro: activity.pro,
+          ticket_count: activity.ticket_count,
+          last_active_on: activity.last_active_on ?? "-",
+          joined_at: activity.joined_at ?? activity.created_at,
         }
       : null;
-  }, [d.tickets, d.users, selectedUserId]);
+  }, [activityData.activities, d.tickets, d.users, selectedUserId]);
   const selectedAnnouncementRecipients = d.announcementRecipients.filter(
     (user) => announcementRecipientIds.includes(user.id),
   );
+  const selectedUserTickets =
+    userTicketsFetcher.data?.userId === ticketListUserId
+      ? userTicketsFetcher.data.tickets
+      : null;
   const filteredAnnouncementRecipients = useMemo(() => {
     const query = announcementRecipientSearch.trim().toLocaleLowerCase("ko");
     return d.announcementRecipients
@@ -780,26 +862,131 @@ export default function Admin({
             결제·분석·문의·계정 변경처럼 운영에 필요한 사건만 기록해요. 일반
             화면 이동과 클릭 분석은 Google Analytics에서 확인해요.
           </p>
+          <activityFetcher.Form
+            ref={activityFormRef}
+            key={`${activityData.activityEvent}:${activityData.activityTarget}:${activityData.activityDate}`}
+            method="get"
+            action="/dashboard/admin"
+            className="bg-muted/35 mb-5 grid gap-3 rounded-2xl border p-4 md:grid-cols-[minmax(10rem,1fr)_minmax(12rem,1.35fr)_minmax(10rem,1fr)_auto] md:items-end"
+          >
+            <input type="hidden" name="tab" value="activities" />
+            <label className="grid gap-1.5 text-xs font-bold">
+              이벤트
+              <Select
+                name="activityEvent"
+                defaultValue={activityData.activityEvent || "all"}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="전체 이벤트" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">전체 이벤트</SelectItem>
+                  {Object.entries(activityLabels).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+            <label className="grid gap-1.5 text-xs font-bold">
+              대상
+              <Input
+                name="activityTarget"
+                defaultValue={activityData.activityTarget}
+                placeholder="이름·아이디로 찾기"
+                className="h-10 rounded-xl"
+              />
+            </label>
+            <label className="grid gap-1.5 text-xs font-bold">
+              발생 날짜
+              <DatePicker
+                id="activity-date"
+                name="activityDate"
+                defaultValue={activityData.activityDate}
+                readOnly
+              />
+            </label>
+            <div className="flex gap-2">
+              <Button
+                type="submit"
+                className="h-10 flex-1 rounded-xl"
+                disabled={activityFetcher.state !== "idle"}
+              >
+                {activityFetcher.state === "idle" ? "필터 적용" : "조회 중..."}
+              </Button>
+              {(activityData.activityEvent ||
+                activityData.activityTarget ||
+                activityData.activityDate) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 rounded-xl"
+                  disabled={activityFetcher.state !== "idle"}
+                  onClick={() => {
+                    activityFormRef.current?.reset();
+                    activityFetcher.load("/dashboard/admin?tab=activities");
+                  }}
+                >
+                  초기화
+                </Button>
+              )}
+            </div>
+          </activityFetcher.Form>
+          <div className="text-muted-foreground mb-3 flex items-center justify-between text-xs">
+            <span>최신순으로 최대 100건을 보여줘요.</span>
+            <strong className="text-foreground">
+              {activityData.activities.length}건
+            </strong>
+          </div>
           <div className="overflow-hidden rounded-2xl border">
             <div className="bg-muted/50 text-muted-foreground grid grid-cols-[minmax(9rem,1fr)_minmax(8rem,1fr)_minmax(10rem,auto)] gap-3 px-4 py-3 text-xs font-bold sm:grid-cols-[minmax(11rem,1fr)_minmax(10rem,1fr)_minmax(12rem,auto)]">
               <span>이벤트</span>
               <span>대상</span>
               <span>발생 일시</span>
             </div>
-            {d.activities.map((activity) => (
+            {activityData.activities.map((activity) => (
               <article
                 key={activity.id}
                 className="grid grid-cols-[minmax(9rem,1fr)_minmax(8rem,1fr)_minmax(10rem,auto)] items-center gap-3 border-t px-4 py-3 text-sm sm:grid-cols-[minmax(11rem,1fr)_minmax(10rem,1fr)_minmax(12rem,auto)]"
               >
-                <strong>
+                <strong
+                  className={`w-fit rounded-full px-2.5 py-1 text-xs ${activityStyles[activity.event_type] ?? "bg-muted text-muted-foreground"}`}
+                >
                   {activityLabels[activity.event_type] ?? activity.event_type}
                 </strong>
-                <span
-                  className="truncate font-mono text-xs"
-                  title={activity.target_label}
-                >
-                  {activity.target_label}
-                </span>
+                <div className="flex min-w-0 items-center gap-2">
+                  {activity.user_id ? (
+                    <button
+                      type="button"
+                      className="shrink-0 rounded-full transition outline-none hover:scale-105 focus-visible:ring-2 focus-visible:ring-emerald-500/50"
+                      aria-label={`${activity.name ?? activity.target_label} 사용자 정보 보기`}
+                      onClick={() => setSelectedUserId(activity.user_id)}
+                    >
+                      <Avatar className="size-8 border">
+                        <AvatarImage
+                          src={activity.avatar_url ?? undefined}
+                          alt={`${activity.name ?? "사용자"} 프로필`}
+                        />
+                        <AvatarFallback className="text-[11px] font-black">
+                          {(activity.name ?? activity.target_label).slice(0, 1)}
+                        </AvatarFallback>
+                      </Avatar>
+                    </button>
+                  ) : (
+                    <Avatar className="size-8 shrink-0 border opacity-55">
+                      <AvatarFallback className="text-[11px] font-black">
+                        {activity.target_label.slice(0, 1)}
+                      </AvatarFallback>
+                    </Avatar>
+                  )}
+                  <span
+                    className="truncate font-mono text-xs"
+                    title={activity.target_label}
+                  >
+                    {activity.target_label}
+                  </span>
+                </div>
                 <time className="text-muted-foreground whitespace-nowrap">
                   {new Date(activity.created_at).toLocaleString("ko-KR", {
                     timeZone: "Asia/Seoul",
@@ -813,7 +1000,7 @@ export default function Admin({
                 </time>
               </article>
             ))}
-            {!d.activities.length && (
+            {!activityData.activities.length && (
               <p className="text-muted-foreground border-t px-4 py-10 text-center text-sm">
                 아직 기록된 주요 활동이 없어요.
               </p>
@@ -1158,8 +1345,20 @@ export default function Admin({
               </div>
               <div className="bg-muted/50 rounded-2xl p-4">
                 <dt className="text-muted-foreground text-xs">작성 문의</dt>
-                <dd className="mt-1 font-bold">
-                  {selectedUser.ticket_count}건
+                <dd className="mt-1">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 font-bold text-emerald-600 transition hover:text-emerald-500 hover:underline dark:text-emerald-400"
+                    onClick={() => {
+                      setTicketListUserId(selectedUser.id);
+                      userTicketsFetcher.load(
+                        `/api/admin/user-tickets/${selectedUser.id}`,
+                      );
+                    }}
+                  >
+                    {selectedUser.ticket_count}건
+                    <ChevronRightIcon className="size-4" />
+                  </button>
                 </dd>
               </div>
               <div className="bg-muted/50 rounded-2xl p-4">
@@ -1176,6 +1375,77 @@ export default function Admin({
               </div>
             </dl>
           )}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={Boolean(ticketListUserId)}
+        onOpenChange={(open) => !open && setTicketListUserId(null)}
+      >
+        <DialogContent className="max-h-[88vh] overflow-hidden rounded-3xl p-0 sm:max-w-xl">
+          <DialogHeader className="border-b px-6 pt-6 pr-12 pb-5 text-left">
+            <DialogTitle className="text-xl font-black">
+              {selectedUser?.name ?? "사용자"}님의 문의
+            </DialogTitle>
+            <DialogDescription>
+              작성한 문의를 최신순으로 보여줘요.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[65vh] overflow-y-auto px-4 py-3 sm:px-6">
+            {userTicketsFetcher.state !== "idle" && !selectedUserTickets ? (
+              <div
+                className="space-y-3 py-2"
+                aria-label="문의 목록 불러오는 중"
+              >
+                {[0, 1, 2].map((item) => (
+                  <div
+                    key={item}
+                    className="bg-muted/55 h-20 animate-pulse rounded-2xl"
+                  />
+                ))}
+              </div>
+            ) : selectedUserTickets?.length ? (
+              <ul className="divide-y">
+                {selectedUserTickets.map((ticket) => (
+                  <li
+                    key={ticket.id}
+                    className="grid gap-2 py-4 first:pt-2 last:pb-2"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <strong className="min-w-0 flex-1 leading-snug break-words">
+                        {ticket.title}
+                      </strong>
+                      <span
+                        className={`inline-flex min-w-20 shrink-0 items-center justify-center rounded-full px-2.5 py-1 text-xs font-semibold ${statusBadgeClass(ticket.status)}`}
+                      >
+                        {statusLabels[ticket.status] ?? ticket.status}
+                      </span>
+                    </div>
+                    <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                        {categoryLabels[
+                          ticket.category as keyof typeof categoryLabels
+                        ] ?? ticket.category}
+                      </span>
+                      <time>
+                        {new Date(ticket.created_at).toLocaleString("ko-KR", {
+                          timeZone: "Asia/Seoul",
+                          year: "numeric",
+                          month: "2-digit",
+                          day: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </time>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-muted-foreground py-14 text-center text-sm">
+                작성한 문의가 없어요.
+              </p>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
       <Dialog

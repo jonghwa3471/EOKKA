@@ -9,7 +9,6 @@ import { notifications } from "~/features/notifications/schema";
 import { profiles } from "~/features/users/schema";
 
 import {
-  adminActivityEvents,
   adminMembers,
   siteAnnouncementRecipients,
   siteAnnouncements,
@@ -560,10 +559,31 @@ export async function getAdminAnnouncementPage(offset: number, limit = 20) {
   };
 }
 
+export async function getAdminUserTickets(userId: string) {
+  return Array.from(
+    await db.execute<{
+      id: string;
+      title: string;
+      status: string;
+      category: string;
+      created_at: string;
+      updated_at: string;
+    }>(sql`select id, title, status, category, created_at, updated_at
+      from support_tickets
+      where user_id = ${userId}
+      order by created_at desc`),
+  );
+}
+
 export async function getAdminOverview(
   search: string,
   page: number,
   status: "all" | "open" | "answered" | "closed" = "all",
+  activityFilters: {
+    event?: string;
+    target?: string;
+    date?: string;
+  } = {},
 ) {
   const [
     tickets,
@@ -648,11 +668,43 @@ export async function getAdminOverview(
     }>(sql`select p.profile_id as id, p.name, u.email, p.avatar_url
       from profiles p join auth.users u on u.id = p.profile_id
       order by p.name, u.email limit 500`),
-    db
-      .select()
-      .from(adminActivityEvents)
-      .orderBy(desc(adminActivityEvents.created_at))
-      .limit(100),
+    db.execute<{
+      id: number;
+      event_type: string;
+      actor_user_id: string | null;
+      target_type: string;
+      target_id: string | null;
+      target_label: string;
+      created_at: string;
+      user_id: string | null;
+      name: string | null;
+      email: string | null;
+      avatar_url: string | null;
+      username: string | null;
+      joined_at: string | null;
+      last_active_on: string | null;
+      pro: boolean;
+      admin: boolean;
+      ticket_count: number;
+    }>(sql`select e.id, e.event_type, e.actor_user_id, e.target_type, e.target_id,
+      e.target_label, e.created_at, p.profile_id as user_id, p.name, u.email,
+      p.avatar_url, p.username, p.created_at as joined_at, p.last_active_on,
+      coalesce(p.pro_expires_at > now(), false) as pro,
+      (a.user_id is not null) as admin,
+      coalesce((select count(*)::int from support_tickets own where own.user_id = p.profile_id), 0) as ticket_count
+      from admin_activity_events e
+      left join profiles p on p.profile_id::text = e.target_id
+      left join auth.users u on u.id = p.profile_id
+      left join admin_members a on a.user_id = p.profile_id
+      where (${activityFilters.event || null}::text is null or e.event_type = ${activityFilters.event || null})
+        and (${activityFilters.target || null}::text is null
+          or e.target_label ilike ${activityFilters.target ? `%${activityFilters.target}%` : null}
+          or p.name ilike ${activityFilters.target ? `%${activityFilters.target}%` : null}
+          or p.username ilike ${activityFilters.target ? `%${activityFilters.target}%` : null}
+          or u.email ilike ${activityFilters.target ? `%${activityFilters.target}%` : null})
+        and (${activityFilters.date || null}::date is null or (e.created_at at time zone 'Asia/Seoul')::date = ${activityFilters.date || null}::date)
+      order by e.created_at desc
+      limit 100`),
   ]);
   return {
     tickets: Array.from(tickets),

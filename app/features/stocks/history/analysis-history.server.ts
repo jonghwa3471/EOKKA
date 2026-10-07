@@ -206,8 +206,8 @@ export async function compactAnalysisHistory(userId?: string) {
       select
         ${analysisHistoryPoints.analysis_history_point_id} as id,
         case
-          when ${analysisHistoryPoints.saved_on} >= current_date - ${DAILY_HISTORY_DAYS} then 'daily'
-          when ${analysisHistoryPoints.saved_on} >= current_date - ${WEEKLY_HISTORY_DAYS} then 'weekly'
+          when ${analysisHistoryPoints.saved_on} >= current_date - ${DAILY_HISTORY_DAYS}::integer then 'daily'
+          when ${analysisHistoryPoints.saved_on} >= current_date - ${WEEKLY_HISTORY_DAYS}::integer then 'weekly'
           else 'monthly'
         end as period_kind,
         row_number() over (
@@ -217,9 +217,9 @@ export async function compactAnalysisHistory(userId?: string) {
             ${analysisHistoryPoints.analysis_mode},
             coalesce(${analysisHistoryPoints.managed_portfolio_id}, 0),
             case
-              when ${analysisHistoryPoints.saved_on} >= current_date - ${DAILY_HISTORY_DAYS}
+              when ${analysisHistoryPoints.saved_on} >= current_date - ${DAILY_HISTORY_DAYS}::integer
                 then ${analysisHistoryPoints.saved_on}::text
-              when ${analysisHistoryPoints.saved_on} >= current_date - ${WEEKLY_HISTORY_DAYS}
+              when ${analysisHistoryPoints.saved_on} >= current_date - ${WEEKLY_HISTORY_DAYS}::integer
                 then to_char(${analysisHistoryPoints.saved_on}, 'IYYY-IW')
               else to_char(${analysisHistoryPoints.saved_on}, 'YYYY-MM')
             end

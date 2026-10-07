@@ -1,6 +1,11 @@
 import type { Route } from "./+types/login";
 
-import { CheckCircle2Icon, MailIcon } from "lucide-react";
+import {
+  CheckCircle2Icon,
+  LockKeyholeIcon,
+  MailIcon,
+  UsersRoundIcon,
+} from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Form, Link, data } from "react-router";
 import { z } from "zod";
@@ -28,6 +33,7 @@ import {
   AuthDivider,
   SocialAuthButtons,
 } from "../components/auth-login-buttons";
+import { getBetaMemberCapacity } from "../member-capacity.server";
 
 export const meta: Route.MetaFunction = () => [
   { title: `로그인 | ${import.meta.env.VITE_APP_NAME}` },
@@ -45,6 +51,10 @@ function loginErrorMessage(code?: string) {
   if (code === "over_request_rate_limit")
     return "요청이 너무 많아요. 잠시 후 다시 시도해 주세요.";
   return "로그인 링크를 보내지 못했어요. 잠시 후 다시 시도해 주세요.";
+}
+
+export async function loader() {
+  return getBetaMemberCapacity();
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -72,7 +82,10 @@ export async function action({ request }: Route.ActionArgs) {
   return { success: true };
 }
 
-export default function Login({ actionData }: Route.ComponentProps) {
+export default function Login({
+  actionData,
+  loaderData,
+}: Route.ComponentProps) {
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (actionData && "success" in actionData && actionData.success)
@@ -96,6 +109,48 @@ export default function Login({ actionData }: Route.ComponentProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
+          <div className="bg-muted/25 rounded-2xl border p-4">
+            <div className="flex items-center justify-between gap-3 text-sm font-black">
+              <span className="flex items-center gap-2">
+                <UsersRoundIcon className="size-4 text-emerald-500" /> 베타 회원
+              </span>
+              <span className="tabular-nums">
+                {Math.min(loaderData.count, loaderData.limit)}/
+                {loaderData.limit}명
+              </span>
+            </div>
+            <div className="bg-muted mt-3 h-2 overflow-hidden rounded-full">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-violet-500 transition-[width]"
+                style={{
+                  width: `${Math.min(100, (loaderData.count / loaderData.limit) * 100)}%`,
+                }}
+              />
+            </div>
+            <p className="text-muted-foreground mt-2 text-xs leading-5">
+              {loaderData.isFull
+                ? "베타 정원이 마감되어 기존 회원만 로그인할 수 있어요."
+                : `${loaderData.remaining}명이 더 베타에 참여할 수 있어요.`}
+            </p>
+          </div>
+
+          {loaderData.isFull && (
+            <Alert className="border-amber-500/30 bg-amber-500/[0.08]">
+              <LockKeyholeIcon className="size-4 text-amber-500" />
+              <AlertTitle>신규 가입이 마감됐어요</AlertTitle>
+              <AlertDescription className="leading-6">
+                기존 회원은 이메일·Google·Kakao로 계속 로그인할 수 있어요. 새로
+                방문하셨다면 로그인 없이 빠른 분석을 이용해 주세요.
+                <Link
+                  to="/"
+                  className="mt-2 block font-black text-amber-600 underline underline-offset-4 dark:text-amber-400"
+                >
+                  빠른 분석 이용하기
+                </Link>
+              </AlertDescription>
+            </Alert>
+          )}
+
           <Form ref={formRef} method="post" className="grid gap-4">
             <div className="grid gap-2">
               <Label htmlFor="email">이메일</Label>

@@ -17,6 +17,10 @@ import { data, redirect } from "react-router";
 import { z } from "zod";
 
 import makeServerClient from "~/core/lib/supa-client.server";
+import {
+  BETA_MEMBER_CAPACITY_MESSAGE,
+  isBetaMemberCapacityFull,
+} from "~/features/auth/member-capacity.server";
 
 /**
  * Schema for validating URL parameters
@@ -54,6 +58,8 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const origin = requestUrl.origin;
   const mode =
     requestUrl.searchParams.get("mode") === "signup" ? "signup" : "login";
+  if (mode === "signup" && (await isBetaMemberCapacityFull()))
+    return data({ error: BETA_MEMBER_CAPACITY_MESSAGE }, { status: 403 });
 
   // Initialize OAuth flow with the specified provider
   const { data: signInData, error: signInError } =

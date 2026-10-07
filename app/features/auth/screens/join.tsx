@@ -1,6 +1,10 @@
 import type { Route } from "./+types/join";
 
-import { CheckCircle2Icon } from "lucide-react";
+import {
+  CheckCircle2Icon,
+  LockKeyholeIcon,
+  UsersRoundIcon,
+} from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Form, Link, data } from "react-router";
 import { z } from "zod";
@@ -29,6 +33,10 @@ import {
   AuthDivider,
   SocialAuthButtons,
 } from "../components/auth-login-buttons";
+import {
+  BETA_MEMBER_CAPACITY_MESSAGE,
+  getBetaMemberCapacity,
+} from "../member-capacity.server";
 
 export const meta: Route.MetaFunction = () => [
   { title: `회원가입 | ${import.meta.env.VITE_APP_NAME}` },
@@ -49,6 +57,10 @@ function signupErrorMessage(code?: string) {
   return "가입 링크를 보내지 못했어요. 잠시 후 다시 시도해 주세요.";
 }
 
+export async function loader() {
+  return getBetaMemberCapacity();
+}
+
 export async function action({ request }: Route.ActionArgs) {
   const parsed = joinSchema.safeParse(
     Object.fromEntries(await request.formData()),
@@ -58,6 +70,10 @@ export async function action({ request }: Route.ActionArgs) {
       { fieldErrors: parsed.error.flatten().fieldErrors },
       { status: 400 },
     );
+
+  const capacity = await getBetaMemberCapacity();
+  if (capacity.isFull)
+    return data({ error: BETA_MEMBER_CAPACITY_MESSAGE }, { status: 403 });
 
   const [client] = makeServerClient(request);
   const origin = new URL(request.url).origin;
@@ -74,8 +90,17 @@ export async function action({ request }: Route.ActionArgs) {
       },
     },
   });
-  if (error)
-    return data({ error: signupErrorMessage(error.code) }, { status: 400 });
+  if (error) {
+    const latestCapacity = await getBetaMemberCapacity();
+    return data(
+      {
+        error: latestCapacity.isFull
+          ? BETA_MEMBER_CAPACITY_MESSAGE
+          : signupErrorMessage(error.code),
+      },
+      { status: latestCapacity.isFull ? 403 : 400 },
+    );
+  }
 
   return { success: true };
 }
@@ -102,7 +127,7 @@ function TermsNotice() {
   );
 }
 
-export default function Join({ actionData }: Route.ComponentProps) {
+export default function Join({ actionData, loaderData }: Route.ComponentProps) {
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (actionData && "success" in actionData && actionData.success)
@@ -129,6 +154,48 @@ export default function Join({ actionData }: Route.ComponentProps) {
         </CardHeader>
 
         <CardContent className="grid gap-4">
+          <div className="bg-muted/25 rounded-2xl border p-4">
+            <div className="flex items-center justify-between gap-3 text-sm font-black">
+              <span className="flex items-center gap-2">
+                <UsersRoundIcon className="size-4 text-emerald-500" /> 베타 회원
+              </span>
+              <span className="tabular-nums">
+                {Math.min(loaderData.count, loaderData.limit)}/
+                {loaderData.limit}명
+              </span>
+            </div>
+            <div className="bg-muted mt-3 h-2 overflow-hidden rounded-full">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-violet-500 transition-[width]"
+                style={{
+                  width: `${Math.min(100, (loaderData.count / loaderData.limit) * 100)}%`,
+                }}
+              />
+            </div>
+            <p className="text-muted-foreground mt-2 text-xs leading-5">
+              {loaderData.isFull
+                ? "준비한 50개의 베타 자리가 모두 채워졌어요."
+                : `${loaderData.remaining}명이 더 베타에 참여할 수 있어요.`}
+            </p>
+          </div>
+
+          {loaderData.isFull && (
+            <Alert className="border-amber-500/30 bg-amber-500/[0.08]">
+              <LockKeyholeIcon className="size-4 text-amber-500" />
+              <AlertTitle>베타 회원 모집이 마감됐어요</AlertTitle>
+              <AlertDescription className="leading-6">
+                회원가입과 분석 기록 저장은 잠시 닫혀 있어요. 로그인 없이 빠른
+                분석은 계속 이용할 수 있어요.
+                <Link
+                  to="/"
+                  className="mt-2 block font-black text-amber-600 underline underline-offset-4 dark:text-amber-400"
+                >
+                  빠른 분석 이용하기
+                </Link>
+              </AlertDescription>
+            </Alert>
+          )}
+
           <Form ref={formRef} method="post" className="grid gap-4">
             <div className="grid gap-2">
               <Label htmlFor="name">이름</Label>
@@ -140,6 +207,7 @@ export default function Join({ actionData }: Route.ComponentProps) {
                 maxLength={50}
                 placeholder="이름을 입력해 주세요"
                 required
+                disabled={loaderData.isFull}
               />
               {actionData &&
               "fieldErrors" in actionData &&
@@ -157,6 +225,7 @@ export default function Join({ actionData }: Route.ComponentProps) {
                 inputMode="email"
                 placeholder="name@example.com"
                 required
+                disabled={loaderData.isFull}
               />
               {actionData &&
               "fieldErrors" in actionData &&
@@ -167,7 +236,12 @@ export default function Join({ actionData }: Route.ComponentProps) {
 
             <div className="grid gap-3 rounded-xl border p-4">
               <div className="flex items-start gap-2.5">
-                <Checkbox id="terms" name="terms" required />
+                <Checkbox
+                  id="terms"
+                  name="terms"
+                  required
+                  disabled={loaderData.isFull}
+                />
                 <Label
                   htmlFor="terms"
                   className="text-muted-foreground leading-5"
@@ -181,7 +255,11 @@ export default function Join({ actionData }: Route.ComponentProps) {
                 <FormErrors errors={actionData.fieldErrors.terms} />
               ) : null}
               <div className="flex items-start gap-2.5">
-                <Checkbox id="marketing" name="marketing" />
+                <Checkbox
+                  id="marketing"
+                  name="marketing"
+                  disabled={loaderData.isFull}
+                />
                 <Label
                   htmlFor="marketing"
                   className="text-muted-foreground leading-5"
@@ -191,7 +269,11 @@ export default function Join({ actionData }: Route.ComponentProps) {
               </div>
             </div>
 
-            <FormButton label="이메일로 시작하기" className="w-full" />
+            <FormButton
+              label={loaderData.isFull ? "베타 모집 마감" : "이메일로 시작하기"}
+              className="w-full"
+              disabled={loaderData.isFull}
+            />
             {actionData && "error" in actionData && actionData.error ? (
               <FormErrors errors={[actionData.error]} />
             ) : null}
@@ -207,7 +289,7 @@ export default function Join({ actionData }: Route.ComponentProps) {
           </Form>
 
           <AuthDivider />
-          <SocialAuthButtons mode="signup" />
+          <SocialAuthButtons mode="signup" disabled={loaderData.isFull} />
           <p className="text-muted-foreground text-center text-[11px] leading-5">
             소셜 계정의 이름을 사용합니다. <TermsNotice />
           </p>

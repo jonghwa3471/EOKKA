@@ -18,6 +18,10 @@ import { z } from "zod";
 
 import makeServerClient from "~/core/lib/supa-client.server";
 import { recordAdminActivity } from "~/features/admin/activity.server";
+import {
+  BETA_MEMBER_CAPACITY_MESSAGE,
+  isBetaMemberCapacityFull,
+} from "~/features/auth/member-capacity.server";
 
 /**
  * Meta function for the social authentication complete page
@@ -156,7 +160,14 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   // Return error if session exchange fails
   if (error) {
-    return data({ error: error.message }, { status: 400 });
+    const looksLikeNewAccountFailure =
+      /saving new user|sign.?up|create.*user|user.*create/i.test(error.message);
+    const capacityFull =
+      looksLikeNewAccountFailure && (await isBetaMemberCapacityFull());
+    return data(
+      { error: capacityFull ? BETA_MEMBER_CAPACITY_MESSAGE : error.message },
+      { status: capacityFull ? 403 : 400 },
+    );
   }
 
   const user = authData.user;

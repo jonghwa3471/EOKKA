@@ -59,6 +59,7 @@ export default [
     ...prefix("/blog", [route("/og", "features/blog/api/og.tsx")]),
     ...prefix("/admin", [
       route("/announcements", "features/admin/api/announcements.ts"),
+      route("/user-tickets/:userId", "features/admin/api/user-tickets.ts"),
     ]),
     ...prefix("/stocks", [
       route("/search", "features/stocks/api/search.ts"),

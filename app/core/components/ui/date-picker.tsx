@@ -43,6 +43,7 @@ export function DatePicker({
   min,
   max,
   required,
+  readOnly = false,
   onChange,
 }: {
   id: string;
@@ -52,6 +53,7 @@ export function DatePicker({
   min?: string;
   max?: string;
   required?: boolean;
+  readOnly?: boolean;
   onChange?: (value: string) => void;
 }) {
   const controlled = value !== undefined;
@@ -125,10 +127,12 @@ export function DatePicker({
           name={name}
           value={selectedValue}
           placeholder="YYYY-MM-DD"
-          inputMode="numeric"
+          inputMode={readOnly ? "none" : "numeric"}
           required={required}
+          readOnly={readOnly}
+          onClick={() => readOnly && setOpen(true)}
           onChange={(event) => update(event.target.value)}
-          className="pr-11 tabular-nums"
+          className={`pr-11 tabular-nums ${readOnly ? "cursor-pointer caret-transparent" : ""}`}
         />
         <button
           type="button"
