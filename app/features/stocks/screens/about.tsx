@@ -867,8 +867,8 @@ export default function AboutScreen() {
             >
               <SectionHeading
                 eyebrow="06 · EOKKA Pro"
-                title="들어오지 않은 날에도 기록이 이어져요"
-                description="Pro 베타는 목표 하나와 최대 20종목을 저장하고 필요할 때 직접 분석해요. 상세 결과 최근 30개와 압축된 장기 흐름, 주·월·연간 인사이트를 제공해요."
+                title="베타 기간에는 직접 분석해 기록해요"
+                description="Pro 베타에서는 자동 분석을 제공하지 않아요. 목표 하나와 최대 20종목을 저장해 필요할 때 직접 분석하고, 최근 기록 30개와 요약된 장기 흐름을 주·월·연간 인사이트에서 확인할 수 있어요."
               />
               <div className="mt-5 flex flex-wrap gap-2">
                 {[
