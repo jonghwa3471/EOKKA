@@ -94,10 +94,10 @@ export default function SubscriptionCheckout({
           </div>
           <ul className="mt-7 grid gap-3 text-sm font-semibold sm:grid-cols-2">
             {[
-              "분석 기록 제한 없이 보관",
-              "목표 금액 최대 3개 저장",
-              "거래일마다 모든 목표 자동 분석",
-              "수동 분석 하루 15회",
+              "최대 20종목 분석",
+              "목표 금액 1개 저장",
+              "상세 기록 30개 · 장기 흐름 보관",
+              "수동 분석 하루 5회",
             ].map((feature) => (
               <li key={feature} className="flex items-center gap-2">
                 <CheckIcon className="size-4 text-emerald-500" /> {feature}

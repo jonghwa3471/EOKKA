@@ -673,6 +673,20 @@ export default function AnalysisHistory({ loaderData }: Route.ComponentProps) {
           )}
         </header>
 
+        <div className="mt-6 flex items-start gap-3 rounded-2xl border border-violet-500/20 bg-violet-500/[0.06] p-4 text-sm leading-6">
+          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-violet-500/12 text-violet-500">
+            <Clock3Icon className="size-4" />
+          </span>
+          <div>
+            <p className="font-black">최근 분석 기록 30개만 상세 보관해요</p>
+            <p className="text-muted-foreground mt-1">
+              30개를 넘으면 오래된 기록부터 상세 결과가 삭제되어 다시 열어볼 수
+              없어요. 대신 요약 정보는 남아 전체 기간 차트와 연간 인사이트에
+              반영돼요.
+            </p>
+          </div>
+        </div>
+
         {managedStartedOn && hasQuickHistory && (
           <div className="mt-6 rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.06] p-4 text-sm leading-6">
             <p className="font-black">

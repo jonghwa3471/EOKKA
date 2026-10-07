@@ -149,7 +149,7 @@ const comparison = [
   {
     feature: "분석 기록 보관",
     free: "저장하지 않음",
-    pro: "상세 30개 · 흐름 계속 보관",
+    pro: "최근 30개 · 이전 기록은 요약 보관",
   },
   {
     feature: "수동 분석",
@@ -376,8 +376,7 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
               함께한 시간만큼 배지가 자라요
             </h2>
             <p className="text-muted-foreground mt-2 text-sm leading-6">
-              결제가 완료된 누적 구독 개월에 따라 프로필에 새로운 배지가
-              표시돼요.
+              Pro와 함께한 기간에 따라 프로필에 새로운 배지가 표시돼요.
             </p>
           </div>
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -433,9 +432,9 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
               무료와 Pro, 무엇이 다른가요?
             </h2>
             <p className="text-muted-foreground mt-2 text-sm">
-              무료에서는 최대 10종목을 직접 분석하고 결과를 바로 확인해요.
-              Pro에서는 더 많은 종목과 목표를 기록으로 남기고, 최신 종가 분석과
-              기간별 인사이트까지 자동으로 이어가요.
+              무료에서는 최대 10종목을 직접 분석하고 결과를 바로 확인해요. Pro
+              베타에서는 최대 20종목과 목표 하나를 기록으로 남기고, 직접 분석한
+              흐름을 기간별 인사이트로 확인해요.
             </p>
           </div>
           <div className="bg-card mt-6 overflow-x-auto rounded-3xl border">
@@ -465,8 +464,8 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
                     <span className="text-muted-foreground flex justify-center text-center">
                       {item.free}
                     </span>
-                    <span className="flex items-center justify-center gap-1.5 text-center font-black text-amber-700 dark:text-amber-300">
-                      <CheckIcon className="size-4" />
+                    <span className="flex items-start justify-center gap-1.5 text-center leading-6 font-black text-amber-700 dark:text-amber-300">
+                      <CheckIcon className="mt-1 size-4 shrink-0" />
                       {item.pro}
                     </span>
                   </div>
@@ -514,8 +513,8 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
           <p className="mt-3 font-black">EOKKA Pro는 아직 베타 단계예요</p>
           <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-6 break-keep">
             완벽한 서비스라고 약속하기보다 실제 사용 경험을 바탕으로 분석과 기록
-            기능을 꾸준히 개선하겠습니다. 구독은 언제든 해지할 수 있고 결제한
-            기간까지 계속 이용할 수 있어요.
+            기능을 꾸준히 개선하겠습니다. 현재 베타 체험은 결제 없이 이용할 수
+            있어요.
           </p>
           <Button asChild variant="outline" className="mt-5 rounded-full">
             <Link to="/dashboard">

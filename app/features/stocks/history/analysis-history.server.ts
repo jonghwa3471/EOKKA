@@ -33,7 +33,7 @@ export class FreeGoalConflictError extends Error {
   readonly code = "FREE_GOAL_CONFLICT";
 
   constructor(readonly currentGoalAmount: number) {
-    super("무료 플랜에서는 목표 금액을 하나만 저장할 수 있어요.");
+    super("현재 베타에서는 목표 금액을 하나만 저장할 수 있어요.");
   }
 }
 
@@ -41,7 +41,7 @@ export class ProGoalLimitError extends Error {
   readonly code = "PRO_GOAL_LIMIT";
 
   constructor() {
-    super("EOKKA Pro에서는 목표 금액을 최대 3개까지 저장할 수 있어요.");
+    super("EOKKA Pro 베타에서는 목표 금액을 하나만 저장할 수 있어요.");
   }
 }
 
@@ -49,17 +49,10 @@ export async function getFreeAccountGoalAmount(userId: string) {
   const [profile] = await db
     .select({
       preferredGoalAmount: profiles.preferred_goal_amount,
-      proExpiresAt: profiles.pro_expires_at,
     })
     .from(profiles)
     .where(eq(profiles.profile_id, userId))
     .limit(1);
-  if (
-    profile?.proExpiresAt !== null &&
-    profile?.proExpiresAt !== undefined &&
-    profile.proExpiresAt.getTime() > Date.now()
-  )
-    return null;
   if (profile?.preferredGoalAmount != null) return profile.preferredGoalAmount;
   const [latest] = await db
     .select({ goalAmount: analysisSnapshots.goal_amount })
@@ -82,22 +75,6 @@ export async function assertFreeAccountGoal({
   goalAmount: number;
   replaceExistingGoal: boolean;
 }) {
-  const [profile] = await db
-    .select({ proExpiresAt: profiles.pro_expires_at })
-    .from(profiles)
-    .where(eq(profiles.profile_id, userId))
-    .limit(1);
-  const isPro =
-    profile?.proExpiresAt != null &&
-    profile.proExpiresAt.getTime() > Date.now();
-  if (isPro) {
-    const activeGoals = new Set(
-      (await getActiveAnalysisHistory(userId)).map((item) => item.goalAmount),
-    );
-    if (!activeGoals.has(goalAmount) && activeGoals.size >= 3)
-      throw new ProGoalLimitError();
-    return null;
-  }
   const currentGoalAmount = await getFreeAccountGoalAmount(userId);
   if (
     currentGoalAmount != null &&

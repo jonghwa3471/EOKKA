@@ -518,13 +518,13 @@ function ProPreview({ phase }: { phase: number }) {
       <div className="p-5">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-black">최신 종가 자동 분석</p>
+            <p className="text-xs font-black">최신 종가 직접 분석</p>
             <p className="text-muted-foreground mt-1 text-[10px]">
-              저장한 목표 3개를 거래일마다 갱신
+              저장한 목표 1개를 필요할 때 갱신
             </p>
           </div>
           <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-[10px] font-black text-emerald-500">
-            자동 실행 중
+            하루 5회
           </span>
         </div>
         <div className="mt-4 grid grid-cols-5 gap-2">
@@ -895,7 +895,7 @@ export default function AboutScreen() {
                   {
                     icon: BellIcon,
                     title: "알림",
-                    text: "자동 분석 완료, 도전과제 달성, 문의 답변 같은 중요한 변화를 모아 확인해요.",
+                    text: "분석 기록 갱신, 도전과제 달성, 문의 답변 같은 중요한 변화를 모아 확인해요.",
                   },
                   {
                     icon: UserRoundIcon,

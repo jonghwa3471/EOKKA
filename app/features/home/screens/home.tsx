@@ -1774,7 +1774,7 @@ export default function Home() {
         description={
           goalConflict ? (
             <>
-              무료 플랜에서는 목표 금액을 하나만 저장할 수 있어요. 현재 목표
+              현재 베타에서는 목표 금액을 하나만 저장할 수 있어요. 현재 목표
               <strong> {formatKoreanMoney(goalConflict.currentGoal)}</strong>을
               <strong> {formatKoreanMoney(goalConflict.nextGoal)}</strong>으로
               바꾸면 이전 목표의 분석 기록이 삭제됩니다.
@@ -2258,9 +2258,9 @@ export default function Home() {
                         </p>
                         {isPro && !managedAnalysisActive && (
                           <p className="mt-2 text-xs font-bold text-amber-600 dark:text-amber-400">
-                            Pro에서는 목표 금액을 최대 3개까지 저장하며, 저장된
-                            모든 목표를 자동 분석해요. 현재 {savedGoalCount}/3개
-                            사용 중이에요.
+                            Pro 베타에서는 목표 금액 하나를 저장하고 필요할 때
+                            직접 분석해 기록을 이어가요. 현재 {savedGoalCount}
+                            /1개 사용 중이에요.
                           </p>
                         )}
                         <div className="mt-4 flex flex-col gap-3 sm:flex-row">

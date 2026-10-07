@@ -3,7 +3,6 @@ import { createHmac, randomUUID } from "node:crypto";
 
 import db from "~/core/db/drizzle-client.server";
 import { analysisRateLimits } from "~/features/stocks/history/schema";
-import { profiles } from "~/features/users/schema";
 
 type RateLimitOptions = {
   key: string;
@@ -163,16 +162,8 @@ function durableIdentifiers(
   };
 }
 
-async function manualAnalysisLimit(userId: string | null) {
-  if (!userId) return 5;
-  const [profile] = await db
-    .select({ proExpiresAt: profiles.pro_expires_at })
-    .from(profiles)
-    .where(sql`${profiles.profile_id} = ${userId}`)
-    .limit(1);
-  return profile?.proExpiresAt && profile.proExpiresAt.getTime() > Date.now()
-    ? 15
-    : 5;
+async function manualAnalysisLimit(_userId: string | null) {
+  return 5;
 }
 
 function rateLimitSecret() {

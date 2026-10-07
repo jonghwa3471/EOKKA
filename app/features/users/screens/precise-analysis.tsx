@@ -6,14 +6,12 @@ import {
   Clock3Icon,
   CrownIcon,
   SparklesIcon,
-  Trash2Icon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Form, Link, data, redirect, useActionData } from "react-router";
 import { z } from "zod";
 
 import ConfirmDialog from "~/core/components/confirm-dialog";
-import { DestructiveConfirmDialog } from "~/core/components/destructive-confirm-dialog";
 import { Button } from "~/core/components/ui/button";
 import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
@@ -41,7 +39,6 @@ import {
   FreeGoalConflictError,
   ProGoalLimitError,
   assertFreeAccountGoal,
-  deleteActiveAnalysisGoal,
   getAnalysisHistory,
   getFreeAccountGoalAmount,
   getPreferredGoalAmount,
@@ -103,8 +100,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       defaultGoalAmount: 100_000_000,
       defaultMonthlyContribution: 0,
       accountGoalAmount: null,
-      savedGoalCount: 0,
-      savedGoals: [],
       analysisAsOfPreview: null,
       hasUnappliedChanges: false,
     };
@@ -123,10 +118,6 @@ export async function loader({ request }: Route.LoaderArgs) {
           record.managedPortfolioId === managed.portfolio.managed_portfolio_id,
       )
     : [];
-  const activeHistory =
-    managed?.portfolio.status === "active"
-      ? managedHistory
-      : history.filter((record) => record.analysisMode === "quick");
   const preferredHistory = preferredGoal
     ? managedHistory.filter((record) => record.goalAmount === preferredGoal)
     : [];
@@ -145,17 +136,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     getStockMarketMode() === "domestic"
       ? await getLatestCachedMarketDate()
       : null;
-  const savedGoals = [
-    ...new Set(activeHistory.map((record) => record.goalAmount)),
-  ]
-    .sort((a, b) => a - b)
-    .map((goalAmount) => ({
-      goalAmount,
-      recordCount: activeHistory.filter(
-        (record) => record.goalAmount === goalAmount,
-      ).length,
-    }));
-
   return {
     managed,
     holdings,
@@ -163,8 +143,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     defaultMonthlyContribution: latest?.monthlyContribution ?? 0,
     accountGoalAmount,
     isPro: true as const,
-    savedGoalCount: savedGoals.length,
-    savedGoals,
     analysisAsOfPreview: latestCachedMarketDate ?? latest?.result.asOf ?? null,
     hasUnappliedChanges: Boolean(
       managed?.portfolio.status === "active" &&
@@ -200,19 +178,6 @@ export async function action({ request }: Route.ActionArgs) {
 
   try {
     const formData = await request.formData();
-    const intent = String(formData.get("intent") ?? "analyze-managed");
-    if (intent === "delete-goal") {
-      const goalAmount = Number(formData.get("goalAmount"));
-      if (!Number.isSafeInteger(goalAmount) || goalAmount <= 0)
-        throw new Error("삭제할 목표 금액이 올바르지 않아요.");
-      const deletion = await deleteActiveAnalysisGoal({
-        userId: user.id,
-        goalAmount,
-      });
-      if (deletion.deletedCount === 0)
-        throw new Error("이미 삭제되었거나 존재하지 않는 목표예요.");
-      return redirect("/dashboard/precise-analysis");
-    }
     const managed = await getManagedPortfolio(user.id);
     if (!managed)
       throw new Error("먼저 내 포트폴리오에서 매매일지를 작성해 주세요.");
@@ -416,7 +381,7 @@ function PreciseAnalysisContent({
         description={
           goalChange ? (
             <>
-              무료 플랜에서는 목표 금액을 하나만 저장할 수 있어요. 현재 목표
+              현재 베타에서는 목표 금액을 하나만 저장할 수 있어요. 현재 목표
               <strong> {moneyLabel(goalChange.current)}</strong>을
               <strong> {moneyLabel(goalChange.requested)}</strong>으로 바꾸면
               이전 목표의 분석 기록이 삭제됩니다.
@@ -589,9 +554,7 @@ function PreciseAnalysisContent({
                   const requestedGoal = Number(
                     new FormData(event.currentTarget).get("goalAmount"),
                   );
-                  const currentGoal = !loaderData.isPro
-                    ? loaderData.accountGoalAmount
-                    : null;
+                  const currentGoal = loaderData.accountGoalAmount;
                   if (
                     currentGoal == null ||
                     requestedGoal === currentGoal ||
@@ -607,59 +570,6 @@ function PreciseAnalysisContent({
               >
                 <input type="hidden" name="intent" value="analyze-managed" />
                 <input type="hidden" name="replaceExistingGoal" value="" />
-                {loaderData.isPro && (
-                  <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-3 sm:col-span-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-xs leading-5 font-bold text-amber-700 dark:text-amber-300">
-                        Pro에서는 목표 금액을 최대 3개까지 저장하며, 저장된 모든
-                        목표를 자동 분석해요.
-                      </p>
-                      <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[11px] font-black text-amber-700 tabular-nums dark:text-amber-300">
-                        {loaderData.savedGoalCount}/3개 사용 중
-                      </span>
-                    </div>
-                    {loaderData.savedGoals.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-2 border-t border-amber-500/15 pt-3">
-                        {loaderData.savedGoals.map((savedGoal) => (
-                          <div
-                            key={savedGoal.goalAmount}
-                            className="bg-background/70 flex items-center gap-2 rounded-xl border px-3 py-2 shadow-sm"
-                          >
-                            <div>
-                              <p className="text-xs font-black">
-                                {moneyLabel(savedGoal.goalAmount)}
-                              </p>
-                              <p className="text-muted-foreground mt-0.5 text-[10px]">
-                                분석 기록 {savedGoal.recordCount}개
-                              </p>
-                            </div>
-                            <DestructiveConfirmDialog
-                              title={`${moneyLabel(savedGoal.goalAmount)} 목표를 삭제할까요?`}
-                              description={`이 목표에 저장된 분석 기록 ${savedGoal.recordCount}개가 모두 삭제되고 자동 분석 대상에서도 제외됩니다. 삭제한 기록은 복구할 수 없어요.`}
-                              confirmLabel="목표 삭제"
-                              fields={{
-                                intent: "delete-goal",
-                                goalAmount: savedGoal.goalAmount,
-                              }}
-                              trigger={
-                                <Button
-                                  type="button"
-                                  size="icon"
-                                  variant="ghost"
-                                  className="text-muted-foreground size-8 rounded-lg hover:bg-red-500/10 hover:text-red-500"
-                                  aria-label={`${moneyLabel(savedGoal.goalAmount)} 목표 삭제`}
-                                  title="이 목표 삭제"
-                                >
-                                  <Trash2Icon className="size-3.5" />
-                                </Button>
-                              }
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
                 <div className="space-y-2">
                   <Label htmlFor="goalAmount">목표 금액</Label>
                   <Input

@@ -215,7 +215,7 @@ const pageCopy: Partial<
   pro: {
     eyebrow: "EOKKA PRO",
     title: "기록이 쌓일수록 더 선명해지는 투자 흐름",
-    description: "자동 분석과 장기 기록으로 포트폴리오 변화를 이어서 확인해요.",
+    description: "직접 분석한 장기 기록으로 포트폴리오 변화를 이어서 확인해요.",
   },
   home: {
     eyebrow: "EOKKA",
@@ -789,17 +789,17 @@ function ProSkeleton() {
             <CrownIcon className="size-3.5" /> EOKKA Pro 베타
           </div>
           <h1 className="mt-5 max-w-2xl text-3xl leading-tight font-black tracking-tight text-balance md:text-5xl">
-            기록은 자동으로,
+            기록은 차곡차곡,
             <br />
             투자 판단은 더 차분하게
           </h1>
           <p className="text-muted-foreground mt-4 max-w-2xl text-sm leading-7 break-keep md:text-base">
-            거래일마다 최신 종가로 포트폴리오를 기록하고, 쌓인 변화를 주간과
-            월간 인사이트로 확인하세요. 아직 성장 중인 베타 서비스라 부담 없는
-            가격으로 시작해요.
+            필요할 때 최신 종가로 포트폴리오를 분석하고, 쌓인 변화를
+            주간·월간·연간 인사이트로 확인하세요. 베타 기간에는 결제 없이 경험할
+            수 있어요.
           </p>
           <div className="mt-6 flex flex-wrap gap-2">
-            {["자동 분석", "기간 제한 없음"].map((benefit) => (
+            {["상세 기록 30개", "장기 흐름 보관", "하루 5회"].map((benefit) => (
               <span
                 key={benefit}
                 className="bg-background/70 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold"
@@ -870,10 +870,10 @@ function PaymentsSkeleton() {
 
 function CheckoutSkeleton() {
   const features = [
-    "분석 기록 제한 없이 보관",
-    "목표 금액 최대 3개 저장",
-    "거래일마다 모든 목표 자동 분석",
-    "수동 분석 하루 15회",
+    "최대 20종목 분석",
+    "목표 금액 1개 저장",
+    "상세 기록 30개 · 장기 흐름 보관",
+    "수동 분석 하루 5회",
   ];
 
   return (
