@@ -14,10 +14,12 @@ export function DeveloperPortfolioGiftDialog({
   open,
   onOpenChange,
   preview = false,
+  beta = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   preview?: boolean;
+  beta?: boolean;
 }) {
   const giftButtonContent = (
     <>
@@ -45,12 +47,14 @@ export function DeveloperPortfolioGiftDialog({
               A GIFT FOR YOU
             </p>
             <DialogTitle className="mt-2 text-2xl font-black tracking-[-0.035em]">
-              결제해 주셔서 감사합니다!
+              {beta
+                ? "Pro 베타 체험을 시작했어요!"
+                : "결제해 주셔서 감사합니다!"}
             </DialogTitle>
             <DialogDescription className="mt-3 text-sm leading-6 font-medium">
-              감사의 마음을 담아 작은 선물을 준비했어요. 개발자가 실제로
-              투자하고 있는 주식 포트폴리오와 그동안 쌓아온 장기 투자 경험을
-              Pro 회원님께만 공개할게요.
+              {beta
+                ? "베타 체험에 함께해 주셔서 감사해요. 개발자가 실제로 투자하고 있는 주식 포트폴리오와 그동안 쌓아온 장기 투자 경험을 선물로 공개할게요."
+                : "감사의 마음을 담아 작은 선물을 준비했어요. 개발자가 실제로 투자하고 있는 주식 포트폴리오와 그동안 쌓아온 장기 투자 경험을 Pro 회원님께만 공개할게요."}
             </DialogDescription>
           </DialogHeader>
           {preview ? (

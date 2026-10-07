@@ -19,6 +19,7 @@ export type NotificationType =
   | "achievement_unlocked"
   | "payment_completed"
   | "payment_failed"
+  | "beta_pro_started"
   | "pro_gift_unlocked"
   | "subscription_renewal_upcoming"
   | "subscription_cancelled";

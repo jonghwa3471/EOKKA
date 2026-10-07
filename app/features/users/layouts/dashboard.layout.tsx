@@ -123,10 +123,16 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 type DashboardLayoutLoaderData = Awaited<ReturnType<typeof loader>>;
-export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
+export async function clientLoader({
+  request,
+  serverLoader,
+}: Route.ClientLoaderArgs) {
+  const betaJustStarted =
+    new URL(request.url).searchParams.get("beta") === "started";
   return loadCachedRouteData<DashboardLayoutLoaderData>(
     "dashboard-layout",
     async () => serverLoader() as Promise<DashboardLayoutLoaderData>,
+    { maxAgeMs: betaJustStarted ? 0 : undefined },
   );
 }
 

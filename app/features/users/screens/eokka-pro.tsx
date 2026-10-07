@@ -1,6 +1,6 @@
 import type { Route } from "./+types/eokka-pro";
 
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import {
   InfinityIcon,
   ArrowRightIcon,
@@ -26,11 +26,13 @@ import {
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
 import { isAdmin } from "~/features/admin/admin.server";
+import { createNotification } from "~/features/notifications/notifications.server";
 import { getPayments } from "~/features/payments/queries";
 
 import { getAutomaticAnalysisSettings } from "../automatic-analysis-settings.server";
 import { DeveloperPortfolioGiftDialog } from "../components/developer-portfolio-gift-dialog";
 import { proTenureToneStyles } from "../components/pro-tenure-badge";
+import { createDeveloperPortfolioGiftNotification } from "../developer-portfolio-gift.server";
 import { PRO_TENURE_BADGES } from "../pro-tenure";
 import { profiles } from "../schema";
 
@@ -66,6 +68,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     isPaidPro: "isPaidPro" in settings && settings.isPaidPro,
     isBetaPro: "isBetaPro" in settings && settings.isBetaPro,
     giftRequested: new URL(request.url).searchParams.get("gift") === "1",
+    betaJustStarted:
+      new URL(request.url).searchParams.get("beta") === "started",
     developerPortfolioGiftRevealed:
       "developerPortfolioGiftRevealedAt" in settings &&
       Boolean(settings.developerPortfolioGiftRevealedAt),
@@ -88,11 +92,33 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   if (formData.get("intent") !== "start-beta-pro")
     throw new Response("Invalid intent", { status: 400 });
-  await db
+  const [started] = await db
     .update(profiles)
     .set({ beta_pro_started_at: new Date(), updated_at: new Date() })
-    .where(eq(profiles.profile_id, user.id));
-  return redirect("/dashboard/pro?beta=started");
+    .where(
+      and(
+        eq(profiles.profile_id, user.id),
+        isNull(profiles.beta_pro_started_at),
+      ),
+    )
+    .returning({ id: profiles.profile_id });
+  if (!started) return redirect("/dashboard/pro");
+  try {
+    await Promise.all([
+      createNotification({
+        userId: user.id,
+        type: "beta_pro_started",
+        title: "EOKKA Pro 베타 체험을 시작했어요",
+        message:
+          "이제 내 포트폴리오와 정밀 분석, 최근 상세 기록 30개와 장기 투자 인사이트를 이용할 수 있어요.",
+        href: "/dashboard/pro",
+      }),
+      createDeveloperPortfolioGiftNotification(user.id),
+    ]);
+  } catch (error) {
+    console.error("Beta Pro notification creation failed", error);
+  }
+  return redirect("/dashboard/pro?beta=started&gift=1");
 }
 
 type EokkaProLoaderData = Awaited<ReturnType<typeof loader>>;
@@ -152,7 +178,9 @@ function koreanDate(value: string) {
 }
 
 export default function EokkaPro({ loaderData }: Route.ComponentProps) {
-  const [giftPreviewOpen, setGiftPreviewOpen] = useState(false);
+  const [giftPreviewOpen, setGiftPreviewOpen] = useState(
+    loaderData.betaJustStarted,
+  );
   usePrimeRouteDataCache("eokka-pro", loaderData);
   return (
     <main className="flex flex-1 flex-col px-5 pt-8 pb-12 md:px-8 md:pt-12">
@@ -499,7 +527,8 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
       <DeveloperPortfolioGiftDialog
         open={giftPreviewOpen}
         onOpenChange={setGiftPreviewOpen}
-        preview
+        preview={!loaderData.betaJustStarted}
+        beta={loaderData.betaJustStarted}
       />
     </main>
   );

@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, isNotNull, isNull, or } from "drizzle-orm";
 
 import db from "~/core/db/drizzle-client.server";
 import { createNotification } from "~/features/notifications/notifications.server";
@@ -17,7 +17,10 @@ export async function revealDeveloperPortfolioGift(userId: string) {
     .where(
       and(
         eq(profiles.profile_id, userId),
-        gt(profiles.pro_expires_at, now),
+        or(
+          gt(profiles.pro_expires_at, now),
+          isNotNull(profiles.beta_pro_started_at),
+        ),
         isNull(profiles.developer_portfolio_gift_revealed_at),
       ),
     )
@@ -28,12 +31,16 @@ export async function revealDeveloperPortfolioGift(userId: string) {
   const [profile] = await db
     .select({
       proExpiresAt: profiles.pro_expires_at,
+      betaProStartedAt: profiles.beta_pro_started_at,
       revealedAt: profiles.developer_portfolio_gift_revealed_at,
     })
     .from(profiles)
     .where(eq(profiles.profile_id, userId))
     .limit(1);
-  if (!profile?.proExpiresAt || profile.proExpiresAt <= now)
+  if (
+    !profile?.betaProStartedAt &&
+    (!profile?.proExpiresAt || profile.proExpiresAt <= now)
+  )
     throw new Error("EOKKA Pro 이용자만 선물을 열 수 있어요.");
   return { revealed: Boolean(profile.revealedAt), newlyRevealed: false };
 }

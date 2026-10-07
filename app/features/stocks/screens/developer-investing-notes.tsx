@@ -36,7 +36,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   } = await client.auth.getUser();
   if (!user) throw redirect("/login");
   const settings = await getAutomaticAnalysisSettings(user.id);
-  if (!settings.isPaidPro) throw redirect("/dashboard/pro");
+  if (!settings.isPro) throw redirect("/dashboard/pro");
   if (!settings.developerPortfolioGiftRevealedAt && !(await isAdmin(user.id)))
     throw redirect("/dashboard/pro");
   return {};
