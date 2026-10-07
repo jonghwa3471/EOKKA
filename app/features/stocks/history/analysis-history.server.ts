@@ -7,18 +7,25 @@ import { managedPortfolios } from "~/features/stocks/portfolio/schema";
 import { syncUserAchievements } from "~/features/users/achievements.server";
 import { profiles } from "~/features/users/schema";
 
-import { analysisSnapshots } from "./schema";
+import { analysisHistoryPoints, analysisSnapshots } from "./schema";
 
 export const FREE_HISTORY_LIMIT = 30;
+const DAILY_HISTORY_DAYS = 90;
+const WEEKLY_HISTORY_DAYS = 365;
 
-async function hasActivePro(userId: string) {
+async function hasHistoryAccess(userId: string) {
   const [profile] = await db
-    .select({ proExpiresAt: profiles.pro_expires_at })
+    .select({
+      proExpiresAt: profiles.pro_expires_at,
+      betaProStartedAt: profiles.beta_pro_started_at,
+    })
     .from(profiles)
     .where(eq(profiles.profile_id, userId))
     .limit(1);
-  return (
-    profile?.proExpiresAt != null && profile.proExpiresAt.getTime() > Date.now()
+  return Boolean(
+    profile?.betaProStartedAt ||
+      (profile?.proExpiresAt != null &&
+        profile.proExpiresAt.getTime() > Date.now()),
   );
 }
 
@@ -121,6 +128,141 @@ function jsonSafeResult(result: AnalysisResult) {
   return JSON.parse(JSON.stringify(result)) as AnalysisResult;
 }
 
+function compactHistoryResult(result: AnalysisResult): AnalysisResult {
+  const sampledChart = result.chart.filter(
+    (point, index, points) =>
+      index === 0 || index === points.length - 1 || point.month % 12 === 0,
+  );
+  return jsonSafeResult({
+    ...result,
+    holdings: result.holdings.map(
+      ({
+        fundamentals: _fundamentals,
+        purchasePosition: _position,
+        ...holding
+      }) => holding,
+    ),
+    chart: sampledChart,
+    contributionChart: undefined,
+    aiStrategy: null,
+    summary: [],
+    riskWarnings: [],
+  });
+}
+
+async function saveAnalysisHistoryPoint({
+  userId,
+  result,
+  analysisMode,
+  managedPortfolioId,
+}: {
+  userId: string;
+  result: AnalysisResult;
+  analysisMode: "quick" | "managed";
+  managedPortfolioId: number | null;
+}) {
+  const values = {
+    user_id: userId,
+    saved_on: result.asOf,
+    period_kind: "daily",
+    goal_amount: Math.round(result.goalAmount),
+    current_value: Math.round(result.currentValue),
+    total_cost: Math.round(result.totalCost),
+    profit: Math.round(result.profit),
+    return_rate: result.returnRate,
+    goal_month: goalMonthFor(result),
+    monthly_contribution: Math.round(result.monthlyContribution),
+    analysis_mode: analysisMode,
+    managed_portfolio_id: managedPortfolioId,
+    metrics: compactHistoryResult(result),
+    updated_at: new Date(),
+  };
+  const updated = await db
+    .update(analysisHistoryPoints)
+    .set(values)
+    .where(
+      and(
+        eq(analysisHistoryPoints.user_id, userId),
+        eq(analysisHistoryPoints.goal_amount, values.goal_amount),
+        eq(analysisHistoryPoints.saved_on, values.saved_on),
+        eq(analysisHistoryPoints.analysis_mode, analysisMode),
+      ),
+    )
+    .returning({ id: analysisHistoryPoints.analysis_history_point_id });
+  if (updated.length === 0)
+    await db.insert(analysisHistoryPoints).values(values);
+}
+
+/**
+ * Keep recent points daily, then retain one closing point per ISO week and,
+ * after a year, one closing point per month. Full AI reports are unaffected.
+ */
+export async function compactAnalysisHistory(userId?: string) {
+  const scope = userId
+    ? sql`where ${analysisHistoryPoints.user_id} = ${userId}`
+    : sql``;
+  await db.execute(sql`
+    with ranked as (
+      select
+        ${analysisHistoryPoints.analysis_history_point_id} as id,
+        case
+          when ${analysisHistoryPoints.saved_on} >= current_date - ${DAILY_HISTORY_DAYS} then 'daily'
+          when ${analysisHistoryPoints.saved_on} >= current_date - ${WEEKLY_HISTORY_DAYS} then 'weekly'
+          else 'monthly'
+        end as period_kind,
+        row_number() over (
+          partition by
+            ${analysisHistoryPoints.user_id},
+            ${analysisHistoryPoints.goal_amount},
+            ${analysisHistoryPoints.analysis_mode},
+            coalesce(${analysisHistoryPoints.managed_portfolio_id}, 0),
+            case
+              when ${analysisHistoryPoints.saved_on} >= current_date - ${DAILY_HISTORY_DAYS}
+                then ${analysisHistoryPoints.saved_on}::text
+              when ${analysisHistoryPoints.saved_on} >= current_date - ${WEEKLY_HISTORY_DAYS}
+                then to_char(${analysisHistoryPoints.saved_on}, 'IYYY-IW')
+              else to_char(${analysisHistoryPoints.saved_on}, 'YYYY-MM')
+            end
+          order by ${analysisHistoryPoints.saved_on} desc,
+            ${analysisHistoryPoints.analysis_history_point_id} desc
+        ) as bucket_rank
+      from ${analysisHistoryPoints}
+      ${scope}
+    ), deleted as (
+      delete from ${analysisHistoryPoints}
+      where ${analysisHistoryPoints.analysis_history_point_id} in (
+        select id from ranked where bucket_rank > 1
+      )
+    )
+    update ${analysisHistoryPoints} as points
+    set period_kind = ranked.period_kind
+    from ranked
+    where points.analysis_history_point_id = ranked.id
+      and ranked.bucket_rank = 1
+  `);
+}
+
+async function pruneDetailedAnalysisHistory(userId: string) {
+  await db.execute(sql`
+    delete from ${analysisSnapshots}
+    where ${analysisSnapshots.analysis_snapshot_id} in (
+      select analysis_snapshot_id
+      from (
+        select
+          ${analysisSnapshots.analysis_snapshot_id} as analysis_snapshot_id,
+          row_number() over (
+            partition by ${analysisSnapshots.user_id}
+            order by ${analysisSnapshots.saved_on} desc,
+              ${analysisSnapshots.analysis_snapshot_id} desc
+          ) as record_number
+        from ${analysisSnapshots}
+        where ${analysisSnapshots.user_id} = ${userId}
+      ) ranked_snapshots
+      where record_number > ${FREE_HISTORY_LIMIT}
+    )
+  `);
+}
+
 function notificationGoalLabel(value: number) {
   return value % 100_000_000 === 0
     ? `${(value / 100_000_000).toLocaleString("ko-KR")}억`
@@ -130,7 +272,7 @@ function notificationGoalLabel(value: number) {
 export async function saveDailyAnalysisSnapshot({
   userId,
   result,
-  hasUnlimitedHistory = true,
+  hasUnlimitedHistory = false,
   analysisMode = "quick",
   managedPortfolioId = null,
   updateSource = "manual",
@@ -144,7 +286,7 @@ export async function saveDailyAnalysisSnapshot({
   updateSource?: "manual" | "automatic";
   replaceOtherGoals?: boolean;
 }) {
-  if (!(await hasActivePro(userId)))
+  if (!(await hasHistoryAccess(userId)))
     throw new Error("분석 기록 저장은 EOKKA Pro에서 이용할 수 있어요.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(result.asOf))
     throw new Error("분석 결과의 종가 기준일이 올바르지 않습니다.");
@@ -173,6 +315,14 @@ export async function saveDailyAnalysisSnapshot({
           and(
             eq(analysisSnapshots.user_id, userId),
             ne(analysisSnapshots.goal_amount, values.goal_amount),
+          ),
+        );
+      await transaction
+        .delete(analysisHistoryPoints)
+        .where(
+          and(
+            eq(analysisHistoryPoints.user_id, userId),
+            ne(analysisHistoryPoints.goal_amount, values.goal_amount),
           ),
         );
       await transaction
@@ -215,27 +365,17 @@ export async function saveDailyAnalysisSnapshot({
     return { id: inserted.id, wasUpdated: false };
   });
 
+  await saveAnalysisHistoryPoint({
+    userId,
+    result,
+    analysisMode,
+    managedPortfolioId,
+  });
+
   if (!hasUnlimitedHistory) {
-    await db.execute(sql`
-      delete from ${analysisSnapshots}
-      where ${analysisSnapshots.analysis_snapshot_id} in (
-        select analysis_snapshot_id
-        from (
-          select
-            ${analysisSnapshots.analysis_snapshot_id} as analysis_snapshot_id,
-            row_number() over (
-              partition by ${analysisSnapshots.goal_amount}, ${analysisSnapshots.analysis_mode}
-              order by
-                ${analysisSnapshots.saved_on} desc,
-                ${analysisSnapshots.analysis_snapshot_id} desc
-            ) as record_number
-          from ${analysisSnapshots}
-          where ${analysisSnapshots.user_id} = ${userId}
-        ) ranked_snapshots
-        where record_number > ${FREE_HISTORY_LIMIT}
-      )
-    `);
+    await pruneDetailedAnalysisHistory(userId);
   }
+  await compactAnalysisHistory(userId);
 
   if (updateSource === "automatic") {
     const href = `/dashboard/history?month=${savedOn.slice(0, 7)}&date=${savedOn}&analysis=${snapshotId.id}`;
@@ -264,7 +404,7 @@ export async function startManagedAnalysisHistory({
   result: AnalysisResult;
   replaceOtherGoals?: boolean;
 }) {
-  if (!(await hasActivePro(userId)))
+  if (!(await hasHistoryAccess(userId)))
     throw new Error("분석 기록 저장은 EOKKA Pro에서 이용할 수 있어요.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(result.asOf))
     throw new Error("분석 결과의 종가 기준일이 올바르지 않습니다.");
@@ -295,6 +435,14 @@ export async function startManagedAnalysisHistory({
             ne(analysisSnapshots.goal_amount, snapshot.goal_amount),
           ),
         );
+      await transaction
+        .delete(analysisHistoryPoints)
+        .where(
+          and(
+            eq(analysisHistoryPoints.user_id, userId),
+            ne(analysisHistoryPoints.goal_amount, snapshot.goal_amount),
+          ),
+        );
     }
     const [inserted] = await transaction
       .insert(analysisSnapshots)
@@ -317,6 +465,15 @@ export async function startManagedAnalysisHistory({
       );
     return inserted.id;
   });
+
+  await saveAnalysisHistoryPoint({
+    userId,
+    result,
+    analysisMode: "managed",
+    managedPortfolioId: portfolioId,
+  });
+  await pruneDetailedAnalysisHistory(userId);
+  await compactAnalysisHistory(userId);
 
   await syncUserAchievements(userId);
 
@@ -364,12 +521,40 @@ export async function getActiveAnalysisHistory(userId: string) {
     .where(eq(managedPortfolios.user_id, userId))
     .limit(1);
   const activeMode = portfolio?.status === "active" ? "managed" : "quick";
-  const history = await getAnalysisHistory(userId);
-  return history.filter(
-    (item) =>
-      item.analysisMode === activeMode &&
-      (activeMode !== "managed" || item.managedPortfolioId === portfolio?.id),
-  );
+  const history = await db
+    .select({
+      id: analysisHistoryPoints.analysis_history_point_id,
+      savedOn: analysisHistoryPoints.saved_on,
+      goalAmount: analysisHistoryPoints.goal_amount,
+      currentValue: analysisHistoryPoints.current_value,
+      profit: analysisHistoryPoints.profit,
+      returnRate: analysisHistoryPoints.return_rate,
+      goalMonth: analysisHistoryPoints.goal_month,
+      monthlyContribution: analysisHistoryPoints.monthly_contribution,
+      analysisMode: analysisHistoryPoints.analysis_mode,
+      managedPortfolioId: analysisHistoryPoints.managed_portfolio_id,
+      result: analysisHistoryPoints.metrics,
+      updatedAt: analysisHistoryPoints.updated_at,
+    })
+    .from(analysisHistoryPoints)
+    .where(
+      and(
+        eq(analysisHistoryPoints.user_id, userId),
+        eq(analysisHistoryPoints.analysis_mode, activeMode),
+        ...(activeMode === "managed" && portfolio?.id
+          ? [eq(analysisHistoryPoints.managed_portfolio_id, portfolio.id)]
+          : []),
+      ),
+    )
+    .orderBy(
+      asc(analysisHistoryPoints.saved_on),
+      asc(analysisHistoryPoints.analysis_history_point_id),
+    );
+  return history.map((item) => ({
+    ...item,
+    updateSource: "history" as const,
+    goalMonth: goalMonthFor(item.result),
+  }));
 }
 
 export async function deleteAnalysisSnapshot({
@@ -391,7 +576,16 @@ export async function deleteAnalysisSnapshot({
       savedOn: analysisSnapshots.saved_on,
       goalAmount: analysisSnapshots.goal_amount,
     });
-  if (deleted[0])
+  if (deleted[0]) {
+    await db
+      .delete(analysisHistoryPoints)
+      .where(
+        and(
+          eq(analysisHistoryPoints.user_id, userId),
+          eq(analysisHistoryPoints.saved_on, deleted[0].savedOn),
+          eq(analysisHistoryPoints.goal_amount, deleted[0].goalAmount),
+        ),
+      );
     await createNotification({
       userId,
       type: "analysis_deleted",
@@ -399,6 +593,7 @@ export async function deleteAnalysisSnapshot({
       message: `${deleted[0].savedOn.replaceAll("-", ".")} ${notificationGoalLabel(deleted[0].goalAmount)} 목표 분석을 삭제했어요.`,
       href: "/dashboard/history",
     });
+  }
 }
 
 export async function deleteAllAnalysisSnapshots(userId: string) {
@@ -406,6 +601,9 @@ export async function deleteAllAnalysisSnapshots(userId: string) {
     .delete(analysisSnapshots)
     .where(eq(analysisSnapshots.user_id, userId))
     .returning({ id: analysisSnapshots.analysis_snapshot_id });
+  await db
+    .delete(analysisHistoryPoints)
+    .where(eq(analysisHistoryPoints.user_id, userId));
   if (deleted.length > 0)
     await createNotification({
       userId,
@@ -438,6 +636,12 @@ export async function deleteActiveAnalysisGoal({
         eq(analysisSnapshots.managed_portfolio_id, portfolio.id),
       )
     : eq(analysisSnapshots.analysis_mode, "quick");
+  const activeHistoryScope = isManaged
+    ? and(
+        eq(analysisHistoryPoints.analysis_mode, "managed"),
+        eq(analysisHistoryPoints.managed_portfolio_id, portfolio.id),
+      )
+    : eq(analysisHistoryPoints.analysis_mode, "quick");
 
   const result = await db.transaction(async (transaction) => {
     const deleted = await transaction
@@ -451,6 +655,15 @@ export async function deleteActiveAnalysisGoal({
       )
       .returning({ id: analysisSnapshots.analysis_snapshot_id });
     if (deleted.length === 0) return { deletedCount: 0, nextGoalAmount: null };
+    await transaction
+      .delete(analysisHistoryPoints)
+      .where(
+        and(
+          eq(analysisHistoryPoints.user_id, userId),
+          eq(analysisHistoryPoints.goal_amount, goalAmount),
+          activeHistoryScope,
+        ),
+      );
 
     const [profile] = await transaction
       .select({

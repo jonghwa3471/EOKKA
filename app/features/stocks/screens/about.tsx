@@ -89,8 +89,7 @@ const featureGroups = [
   {
     title: "변화를 돌아볼 때",
     icon: CalendarDaysIcon,
-    description:
-      "기간별 자산 변화와 인사이트를 비교하고 투자 습관을 기록해요.",
+    description: "기간별 자산 변화와 인사이트를 비교하고 투자 습관을 기록해요.",
     items: [
       "날짜와 목표 금액별 분석 기록",
       "주·월·연간 투자 인사이트",
@@ -869,15 +868,15 @@ export default function AboutScreen() {
               <SectionHeading
                 eyebrow="06 · EOKKA Pro"
                 title="들어오지 않은 날에도 기록이 이어져요"
-                description="Pro는 목표를 최대 3개까지 저장하고 거래일마다 최신 종가로 모두 자동 분석해요. 최대 20종목과 하루 15회 수동 분석, 기간 제한 없는 기록과 주·월·연간 인사이트를 제공해요."
+                description="Pro 베타는 목표 하나와 최대 20종목을 저장하고 필요할 때 직접 분석해요. 상세 결과 최근 30개와 압축된 장기 흐름, 주·월·연간 인사이트를 제공해요."
               />
               <div className="mt-5 flex flex-wrap gap-2">
                 {[
-                  "거래일 자동 분석",
-                  "기록 기간 제한 없음",
-                  "목표 최대 3개",
+                  "필요할 때 직접 분석",
+                  "상세 기록 최근 30개",
+                  "목표 금액 1개",
                   "최대 20종목",
-                  "하루 15회 분석",
+                  "하루 5회 분석",
                 ].map((item) => (
                   <span
                     key={item}

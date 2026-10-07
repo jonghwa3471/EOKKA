@@ -18,6 +18,7 @@ const querySchema = z.object({
 const PRO_MONTHLY_PRICE = 990;
 
 export async function loader({ request }: Route.LoaderArgs) {
+  if (process.env.PAYMENTS_ENABLED !== "true") throw redirect("/dashboard/pro");
   const [client] = makeServerClient(request);
   await requireAuthentication(client);
   const {

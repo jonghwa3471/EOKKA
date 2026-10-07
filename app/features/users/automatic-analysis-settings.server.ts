@@ -8,6 +8,7 @@ export async function getAutomaticAnalysisSettings(userId: string) {
   const [profile] = await db
     .select({
       proExpiresAt: profiles.pro_expires_at,
+      betaProStartedAt: profiles.beta_pro_started_at,
       developerPortfolioGiftRevealedAt:
         profiles.developer_portfolio_gift_revealed_at,
     })
@@ -17,12 +18,17 @@ export async function getAutomaticAnalysisSettings(userId: string) {
 
   const settings = profile ?? {
     proExpiresAt: null,
+    betaProStartedAt: null,
     developerPortfolioGiftRevealedAt: null,
   };
+  const isPaidPro =
+    settings.proExpiresAt !== null &&
+    settings.proExpiresAt.getTime() > Date.now();
+  const isBetaPro = settings.betaProStartedAt !== null;
   return {
     ...settings,
-    isPro:
-      settings.proExpiresAt !== null &&
-      settings.proExpiresAt.getTime() > Date.now(),
+    isPaidPro,
+    isBetaPro,
+    isPro: isPaidPro || isBetaPro,
   };
 }

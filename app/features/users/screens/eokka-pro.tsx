@@ -1,5 +1,6 @@
 import type { Route } from "./+types/eokka-pro";
 
+import { eq } from "drizzle-orm";
 import {
   InfinityIcon,
   ArrowRightIcon,
@@ -13,9 +14,10 @@ import {
   UserRoundIcon,
 } from "lucide-react";
 import { useState } from "react";
-import { Form, Link } from "react-router";
+import { Form, Link, redirect } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
+import db from "~/core/db/drizzle-client.server";
 import { isLocalDevelopmentEnvironment } from "~/core/lib/app-environment.server";
 import {
   loadCachedRouteData,
@@ -30,6 +32,7 @@ import { getAutomaticAnalysisSettings } from "../automatic-analysis-settings.ser
 import { DeveloperPortfolioGiftDialog } from "../components/developer-portfolio-gift-dialog";
 import { proTenureToneStyles } from "../components/pro-tenure-badge";
 import { PRO_TENURE_BADGES } from "../pro-tenure";
+import { profiles } from "../schema";
 
 export const meta: Route.MetaFunction = () => [
   { title: `EOKKA Pro | ${import.meta.env.VITE_APP_NAME}` },
@@ -60,6 +63,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       isLocalDevelopmentEnvironment() &&
       Boolean(user && (await isAdmin(user.id))),
     isPro: settings.isPro,
+    isPaidPro: "isPaidPro" in settings && settings.isPaidPro,
+    isBetaPro: "isBetaPro" in settings && settings.isBetaPro,
     giftRequested: new URL(request.url).searchParams.get("gift") === "1",
     developerPortfolioGiftRevealed:
       "developerPortfolioGiftRevealedAt" in settings &&
@@ -74,11 +79,33 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+export async function action({ request }: Route.ActionArgs) {
+  const [client] = makeServerClient(request);
+  const {
+    data: { user },
+  } = await client.auth.getUser();
+  if (!user) throw redirect("/login?next=/dashboard/pro");
+  const formData = await request.formData();
+  if (formData.get("intent") !== "start-beta-pro")
+    throw new Response("Invalid intent", { status: 400 });
+  await db
+    .update(profiles)
+    .set({ beta_pro_started_at: new Date(), updated_at: new Date() })
+    .where(eq(profiles.profile_id, user.id));
+  return redirect("/dashboard/pro?beta=started");
+}
+
 type EokkaProLoaderData = Awaited<ReturnType<typeof loader>>;
-export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
+export async function clientLoader({
+  request,
+  serverLoader,
+}: Route.ClientLoaderArgs) {
+  const justStartedBeta =
+    new URL(request.url).searchParams.get("beta") === "started";
   return loadCachedRouteData<EokkaProLoaderData>(
     "eokka-pro",
     async () => serverLoader() as Promise<EokkaProLoaderData>,
+    { maxAgeMs: justStartedBeta ? 0 : 30_000 },
   );
 }
 
@@ -91,27 +118,22 @@ const comparison = [
   {
     feature: "저장 가능한 목표 금액",
     free: "저장 불가",
-    pro: "최대 3개",
+    pro: "1개",
   },
   {
     feature: "분석 기록 보관",
     free: "저장하지 않음",
-    pro: "기간 제한 없음",
+    pro: "상세 30개 · 흐름 계속 보관",
   },
   {
     feature: "수동 분석",
     free: "하루 5회",
-    pro: "하루 15회",
+    pro: "하루 5회",
   },
   {
     feature: "자동 분석",
     free: "-",
-    pro: "사용 가능",
-  },
-  {
-    feature: "자동 분석 범위",
-    free: "-",
-    pro: "저장한 모든 목표",
+    pro: "베타 기간 미제공",
   },
   {
     feature: "투자 인사이트",
@@ -200,20 +222,20 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
                 <CrownIcon className="size-3.5" /> EOKKA Pro 베타
               </div>
               <h1 className="mt-5 max-w-2xl text-3xl leading-tight font-black tracking-tight text-balance md:text-5xl">
-                기록은 자동으로,
+                기록은 가볍게 쌓고,
                 <br />
                 투자 판단은 더 차분하게
               </h1>
               <p className="text-muted-foreground mt-4 max-w-2xl text-sm leading-7 break-keep md:text-base">
-                거래일마다 최신 종가로 포트폴리오를 기록하고, 쌓인 변화를 주간과
-                월간 인사이트로 확인하세요. 아직 성장 중인 베타 서비스라 부담
-                없는 가격으로 시작해요.
+                필요할 때 최신 종가로 직접 분석하고, 쌓인 변화를 주간·월간·연간
+                인사이트로 확인하세요. 베타 기간에는 결제 없이 직접 경험할 수
+                있어요.
               </p>
               <div className="mt-6 flex flex-wrap gap-2">
                 {[
-                  "거래일 자동 분석",
-                  "기록 기간 제한 없음",
-                  "목표 최대 3개",
+                  "상세 기록 최근 30개",
+                  "장기 차트 계속 보관",
+                  "목표 금액 1개",
                   "최대 20종목",
                 ].map((benefit) => (
                   <span
@@ -231,19 +253,16 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-xs font-black text-amber-600 dark:text-amber-300">
-                    베타 기간 한정
+                    누구나 이용하는 베타
                   </p>
                   <div className="mt-2 flex items-end gap-1">
                     <strong className="text-4xl font-black tracking-tight">
-                      990원
+                      무료
                     </strong>
-                    <span className="text-muted-foreground pb-1 text-sm">
-                      / 월
-                    </span>
                   </div>
                 </div>
                 <span className="rounded-full bg-amber-500/10 px-3 py-1.5 text-[11px] font-black text-amber-700 dark:text-amber-300">
-                  월 자동결제
+                  결제 없음
                 </span>
               </div>
               {loaderData.isPro ? (
@@ -251,9 +270,11 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
                   <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-4">
                     <p className="flex items-center gap-2 text-sm font-black text-emerald-700 dark:text-emerald-300">
                       <span className="size-2 rounded-full bg-emerald-500" />
-                      Pro 이용 중
+                      {loaderData.isBetaPro
+                        ? "Pro 베타 체험 중"
+                        : "Pro 이용 중"}
                     </p>
-                    {loaderData.proExpiresAt ? (
+                    {loaderData.isPaidPro && loaderData.proExpiresAt ? (
                       <p className="text-muted-foreground mt-2 text-xs">
                         다음 결제 ·{" "}
                         <strong className="text-foreground tabular-nums">
@@ -262,51 +283,58 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
                       </p>
                     ) : null}
                   </div>
-                  <Button
-                    asChild
-                    variant="outline"
-                    className="w-full rounded-2xl"
-                  >
-                    <Link to="/dashboard/payments">구독 관리</Link>
-                  </Button>
+                  {loaderData.isPaidPro ? (
+                    <Button
+                      asChild
+                      variant="outline"
+                      className="w-full rounded-2xl"
+                    >
+                      <Link to="/dashboard/payments">구독 관리</Link>
+                    </Button>
+                  ) : (
+                    <p className="text-muted-foreground text-center text-xs leading-5">
+                      결제 없이 기간 제한 없이 체험할 수 있어요.
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div className="mt-5 space-y-3">
                   <div className="bg-muted/35 rounded-2xl border p-4">
-                    <p className="text-xs font-black">오늘 시작하면</p>
+                    <p className="text-xs font-black">무료 베타 체험</p>
                     <p className="text-muted-foreground mt-2 text-xs leading-5">
-                      {koreanDate(loaderData.checkoutRenewsAt)}까지 이용하고,
-                      같은 날 다음 결제가 진행돼요.
+                      결제 없이 목표 1개와 최근 상세 기록 30개, 장기 차트와
+                      주·월·연간 인사이트를 이용해 보세요.
                     </p>
                   </div>
-                  <Button
-                    asChild
-                    size="lg"
-                    className="w-full rounded-2xl bg-amber-500 text-black hover:bg-amber-400"
-                  >
-                    <Link to="/payments/checkout" prefetch="intent">
-                      <Clock3Icon /> 월 990원으로 시작하기
-                    </Link>
-                  </Button>
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="start-beta-pro" />
+                    <Button
+                      type="submit"
+                      size="lg"
+                      className="w-full rounded-2xl bg-amber-500 text-black hover:bg-amber-400"
+                    >
+                      <SparklesIcon /> Pro 베타 체험 시작하기
+                    </Button>
+                  </Form>
                 </div>
               )}
-              <details className="group mt-3 text-[11px]">
-                <summary className="text-muted-foreground hover:text-foreground flex cursor-pointer list-none items-center justify-center gap-1 font-bold transition-colors">
-                  결제 및 해지 안내
-                  <ArrowRightIcon className="size-3 transition-transform group-open:rotate-90" />
-                </summary>
-                <p className="text-muted-foreground bg-muted/35 mt-2 rounded-xl px-3 py-2.5 text-center leading-5 break-keep">
-                  구독을 해지하면 다음 결제부터 중단되며, 결제한 기간까지 Pro를
-                  이용할 수 있어요. 구독이 끝나도 기존 분석 기록과 포트폴리오는
-                  삭제되지 않으며, 재구독하면 이전 기록부터 이어서 이용할 수
-                  있어요. Pro 이용 기간이 끝난 동안에는 자동 분석과 새 분석 기록
-                  저장이 중단돼요. 청약철회·과오금·서비스 하자에 따른 환불은
-                  관련 법령과 결제 화면에 안내된 조건을 따라요.
-                </p>
-              </details>
-              <p className="text-muted-foreground mt-3 text-center text-[10px] leading-4">
-                토스페이먼츠를 통해 안전하게 결제해요
-              </p>
+              {loaderData.isPaidPro && (
+                <details className="group mt-3 text-[11px]">
+                  <summary className="text-muted-foreground hover:text-foreground flex cursor-pointer list-none items-center justify-center gap-1 font-bold transition-colors">
+                    결제 및 해지 안내
+                    <ArrowRightIcon className="size-3 transition-transform group-open:rotate-90" />
+                  </summary>
+                  <p className="text-muted-foreground bg-muted/35 mt-2 rounded-xl px-3 py-2.5 text-center leading-5 break-keep">
+                    구독을 해지하면 다음 결제부터 중단되며, 결제한 기간까지
+                    Pro를 이용할 수 있어요. 구독이 끝나도 기존 분석 기록과
+                    포트폴리오는 삭제되지 않으며, 재구독하면 이전 기록부터
+                    이어서 이용할 수 있어요. Pro 이용 기간이 끝난 동안에는 자동
+                    분석과 새 분석 기록 저장이 중단돼요. 청약철회·과오금·서비스
+                    하자에 따른 환불은 관련 법령과 결제 화면에 안내된 조건을
+                    따라요.
+                  </p>
+                </details>
+              )}
             </div>
           </div>
         </section>
@@ -426,19 +454,19 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
               icon: InfinityIcon,
               title: "분석을 기록으로 남겨요",
               detail:
-                "무료 분석은 화면에서 확인하고 끝나지만, Pro는 기록을 기간 제한 없이 보관해 수익률과 목표 기간의 변화를 이어서 보여줘요.",
+                "상세 분석은 최근 30개까지 다시 보고, 가벼운 변화 기록은 압축해 장기 차트와 연간 인사이트를 계속 이어가요.",
             },
             {
               icon: RefreshCwIcon,
-              title: "세 가지 목표를 거래일마다 확인해요",
+              title: "한 가지 목표에 집중해요",
               detail:
-                "목표 금액을 최대 3개까지 저장하면 거래일마다 모든 목표를 최신 종가와 각 목표에서 마지막으로 사용한 월 투자금으로 자동 분석해요.",
+                "무료 베타에서는 목표 금액 하나를 저장하고, 필요할 때 최신 종가로 직접 분석해 흐름을 쌓을 수 있어요.",
             },
             {
               icon: ShieldCheckIcon,
-              title: "더 넓게, 더 자주 분석해요",
+              title: "기간별 변화를 한눈에 봐요",
               detail:
-                "빠른 분석과 정밀 포트폴리오에 최대 20종목을 담고, 수동 분석도 하루 15회까지 이용할 수 있어요.",
+                "주간·월간·연간 인사이트와 장기 자산 차트로 숫자가 어떻게 달라졌는지 쉽게 확인해요.",
             },
           ].map(({ icon: Icon, title, detail }) => (
             <article key={title} className="bg-card rounded-2xl border p-5">

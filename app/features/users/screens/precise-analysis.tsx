@@ -94,13 +94,27 @@ export async function loader({ request }: Route.LoaderArgs) {
   } = await client.auth.getUser();
   if (!user) throw redirect("/login");
 
-  const [managed, history, preferredGoal, accountGoalAmount, accountSettings] =
+  const accountSettings = await getAutomaticAnalysisSettings(user.id);
+  if (!accountSettings.isPro)
+    return {
+      isPro: false as const,
+      managed: null,
+      holdings: [],
+      defaultGoalAmount: 100_000_000,
+      defaultMonthlyContribution: 0,
+      accountGoalAmount: null,
+      savedGoalCount: 0,
+      savedGoals: [],
+      analysisAsOfPreview: null,
+      hasUnappliedChanges: false,
+    };
+
+  const [managed, history, preferredGoal, accountGoalAmount] =
     await Promise.all([
       getManagedPortfolio(user.id),
       getAnalysisHistory(user.id),
       getPreferredGoalAmount(user.id),
       getFreeAccountGoalAmount(user.id),
-      getAutomaticAnalysisSettings(user.id),
     ]);
   const managedHistory = managed
     ? history.filter(
@@ -148,7 +162,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     defaultGoalAmount: latest?.goalAmount ?? 100_000_000,
     defaultMonthlyContribution: latest?.monthlyContribution ?? 0,
     accountGoalAmount,
-    isPro: accountSettings.isPro,
+    isPro: true as const,
     savedGoalCount: savedGoals.length,
     savedGoals,
     analysisAsOfPreview: latestCachedMarketDate ?? latest?.result.asOf ?? null,
@@ -162,6 +176,10 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 type PreciseAnalysisLoaderData = Awaited<ReturnType<typeof loader>>;
+type ProPreciseAnalysisLoaderData = Extract<
+  PreciseAnalysisLoaderData,
+  { isPro: true }
+>;
 export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
   return loadCachedRouteData<PreciseAnalysisLoaderData>(
     "precise-analysis",
@@ -175,6 +193,10 @@ export async function action({ request }: Route.ActionArgs) {
     data: { user },
   } = await client.auth.getUser();
   if (!user) throw new Response("Unauthorized", { status: 401 });
+
+  const initialAccountSettings = await getAutomaticAnalysisSettings(user.id);
+  if (!initialAccountSettings.isPro)
+    throw redirect("/dashboard/pro?feature=precise-analysis");
 
   try {
     const formData = await request.formData();
@@ -202,7 +224,7 @@ export async function action({ request }: Route.ActionArgs) {
     });
     if (managed.portfolio.status !== "active" && parsed.confirmReset !== "on")
       throw new Error("정밀 분석 전환에 동의해 주세요.");
-    const accountSettings = await getAutomaticAnalysisSettings(user.id);
+    const accountSettings = initialAccountSettings;
     if (accountSettings.isPro)
       await assertFreeAccountGoal({
         userId: user.id,
@@ -321,6 +343,15 @@ export async function action({ request }: Route.ActionArgs) {
 
 export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
   usePrimeRouteDataCache("precise-analysis", loaderData);
+  if (!loaderData.isPro) return <PreciseAnalysisProNotice />;
+  return <PreciseAnalysisContent loaderData={loaderData} />;
+}
+
+function PreciseAnalysisContent({
+  loaderData,
+}: {
+  loaderData: ProPreciseAnalysisLoaderData;
+}) {
   const actionData = useActionData<typeof action>();
   useEffect(() => {
     if (actionData?.result)
@@ -776,6 +807,39 @@ export default function PreciseAnalysis({ loaderData }: Route.ComponentProps) {
             )}
           </>
         )}
+      </div>
+    </main>
+  );
+}
+
+function PreciseAnalysisProNotice() {
+  return (
+    <main className="flex flex-1 flex-col px-5 pt-8 pb-14 md:px-8 md:pt-12">
+      <div className="mx-auto w-full max-w-7xl">
+        <section className="via-card relative overflow-hidden rounded-3xl border border-amber-400/30 bg-gradient-to-br from-amber-400/15 to-violet-500/10 p-7 shadow-sm md:p-10">
+          <CrownIcon className="absolute -top-7 -right-7 size-40 rotate-12 text-amber-400/10" />
+          <div className="relative max-w-2xl">
+            <span className="inline-flex rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs font-black text-amber-600 dark:text-amber-400">
+              PRECISE ANALYSIS · EOKKA PRO
+            </span>
+            <h1 className="mt-5 text-3xl font-black tracking-tight md:text-4xl">
+              매매일지를 바탕으로 더 정확하게 분석해요
+            </h1>
+            <p className="text-muted-foreground mt-4 leading-7 break-keep">
+              Pro 베타를 시작하면 포트폴리오의 실제 매수·매도 흐름과 평균
+              매수가를 반영해 목표 도달 과정과 투자 인사이트를 확인할 수 있어요.
+            </p>
+            <Button
+              asChild
+              size="lg"
+              className="mt-7 rounded-full bg-amber-500 text-black hover:bg-amber-400"
+            >
+              <Link to="/dashboard/pro?feature=precise-analysis">
+                Pro 베타 무료로 시작하기 <ArrowRightIcon />
+              </Link>
+            </Button>
+          </div>
+        </section>
       </div>
     </main>
   );

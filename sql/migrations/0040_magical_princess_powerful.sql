@@ -1,0 +1,1 @@
+ALTER TABLE "profiles" ADD COLUMN "beta_pro_started_at" timestamp with time zone;

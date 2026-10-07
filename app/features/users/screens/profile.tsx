@@ -140,6 +140,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   ).size;
   const proExpiresAt = accountSettings.proExpiresAt?.toISOString() ?? null;
   const isPro = accountSettings.isPro;
+  const isBetaPro = accountSettings.isBetaPro;
   const completedPaymentCount = payments.filter((payment) =>
     ["DONE", "PAID", "APPROVED"].includes(payment.status.toUpperCase()),
   ).length;
@@ -167,6 +168,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     username: profile?.username ?? null,
     createdAt: profile?.created_at ?? user.created_at,
     isPro,
+    isBetaPro,
     proExpiresAt,
     analysisCount: analysisRecords.length,
     activeGoalCount,
@@ -222,6 +224,7 @@ export default function Profile({ loaderData }: Route.ComponentProps) {
     createdAt,
     providers,
     isPro,
+    isBetaPro,
     proExpiresAt,
     analysisCount,
     activeGoalCount,
@@ -434,7 +437,9 @@ export default function Profile({ loaderData }: Route.ComponentProps) {
             </p>
             <p className="text-muted-foreground mt-1 text-xs leading-5">
               {isPro
-                ? `${formatDate(proExpiresAt)}까지 이용 가능`
+                ? isBetaPro
+                  ? "결제 없이 기간 제한 없이 체험 중"
+                  : `${formatDate(proExpiresAt)}까지 이용 가능`
                 : "필요할 때 직접 분석할 수 있어요."}
             </p>
           </div>

@@ -9,6 +9,7 @@ import {
   CheckCircle2Icon,
   ChevronDownIcon,
   CircleAlertIcon,
+  CrownIcon,
   PencilIcon,
   PlusIcon,
   RefreshCwIcon,
@@ -194,10 +195,21 @@ export async function loader({ request }: Route.LoaderArgs) {
   } = await client.auth.getUser();
   if (!user) throw redirect("/login");
 
-  const [managed, quickHistory, accountSettings] = await Promise.all([
+  const accountSettings = await getAutomaticAnalysisSettings(user.id);
+  if (!accountSettings.isPro)
+    return {
+      isPro: false as const,
+      today: seoulDate(),
+      managed: null,
+      holdings: [],
+      lastManagedAnalysisAt: null,
+      hasUnappliedChanges: false,
+      holdingLimit: 20,
+    };
+
+  const [managed, quickHistory] = await Promise.all([
     getManagedPortfolio(user.id),
     getAnalysisHistory(user.id),
-    getAutomaticAnalysisSettings(user.id),
   ]);
   const holdings = managed
     ? calculateManagedHoldings(managed.transactions)
@@ -224,16 +236,21 @@ export async function loader({ request }: Route.LoaderArgs) {
   );
 
   return {
+    isPro: true as const,
     today: seoulDate(),
     managed,
     holdings,
     lastManagedAnalysisAt,
     hasUnappliedChanges,
-    holdingLimit: accountSettings.isPro ? 20 : 10,
+    holdingLimit: 20,
   };
 }
 
 type ManagedPortfolioLoaderData = Awaited<ReturnType<typeof loader>>;
+type ProManagedPortfolioLoaderData = Extract<
+  ManagedPortfolioLoaderData,
+  { isPro: true }
+>;
 export async function clientLoader({
   request,
   serverLoader,
@@ -251,11 +268,13 @@ export async function action({ request }: Route.ActionArgs) {
   } = await client.auth.getUser();
   if (!user) throw new Response("Unauthorized", { status: 401 });
 
+  const accountSettings = await getAutomaticAnalysisSettings(user.id);
+  if (!accountSettings.isPro)
+    throw redirect("/dashboard/pro?feature=portfolio");
+
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
-  const holdingLimit = (await getAutomaticAnalysisSettings(user.id)).isPro
-    ? 20
-    : 10;
+  const holdingLimit = 20;
 
   try {
     if (intent === "add-transaction") {
@@ -521,8 +540,27 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
+  usePrimeRouteDataCache(
+    `managed-portfolio:${useLocation().search}`,
+    loaderData,
+  );
+  if (!loaderData.isPro)
+    return (
+      <ProFeatureNotice
+        eyebrow="MANAGED PORTFOLIO"
+        title="매매일지를 이어서 관리해 보세요"
+        description="Pro 베타를 시작하면 매수·매도 기록을 포트폴리오로 관리하고, 실제 매입 흐름을 반영한 정밀 분석을 이용할 수 있어요."
+      />
+    );
+  return <ManagedPortfolioContent loaderData={loaderData} />;
+}
+
+function ManagedPortfolioContent({
+  loaderData,
+}: {
+  loaderData: ProManagedPortfolioLoaderData;
+}) {
   const location = useLocation();
-  usePrimeRouteDataCache(`managed-portfolio:${location.search}`, loaderData);
   const {
     today,
     managed,
@@ -1600,6 +1638,46 @@ export default function ManagedPortfolio({ loaderData }: Route.ComponentProps) {
               아직 작성한 매매일지가 없어요.
             </p>
           )}
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function ProFeatureNotice({
+  eyebrow,
+  title,
+  description,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <main className="flex flex-1 flex-col px-5 pt-8 pb-12 md:px-8 md:pt-12">
+      <div className="mx-auto w-full max-w-7xl">
+        <section className="via-card relative overflow-hidden rounded-3xl border border-amber-400/30 bg-gradient-to-br from-amber-400/15 to-violet-500/10 p-7 shadow-sm md:p-10">
+          <CrownIcon className="absolute -top-7 -right-7 size-40 rotate-12 text-amber-400/10" />
+          <div className="relative max-w-2xl">
+            <span className="inline-flex rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs font-black text-amber-600 dark:text-amber-400">
+              {eyebrow} · EOKKA PRO
+            </span>
+            <h1 className="mt-5 text-3xl font-black tracking-tight md:text-4xl">
+              {title}
+            </h1>
+            <p className="text-muted-foreground mt-4 leading-7 break-keep">
+              {description}
+            </p>
+            <Button
+              asChild
+              size="lg"
+              className="mt-7 rounded-full bg-amber-500 text-black hover:bg-amber-400"
+            >
+              <Link to="/dashboard/pro?feature=portfolio">
+                Pro 베타 무료로 시작하기 <ArrowRightIcon />
+              </Link>
+            </Button>
+          </div>
         </section>
       </div>
     </main>

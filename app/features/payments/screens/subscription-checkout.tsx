@@ -21,6 +21,7 @@ export const meta: Route.MetaFunction = () => [
 ];
 
 export async function loader({ request }: Route.LoaderArgs) {
+  if (process.env.PAYMENTS_ENABLED !== "true") throw redirect("/dashboard/pro");
   const [client] = makeServerClient(request);
   await requireAuthentication(client);
   const {

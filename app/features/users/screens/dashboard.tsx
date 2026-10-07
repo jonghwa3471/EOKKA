@@ -188,6 +188,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       "사용자",
     latestMarketDate,
     isPro: automaticSettings?.isPro ?? false,
+    isPaidPro: automaticSettings?.isPaidPro ?? false,
     nextAutomaticAnalysis: nextAutomaticAnalysisLabel(),
   };
 }
@@ -3210,6 +3211,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
     latestMarketDate,
     nextAutomaticAnalysis,
     isPro,
+    isPaidPro,
   } = loaderData;
   const [dimmedTrendSeries, setDimmedTrendSeries] = useState<TrendSeries[]>([]);
   useEffect(() => {
@@ -3243,9 +3245,11 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
               분석 기록을 시작해 보세요
             </h1>
             <p className="text-muted-foreground mx-auto mt-5 max-w-xl leading-7">
-              {isPro
+              {isPaidPro
                 ? "첫 포트폴리오 분석을 저장하면 이후 새 종가가 제공될 때 자동 기록이 쌓이고, 목표 달성 기간과 수익률의 변화를 비교할 수 있어요."
-                : "무료 플랜에서는 분석 결과를 바로 확인할 수 있어요. 기록을 저장하고 시간에 따른 변화를 비교하려면 EOKKA Pro를 이용해 주세요."}
+                : isPro
+                  ? "첫 포트폴리오 분석을 저장하면 최근 상세 기록과 장기 자산 흐름을 함께 확인할 수 있어요. 베타에서는 필요할 때 직접 분석해 주세요."
+                  : "무료 플랜에서는 분석 결과를 바로 확인할 수 있어요. 기록을 저장하고 시간에 따른 변화를 비교하려면 EOKKA Pro를 이용해 주세요."}
             </p>
             <Button asChild size="lg" className="mt-8 rounded-full px-7">
               <Link to={isPro ? "/" : "/dashboard/pro"}>
@@ -3261,7 +3265,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
 
   const hasLatestCloseAnalysis =
     latestMarketDate === null || latest.savedOn >= latestMarketDate;
-  const isAutomaticGoal = isPro;
+  const isAutomaticGoal = isPaidPro;
   const checkedAnalysisHref = hasLatestCloseAnalysis
     ? `/dashboard/history?month=${latest.savedOn.slice(0, 7)}&date=${latest.savedOn}&analysis=${latest.id}`
     : null;
@@ -3947,19 +3951,19 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                   EOKKA PRO
                 </span>
                 <h2 className="mt-5 text-2xl font-black">
-                  투자 기록을 자동으로 이어가세요
+                  투자 기록을 차곡차곡 이어가세요
                 </h2>
                 <p className="text-muted-foreground mt-3 max-w-2xl leading-7 break-keep">
-                  최대 3개의 목표를 거래일마다 최신 종가로 자동 분석하고, 쌓인
-                  기록을 기간 제한 없이 보관해 주간·월간 변화를 이어서 확인할 수
-                  있어요.
+                  목표 하나를 필요할 때 직접 분석하고, 상세 결과는 최근 30개까지
+                  다시 보세요. 가벼운 변화 기록은 계속 이어져 장기 차트와
+                  주·월·연간 인사이트에 활용돼요.
                 </p>
                 <div className="mt-6 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
                   {[
-                    "분석 기록 무제한 보관",
-                    "목표 금액 3개 자동 분석",
+                    "상세 분석 최근 30개",
+                    "장기 변화 기록 보관",
                     "최대 20종목 분석",
-                    "수동 분석 하루 15회",
+                    "주·월·연간 인사이트",
                   ].map((benefit) => (
                     <div
                       key={benefit}

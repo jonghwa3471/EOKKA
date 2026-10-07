@@ -2,7 +2,10 @@ import { eq } from "drizzle-orm";
 
 import db from "~/core/db/drizzle-client.server";
 import { notifications } from "~/features/notifications/schema";
-import { analysisSnapshots } from "~/features/stocks/history/schema";
+import {
+  analysisHistoryPoints,
+  analysisSnapshots,
+} from "~/features/stocks/history/schema";
 import {
   managedPortfolios,
   portfolioTransactions,
@@ -18,6 +21,9 @@ export async function resetUserInvestmentData(userId: string) {
     await transaction
       .delete(analysisSnapshots)
       .where(eq(analysisSnapshots.user_id, userId));
+    await transaction
+      .delete(analysisHistoryPoints)
+      .where(eq(analysisHistoryPoints.user_id, userId));
     await transaction
       .delete(managedPortfolios)
       .where(eq(managedPortfolios.user_id, userId));
