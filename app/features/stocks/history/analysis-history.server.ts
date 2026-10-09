@@ -8,7 +8,11 @@ import { findCompletedAchievementIds } from "~/features/users/achievements";
 import { syncUserAchievements } from "~/features/users/achievements.server";
 import { profiles, userAchievements } from "~/features/users/schema";
 
-import { analysisHistoryPoints, analysisSnapshots } from "./schema";
+import {
+  analysisHistoryPoints,
+  analysisSnapshots,
+  pendingQuickAnalyses,
+} from "./schema";
 
 export const FREE_HISTORY_LIMIT = 30;
 const DAILY_HISTORY_DAYS = 90;
@@ -44,6 +48,43 @@ export class ProGoalLimitError extends Error {
   constructor() {
     super("EOKKA Pro 베타에서는 목표 금액을 하나만 저장할 수 있어요.");
   }
+}
+
+export async function savePendingQuickAnalysis(
+  userId: string,
+  result: AnalysisResult,
+) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(result.asOf)) return;
+  const now = new Date();
+  await db
+    .insert(pendingQuickAnalyses)
+    .values({
+      user_id: userId,
+      result: jsonSafeResult(result),
+      updated_at: now,
+    })
+    .onConflictDoUpdate({
+      target: pendingQuickAnalyses.user_id,
+      set: { result: jsonSafeResult(result), updated_at: now },
+    });
+}
+
+export async function promotePendingQuickAnalysis(userId: string) {
+  const [pending] = await db
+    .select({ result: pendingQuickAnalyses.result })
+    .from(pendingQuickAnalyses)
+    .where(eq(pendingQuickAnalyses.user_id, userId))
+    .limit(1);
+  if (!pending) return null;
+
+  const saved = await saveDailyAnalysisSnapshot({
+    userId,
+    result: pending.result,
+  });
+  await db
+    .delete(pendingQuickAnalyses)
+    .where(eq(pendingQuickAnalyses.user_id, userId));
+  return saved;
 }
 
 export async function getFreeAccountGoalAmount(userId: string) {

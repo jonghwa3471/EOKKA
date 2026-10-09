@@ -13,13 +13,14 @@ import {
   SparklesIcon,
   UserRoundIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Form, Link, redirect } from "react-router";
 
 import { Button } from "~/core/components/ui/button";
 import db from "~/core/db/drizzle-client.server";
 import { isLocalDevelopmentEnvironment } from "~/core/lib/app-environment.server";
 import {
+  invalidateRouteDataCache,
   loadCachedRouteData,
   usePrimeRouteDataCache,
 } from "~/core/lib/route-data-cache";
@@ -28,6 +29,7 @@ import { cn } from "~/core/lib/utils";
 import { isAdmin } from "~/features/admin/admin.server";
 import { createNotification } from "~/features/notifications/notifications.server";
 import { getPayments } from "~/features/payments/queries";
+import { promotePendingQuickAnalysis } from "~/features/stocks/history/analysis-history.server";
 
 import { getAutomaticAnalysisSettings } from "../automatic-analysis-settings.server";
 import { DeveloperPortfolioGiftDialog } from "../components/developer-portfolio-gift-dialog";
@@ -103,22 +105,31 @@ export async function action({ request }: Route.ActionArgs) {
     )
     .returning({ id: profiles.profile_id });
   if (!started) return redirect("/dashboard/pro");
+  let restoredAnalysis = false;
+  try {
+    restoredAnalysis = Boolean(await promotePendingQuickAnalysis(user.id));
+  } catch (error) {
+    console.error("Pending quick analysis promotion failed", error);
+  }
   try {
     await Promise.all([
       createNotification({
         userId: user.id,
         type: "beta_pro_started",
         title: "EOKKA Pro 베타 체험을 시작했어요",
-        message:
-          "이제 내 포트폴리오와 정밀 분석, 최근 상세 기록 30개와 장기 투자 인사이트를 이용할 수 있어요.",
-        href: "/dashboard/pro",
+        message: restoredAnalysis
+          ? "이제 Pro 기능을 이용할 수 있어요. 조금 전 빠른 분석도 첫 기록으로 저장했어요."
+          : "이제 내 포트폴리오와 정밀 분석, 최근 상세 기록 30개와 장기 투자 인사이트를 이용할 수 있어요.",
+        href: restoredAnalysis ? "/dashboard" : "/dashboard/pro",
       }),
       createDeveloperPortfolioGiftNotification(user.id),
     ]);
   } catch (error) {
     console.error("Beta Pro notification creation failed", error);
   }
-  return redirect("/dashboard/pro?beta=started&gift=1");
+  return redirect(
+    `/dashboard/pro?beta=started&gift=1${restoredAnalysis ? "&analysis=restored" : ""}`,
+  );
 }
 
 type EokkaProLoaderData = Awaited<ReturnType<typeof loader>>;
@@ -182,6 +193,14 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
     loaderData.betaJustStarted,
   );
   usePrimeRouteDataCache("eokka-pro", loaderData);
+  useEffect(() => {
+    if (!loaderData.betaJustStarted) return;
+    invalidateRouteDataCache("dashboard");
+    invalidateRouteDataCache("analysis-history");
+    invalidateRouteDataCache("investment-insights");
+    invalidateRouteDataCache("home");
+    invalidateRouteDataCache("dashboard-layout");
+  }, [loaderData.betaJustStarted]);
   return (
     <main className="flex flex-1 flex-col px-5 pt-8 pb-12 md:px-8 md:pt-12">
       <div className="mx-auto w-full max-w-6xl">

@@ -75,6 +75,45 @@ export const analysisSnapshots = pgTable(
 ).enableRLS();
 
 /**
+ * The latest quick analysis made before a signed-in user starts the Pro beta.
+ * It is not exposed as history and is replaced on every free analysis. Once
+ * the beta starts, it is promoted to a normal snapshot and removed.
+ */
+export const pendingQuickAnalyses = pgTable(
+  "pending_quick_analyses",
+  {
+    user_id: uuid()
+      .primaryKey()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    result: jsonb().$type<AnalysisResult>().notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    pgPolicy("select-own-pending-quick-analysis", {
+      for: "select",
+      to: authenticatedRole,
+      using: sql`${authUid} = ${table.user_id}`,
+    }),
+    pgPolicy("insert-own-pending-quick-analysis", {
+      for: "insert",
+      to: authenticatedRole,
+      withCheck: sql`${authUid} = ${table.user_id}`,
+    }),
+    pgPolicy("update-own-pending-quick-analysis", {
+      for: "update",
+      to: authenticatedRole,
+      using: sql`${authUid} = ${table.user_id}`,
+      withCheck: sql`${authUid} = ${table.user_id}`,
+    }),
+    pgPolicy("delete-own-pending-quick-analysis", {
+      for: "delete",
+      to: authenticatedRole,
+      using: sql`${authUid} = ${table.user_id}`,
+    }),
+  ],
+).enableRLS();
+
+/**
  * Lightweight, long-lived portfolio history used by charts and period insights.
  * The full AI report remains in analysis_snapshots and can be pruned separately.
  */

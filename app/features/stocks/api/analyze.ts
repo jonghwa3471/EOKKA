@@ -21,6 +21,7 @@ import {
   ProGoalLimitError,
   assertFreeAccountGoal,
   saveDailyAnalysisSnapshot,
+  savePendingQuickAnalysis,
 } from "../history/analysis-history.server";
 import { getManagedPortfolio } from "../portfolio/portfolio.server";
 
@@ -158,6 +159,8 @@ export async function action({ request }: Route.ActionArgs) {
             replaceOtherGoals: replaceExistingGoal,
           });
         }
+      } else if (user && managed?.portfolio.status !== "active") {
+        await savePendingQuickAnalysis(user.id, completeResult);
       }
     } catch (snapshotError) {
       // A storage problem must not discard an otherwise valid analysis.
