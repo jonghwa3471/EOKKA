@@ -385,16 +385,20 @@ export async function analyzePortfolio(
     cagr(portfolioReturns, Math.min(60, portfolioReturns.length)) ?? 0;
   const profit = currentValue - totalCost;
   const returnRate = (profit / totalCost) * 100;
-  const moneyWeightedReturn = input.cashFlows?.length
-    ? moneyWeightedAnnualReturn(input.cashFlows, currentValue, analysisAsOf)
-    : null;
-  const annualizedReturnRate =
-    moneyWeightedReturn ??
-    (currentValue > 0 && totalCost > 0 && input.investmentPeriodMonths !== null
-      ? ((currentValue / totalCost) ** (12 / input.investmentPeriodMonths) -
-          1) *
-        100
-      : null);
+  const investmentPeriodMonths = input.investmentPeriodMonths;
+  const hasAnnualReturnHistory =
+    investmentPeriodMonths !== null && investmentPeriodMonths >= 12;
+  const moneyWeightedReturn =
+    hasAnnualReturnHistory && input.cashFlows?.length
+      ? moneyWeightedAnnualReturn(input.cashFlows, currentValue, analysisAsOf)
+      : null;
+  const annualizedReturnRate = !hasAnnualReturnHistory
+    ? null
+    : (moneyWeightedReturn ??
+      (currentValue > 0 && totalCost > 0
+        ? ((currentValue / totalCost) ** (12 / investmentPeriodMonths) - 1) *
+          100
+        : null));
   const personalReturnMethod =
     moneyWeightedReturn === null ? "estimated" : "money-weighted";
   const rawSimulationMonthlyDrift =

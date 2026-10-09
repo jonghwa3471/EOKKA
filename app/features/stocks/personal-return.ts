@@ -33,6 +33,11 @@ export function moneyWeightedAnnualReturn(
     return null;
 
   const origin = flows[0].time.getTime();
+  const investmentDays = (flows.at(-1)!.time.getTime() - origin) / DAY_MS;
+  // Annualizing a few days or months of performance creates spectacular but
+  // misleading figures. Keep the cumulative return visible and wait for one
+  // full year before presenting an annual return.
+  if (investmentDays < 365) return null;
   const npv = (rate: number) =>
     flows.reduce(
       (sum, flow) =>

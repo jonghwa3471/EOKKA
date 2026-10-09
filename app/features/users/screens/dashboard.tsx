@@ -43,6 +43,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/core/components/ui/tooltip";
+import {
+  loadCachedRouteData,
+  usePrimeRouteDataCache,
+} from "~/core/lib/route-data-cache";
 import { cn } from "~/core/lib/utils";
 
 export const meta: Route.MetaFunction = () => [
@@ -161,22 +165,12 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 type DashboardLoaderData = Awaited<ReturnType<typeof loader>>;
-let dashboardClientCache: {
-  version: string;
-  data: DashboardLoaderData;
-} | null = null;
-
-function dashboardCacheVersion() {
-  return window.sessionStorage.getItem("eokka:dashboard-cache-version") ?? "0";
-}
 
 export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
-  const version = dashboardCacheVersion();
-  if (dashboardClientCache?.version === version)
-    return dashboardClientCache.data;
-  const data = (await serverLoader()) as DashboardLoaderData;
-  dashboardClientCache = { version, data };
-  return data;
+  return loadCachedRouteData<DashboardLoaderData>(
+    "dashboard",
+    () => serverLoader() as Promise<DashboardLoaderData>,
+  );
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -3170,6 +3164,7 @@ function WeeklyAwardCard({
 }
 
 export default function Dashboard({ loaderData }: Route.ComponentProps) {
+  usePrimeRouteDataCache("dashboard", loaderData);
   const {
     history,
     name,
@@ -3181,12 +3176,6 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
     isPaidPro,
   } = loaderData;
   const [dimmedTrendSeries, setDimmedTrendSeries] = useState<TrendSeries[]>([]);
-  useEffect(() => {
-    dashboardClientCache = {
-      version: dashboardCacheVersion(),
-      data: loaderData,
-    };
-  }, [loaderData]);
   const toggleTrendSeries = (series: TrendSeries) =>
     setDimmedTrendSeries((current) =>
       current.includes(series)
@@ -3253,9 +3242,14 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
   const hasForeignHolding = latest.result.holdings.some(
     (holding) => holding.currency === "USD",
   );
-  const annualizedReturnRate = latest.result.annualizedReturnRate ?? null;
+  const annualizedReturnRate =
+    (latest.result.investmentPeriodMonths ?? 0) >= 12
+      ? (latest.result.annualizedReturnRate ?? null)
+      : null;
   const previousAnnualizedReturnRate =
-    previous?.result.annualizedReturnRate ?? null;
+    (previous?.result.investmentPeriodMonths ?? 0) >= 12
+      ? (previous?.result.annualizedReturnRate ?? null)
+      : null;
   const annualizedReturnChange = difference(
     annualizedReturnRate,
     previousAnnualizedReturnRate,
@@ -3465,7 +3459,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             label="총 연평균 수익률"
             value={
               annualizedReturnRate === null
-                ? "기간 입력 필요"
+                ? "1년 기록 필요"
                 : formatRate(annualizedReturnRate)
             }
             valueClass={
@@ -3483,7 +3477,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
             change={
               annualizedReturnRate === null ? (
                 <span className="text-muted-foreground text-xs">
-                  투자 기간을 입력해 주세요
+                  누적 수익률은 위 카드에서 확인할 수 있어요
                 </span>
               ) : (
                 <Change value={annualizedReturnChange} suffix="%p" />

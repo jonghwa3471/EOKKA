@@ -765,6 +765,17 @@ function ManagedPortfolioContent({
           </span>
         </header>
 
+        {!isActive && (
+          <div className="mt-6 rounded-2xl border border-amber-500/25 bg-amber-500/[0.07] px-4 py-3 text-sm leading-6 text-amber-700 dark:text-amber-300">
+            <strong className="font-black">
+              정밀 분석으로 전환하기 전에 확인해 주세요.
+            </strong>{" "}
+            전환하면 대시보드와 인사이트 차트는 정밀 분석 기준으로 초기화되어
+            전환한 날부터 다시 기록돼요. 이전 빠른 분석은 삭제되지 않고 분석
+            기록에서 계속 확인할 수 있어요.
+          </div>
+        )}
+
         {actionError && (
           <div className="mt-6 flex items-start gap-3 rounded-2xl border border-red-500/25 bg-red-500/8 p-4 text-sm text-red-600 dark:text-red-400">
             <CircleAlertIcon className="mt-0.5 size-4 shrink-0" />

@@ -220,7 +220,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     analysisAsOfPreview: latestCachedMarketDate ?? latest?.result.asOf ?? null,
     isAuthenticated: user !== null,
     isPro: accountSettings?.isPro ?? false,
-    savedGoalCount: goalOptions.length,
     managedAnalysisActive,
     moneyInsights:
       latest && preferredGoal
@@ -1284,7 +1283,6 @@ export default function Home() {
     analysisAsOfPreview,
     isAuthenticated,
     isPro,
-    savedGoalCount,
     managedAnalysisActive,
     moneyInsights,
   } = loaderData;
@@ -1731,6 +1729,9 @@ export default function Home() {
       window.sessionStorage.setItem(ANALYSIS_STORAGE_KEY, JSON.stringify(body));
       if (isAuthenticated) {
         invalidateRouteDataCache("home");
+        invalidateRouteDataCache("dashboard");
+        invalidateRouteDataCache("investment-insights");
+        invalidateRouteDataCache("analysis-history");
         invalidateRouteDataCache("achievements");
         void revalidator.revalidate();
       }
@@ -2157,8 +2158,8 @@ export default function Home() {
                           주식 투자를 시작한 지 얼마나 됐나요?
                         </Label>
                         <p className="text-muted-foreground mt-1 text-xs">
-                          현재 누적 수익률을 대략적인 연평균 수익률로 환산하는
-                          데 사용해요.
+                          투자 기간이 1년 이상이면 현재 누적 수익률을 연평균
+                          수익률로 환산하는 데 사용해요.
                         </p>
                         <div className="mt-3 flex max-w-sm items-center gap-2">
                           <div className="relative flex-1">
@@ -2256,13 +2257,6 @@ export default function Home() {
                         <p className="text-muted-foreground mt-1 text-xs">
                           1억부터 1,000억까지 원하는 목표를 입력할 수 있어요.
                         </p>
-                        {isPro && !managedAnalysisActive && (
-                          <p className="mt-2 text-xs font-bold text-amber-600 dark:text-amber-400">
-                            Pro 베타에서는 목표 금액 하나를 저장하고 필요할 때
-                            직접 분석해 기록을 이어가요. 현재 {savedGoalCount}
-                            /1개 사용 중이에요.
-                          </p>
-                        )}
                         <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                           <div className="relative sm:w-44">
                             <Input

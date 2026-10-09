@@ -285,6 +285,29 @@ export async function saveDailyAnalysisSnapshot({
   };
 
   const snapshotId = await db.transaction(async (transaction) => {
+    if (analysisMode === "managed") {
+      // A closing date represents one portfolio state. When a precise analysis
+      // is saved for that date, it becomes the canonical record instead of
+      // leaving the earlier quick analysis beside it.
+      await transaction
+        .delete(analysisSnapshots)
+        .where(
+          and(
+            eq(analysisSnapshots.user_id, userId),
+            eq(analysisSnapshots.saved_on, savedOn),
+            eq(analysisSnapshots.analysis_mode, "quick"),
+          ),
+        );
+      await transaction
+        .delete(analysisHistoryPoints)
+        .where(
+          and(
+            eq(analysisHistoryPoints.user_id, userId),
+            eq(analysisHistoryPoints.saved_on, savedOn),
+            eq(analysisHistoryPoints.analysis_mode, "quick"),
+          ),
+        );
+    }
     if (replaceOtherGoals) {
       await transaction
         .delete(analysisSnapshots)
@@ -403,6 +426,24 @@ export async function startManagedAnalysisHistory({
   };
 
   const snapshotId = await db.transaction(async (transaction) => {
+    await transaction
+      .delete(analysisSnapshots)
+      .where(
+        and(
+          eq(analysisSnapshots.user_id, userId),
+          eq(analysisSnapshots.saved_on, savedOn),
+          eq(analysisSnapshots.analysis_mode, "quick"),
+        ),
+      );
+    await transaction
+      .delete(analysisHistoryPoints)
+      .where(
+        and(
+          eq(analysisHistoryPoints.user_id, userId),
+          eq(analysisHistoryPoints.saved_on, savedOn),
+          eq(analysisHistoryPoints.analysis_mode, "quick"),
+        ),
+      );
     if (replaceOtherGoals) {
       await transaction
         .delete(analysisSnapshots)

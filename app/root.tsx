@@ -56,7 +56,10 @@ import {
 } from "./core/lib/analytics.client";
 import { validateEnvironmentConfiguration } from "./core/lib/app-environment.server";
 import i18next from "./core/lib/i18next.server";
-import { hasCachedRouteData } from "./core/lib/route-data-cache";
+import {
+  hasCachedRouteData,
+  invalidateRouteDataCache,
+} from "./core/lib/route-data-cache";
 import { themeSessionResolver } from "./core/lib/theme-session.server";
 import { cn } from "./core/lib/utils";
 import NotFound from "./core/screens/404";
@@ -515,6 +518,13 @@ export default function App() {
     const analyticsEvent = searchParams.get("analytics");
     if (!analyticsEvent || !isAnalyticsEventName(analyticsEvent)) return;
     consumePendingAnalyticsEvent(analyticsEvent);
+    if (analyticsEvent === "precise_analysis_complete") {
+      invalidateRouteDataCache("dashboard");
+      invalidateRouteDataCache("analysis-history");
+      invalidateRouteDataCache("investment-insights");
+      invalidateRouteDataCache("precise-analysis");
+      invalidateRouteDataCache("home");
+    }
     const nextSearchParams = new URLSearchParams(searchParams);
     nextSearchParams.delete("analytics");
     navigate(

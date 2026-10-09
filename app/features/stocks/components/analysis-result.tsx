@@ -2341,6 +2341,10 @@ export function AnalysisResultView({
   const [dimmedScenarioSeries, setDimmedScenarioSeries] = useState<
     ScenarioSeries[]
   >([]);
+  const annualizedReturnRate =
+    (result.investmentPeriodMonths ?? 0) >= 12
+      ? (result.annualizedReturnRate ?? null)
+      : null;
   const aiText = (text: string) =>
     restoreStoredHoldingAliases(text, result.holdings).replaceAll(
       "정보가 더 필요해요",
@@ -2403,11 +2407,11 @@ export function AnalysisResultView({
   );
   const marketAnnualReturn = result.benchmark?.investmentPeriodCagr ?? null;
   const annualReturnDifference =
-    result.annualizedReturnRate == null || marketAnnualReturn == null
+    annualizedReturnRate == null || marketAnnualReturn == null
       ? null
-      : result.annualizedReturnRate - marketAnnualReturn;
+      : annualizedReturnRate - marketAnnualReturn;
   const annualReturnComparison = (() => {
-    if (result.annualizedReturnRate == null) return "투자 기간 입력 필요";
+    if (annualizedReturnRate == null) return "1년 기록이 쌓이면 표시해요";
     if (!result.benchmark) return "시장 비교 데이터 없음";
     if (marketAnnualReturn == null) return "같은 기간의 시장 데이터가 부족해요";
     if (annualReturnDifference === null) return undefined;
@@ -2491,19 +2495,19 @@ export function AnalysisResultView({
           {
             label: "내 연평균 수익률",
             value:
-              result.annualizedReturnRate == null
-                ? "기간 입력 필요"
-                : `${result.annualizedReturnRate >= 0 ? "+" : ""}${result.annualizedReturnRate.toFixed(1)}%`,
-            rollingValue: result.annualizedReturnRate ?? undefined,
+              annualizedReturnRate == null
+                ? "1년 기록 필요"
+                : `${annualizedReturnRate >= 0 ? "+" : ""}${annualizedReturnRate.toFixed(1)}%`,
+            rollingValue: annualizedReturnRate ?? undefined,
             rollingFormat:
-              result.annualizedReturnRate == null
+              annualizedReturnRate == null
                 ? undefined
                 : (value: number) =>
                     `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`,
             tone:
-              result.annualizedReturnRate == null
+              annualizedReturnRate == null
                 ? undefined
-                : result.annualizedReturnRate >= 0
+                : annualizedReturnRate >= 0
                   ? "profit"
                   : "loss",
             detail: annualReturnComparison,
@@ -3615,6 +3619,11 @@ export function AnalysisResultView({
             <p className="text-muted-foreground mt-2 max-w-xl text-sm leading-6">
               입력한 종목·평균 매수가·수량은 그대로 가져가고, 종목별 매수 날짜만
               추가하면 당시 환율까지 자동 반영해요.
+            </p>
+            <p className="mt-2 max-w-xl text-xs leading-5 font-bold text-amber-600 dark:text-amber-400">
+              전환하면 대시보드와 인사이트 차트는 정밀 분석 기준으로 초기화되어
+              전환한 날부터 다시 기록돼요. 이전 빠른 분석은 분석 기록에서 계속
+              확인할 수 있어요.
             </p>
           </div>
           <Button

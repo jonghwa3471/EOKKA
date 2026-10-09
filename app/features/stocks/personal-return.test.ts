@@ -29,3 +29,14 @@ test("추가 매수 시점을 반영한다", () => {
 test("매수 현금흐름이 없으면 계산하지 않는다", () => {
   assert.equal(moneyWeightedAnnualReturn([], 1_000_000, "2026-01-01"), null);
 });
+
+test("1년 미만의 단기 성과는 연평균 수익률로 확대하지 않는다", () => {
+  assert.equal(
+    moneyWeightedAnnualReturn(
+      [{ date: "2025-12-01", amountKrw: -1_000_000 }],
+      1_100_000,
+      "2026-01-01",
+    ),
+    null,
+  );
+});
