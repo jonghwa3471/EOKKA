@@ -4,6 +4,7 @@ import db from "~/core/db/drizzle-client.server";
 import { createNotification } from "~/features/notifications/notifications.server";
 import type { AnalysisResult } from "~/features/stocks/analysis.types";
 import { analysisSnapshots } from "~/features/stocks/history/schema";
+import { managedPortfolios } from "~/features/stocks/portfolio/schema";
 
 import { achievementById, findCompletedAchievementIds } from "./achievements";
 import { userAchievements } from "./schema";
@@ -52,6 +53,7 @@ async function awardAchievementIds(userId: string, completedIds: string[]) {
 export async function awardUserAchievementsForAnalysis(
   userId: string,
   result: AnalysisResult,
+  analysisMode: "quick" | "managed" = "quick",
 ) {
   await awardAchievementIds(
     userId,
@@ -61,6 +63,7 @@ export async function awardUserAchievementsForAnalysis(
         goalAmount: result.goalAmount,
         currentValue: result.currentValue,
         monthlyContribution: result.monthlyContribution,
+        analysisMode,
         result,
       },
     ]),
@@ -68,16 +71,29 @@ export async function awardUserAchievementsForAnalysis(
 }
 
 export async function syncUserAchievements(userId: string) {
+  const [managedPortfolio] = await db
+    .select({ status: managedPortfolios.status })
+    .from(managedPortfolios)
+    .where(eq(managedPortfolios.user_id, userId))
+    .limit(1);
+  const activeMode =
+    managedPortfolio?.status === "active" ? "managed" : "quick";
   const snapshots = await db
     .select({
       savedOn: analysisSnapshots.saved_on,
       goalAmount: analysisSnapshots.goal_amount,
       currentValue: analysisSnapshots.current_value,
       monthlyContribution: analysisSnapshots.monthly_contribution,
+      analysisMode: analysisSnapshots.analysis_mode,
       result: analysisSnapshots.result,
     })
     .from(analysisSnapshots)
-    .where(eq(analysisSnapshots.user_id, userId))
+    .where(
+      and(
+        eq(analysisSnapshots.user_id, userId),
+        eq(analysisSnapshots.analysis_mode, activeMode),
+      ),
+    )
     .orderBy(
       desc(analysisSnapshots.saved_on),
       desc(analysisSnapshots.updated_at),

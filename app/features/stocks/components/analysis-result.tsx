@@ -3623,7 +3623,8 @@ export function AnalysisResultView({
             <p className="mt-2 max-w-xl text-xs leading-5 font-bold text-amber-600 dark:text-amber-400">
               전환하면 대시보드와 인사이트 차트는 정밀 분석 기준으로 초기화되어
               전환한 날부터 다시 기록돼요. 이전 빠른 분석은 분석 기록에서 계속
-              확인할 수 있어요.
+              확인할 수 있어요. 빠른 분석으로 획득한 도전과제도 초기화되고 정밀
+              분석 기준으로 다시 시작해요.
             </p>
           </div>
           <Button

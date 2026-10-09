@@ -251,19 +251,23 @@ export async function action({ request }: Route.ActionArgs) {
       targetType: "analysis",
     });
 
-    try {
-      await awardUserAchievementsForAnalysis(user.id, completeResult);
-    } catch (achievementError) {
-      console.error("Achievement award failed", achievementError);
-    }
-
-    if (!accountSettings.isPro)
+    if (!accountSettings.isPro) {
+      try {
+        await awardUserAchievementsForAnalysis(
+          user.id,
+          completeResult,
+          "managed",
+        );
+      } catch (achievementError) {
+        console.error("Achievement award failed", achievementError);
+      }
       return data({
         result: completeResult,
         error: null,
         code: undefined,
         historySaved: false,
       });
+    }
 
     request.signal.throwIfAborted();
     const saved =
@@ -653,7 +657,9 @@ function PreciseAnalysisContent({
                           이전 날짜의 빠른 분석 기록은 보관하고, 같은 종가
                           날짜의 기록은 정밀 분석으로 대체해요. 대시보드와
                           인사이트 차트는 정밀 분석 기준으로 초기화되며, 전환한
-                          날부터 다시 기록하는 데 동의해요.
+                          날부터 다시 기록해요. 빠른 분석으로 획득한 도전과제도
+                          초기화되어 정밀 분석 기준으로 다시 시작하는 데
+                          동의해요.
                         </>
                       ) : (
                         <>

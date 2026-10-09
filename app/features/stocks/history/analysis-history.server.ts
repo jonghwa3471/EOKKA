@@ -1,11 +1,12 @@
-import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 
 import db from "~/core/db/drizzle-client.server";
 import { createNotification } from "~/features/notifications/notifications.server";
 import type { AnalysisResult } from "~/features/stocks/analysis.types";
 import { managedPortfolios } from "~/features/stocks/portfolio/schema";
+import { findCompletedAchievementIds } from "~/features/users/achievements";
 import { syncUserAchievements } from "~/features/users/achievements.server";
-import { profiles } from "~/features/users/schema";
+import { profiles, userAchievements } from "~/features/users/schema";
 
 import { analysisHistoryPoints, analysisSnapshots } from "./schema";
 
@@ -426,6 +427,45 @@ export async function startManagedAnalysisHistory({
   };
 
   const snapshotId = await db.transaction(async (transaction) => {
+    const quickSnapshots = await transaction
+      .select({
+        savedOn: analysisSnapshots.saved_on,
+        goalAmount: analysisSnapshots.goal_amount,
+        currentValue: analysisSnapshots.current_value,
+        monthlyContribution: analysisSnapshots.monthly_contribution,
+        analysisMode: analysisSnapshots.analysis_mode,
+        result: analysisSnapshots.result,
+      })
+      .from(analysisSnapshots)
+      .where(
+        and(
+          eq(analysisSnapshots.user_id, userId),
+          eq(analysisSnapshots.analysis_mode, "quick"),
+        ),
+      )
+      .orderBy(
+        desc(analysisSnapshots.saved_on),
+        desc(analysisSnapshots.updated_at),
+      );
+    const quickAchievementIds = findCompletedAchievementIds(quickSnapshots);
+    if (quickAchievementIds.length) {
+      await transaction
+        .delete(userAchievements)
+        .where(
+          and(
+            eq(userAchievements.user_id, userId),
+            inArray(userAchievements.achievement_id, quickAchievementIds),
+          ),
+        );
+    }
+    const [currentProfile] = await transaction
+      .select({ featuredIds: profiles.featured_achievement_ids })
+      .from(profiles)
+      .where(eq(profiles.profile_id, userId))
+      .limit(1);
+    const remainingFeaturedIds = (currentProfile?.featuredIds ?? []).filter(
+      (id) => !quickAchievementIds.includes(id),
+    );
     await transaction
       .delete(analysisSnapshots)
       .where(
@@ -470,6 +510,7 @@ export async function startManagedAnalysisHistory({
       .update(profiles)
       .set({
         preferred_goal_amount: snapshot.goal_amount,
+        featured_achievement_ids: remainingFeaturedIds,
       })
       .where(eq(profiles.profile_id, userId));
     await transaction

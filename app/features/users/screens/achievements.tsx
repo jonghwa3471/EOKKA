@@ -14,6 +14,7 @@ import { cn } from "~/core/lib/utils";
 import {
   ACHIEVEMENTS,
   ACHIEVEMENT_CATEGORIES,
+  ACHIEVEMENT_CATEGORY_DESCRIPTIONS,
   ACHIEVEMENT_DIFFICULTY_STYLES,
   achievementDifficulty,
   achievementDifficultyRank,
@@ -173,7 +174,7 @@ export default function Achievements({ loaderData }: Route.ComponentProps) {
                 <div>
                   <h2 className="text-xl font-black">{group.category}</h2>
                   <p className="text-muted-foreground mt-1 text-sm">
-                    쉬운 도전부터 차례대로 모아보세요.
+                    {ACHIEVEMENT_CATEGORY_DESCRIPTIONS[group.category]}
                   </p>
                 </div>
                 <span className="text-muted-foreground shrink-0 text-sm font-black tabular-nums">

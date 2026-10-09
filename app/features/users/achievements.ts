@@ -9,6 +9,7 @@ export type AchievementTone =
   | "blue";
 export type AchievementCategory =
   | "분석 기록"
+  | "정밀 분석"
   | "포트폴리오"
   | "투자 성과"
   | "버핏 지수"
@@ -77,6 +78,7 @@ export const ACHIEVEMENT_DIFFICULTY_STYLES: Record<
 
 export const ACHIEVEMENT_CATEGORIES: AchievementCategory[] = [
   "분석 기록",
+  "정밀 분석",
   "포트폴리오",
   "투자 성과",
   "버핏 지수",
@@ -84,6 +86,20 @@ export const ACHIEVEMENT_CATEGORIES: AchievementCategory[] = [
   "투자 습관",
   "자산 성장",
 ];
+
+export const ACHIEVEMENT_CATEGORY_DESCRIPTIONS: Record<
+  AchievementCategory,
+  string
+> = {
+  "분석 기록": "분석한 날을 차곡차곡 쌓으며 투자 흐름을 관찰해 보세요.",
+  "정밀 분석": "실제 매매일지를 바탕으로 더 정확한 기록 습관을 만들어 보세요.",
+  포트폴리오: "보유 종목을 구성하고 위험을 나누는 경험을 쌓아 보세요.",
+  "투자 성과": "포트폴리오의 수익률이 성장하며 열리는 성과를 확인해 보세요.",
+  "버핏 지수": "1년 이상의 기록으로 장기 수익률의 높은 벽에 도전해 보세요.",
+  "목표 달성": "정한 목표 금액에 한 걸음씩 가까워지는 과정을 확인해 보세요.",
+  "투자 습관": "꾸준한 투자금과 긴 투자 기간으로 좋은 습관을 만들어 보세요.",
+  "자산 성장": "평가금액과 수익이 커질수록 달라지는 성장 단계를 만나 보세요.",
+};
 
 export const ACHIEVEMENTS: AchievementDefinition[] = [
   {
@@ -148,6 +164,42 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     description: "100일의 시장을 내 기록으로 남겼어요.",
     tone: "amber",
     category: "분석 기록",
+  },
+  {
+    id: "first-managed-analysis",
+    name: "정밀한 첫걸음",
+    emoji: "🧭",
+    mission: "매매일지를 바탕으로 첫 정밀 분석을 완료해요.",
+    description: "실제 매수 기록을 바탕으로 더 정확한 투자 기록을 시작했어요.",
+    tone: "emerald",
+    category: "정밀 분석",
+  },
+  {
+    id: "three-managed-days",
+    name: "꼼꼼한 관찰자",
+    emoji: "🔬",
+    mission: "서로 다른 날짜의 정밀 분석 기록을 3일 쌓아요.",
+    description: "정밀한 기준으로 포트폴리오의 변화를 관찰하기 시작했어요.",
+    tone: "blue",
+    category: "정밀 분석",
+  },
+  {
+    id: "seven-managed-days",
+    name: "정밀 기록 루틴",
+    emoji: "📝",
+    mission: "서로 다른 날짜의 정밀 분석 기록을 7일 쌓아요.",
+    description: "일주일의 변화를 실제 매매 기록과 함께 차곡차곡 남겼어요.",
+    tone: "violet",
+    category: "정밀 분석",
+  },
+  {
+    id: "thirty-managed-days",
+    name: "정밀 분석가",
+    emoji: "🎯",
+    mission: "서로 다른 날짜의 정밀 분석 기록을 30일 쌓아요.",
+    description: "한 달의 투자 흐름을 정밀한 기록으로 완성했어요.",
+    tone: "amber",
+    category: "정밀 분석",
   },
   {
     id: "three-holdings",
@@ -513,6 +565,7 @@ export interface AchievementSnapshot {
   goalAmount: number;
   currentValue: number;
   monthlyContribution: number;
+  analysisMode?: "quick" | "managed" | string;
   result: AnalysisResult;
 }
 
@@ -521,6 +574,11 @@ export function findCompletedAchievementIds(snapshots: AchievementSnapshot[]) {
   const latest = snapshots[0];
   const result = latest.result;
   const recordDays = new Set(snapshots.map((item) => item.savedOn)).size;
+  const managedRecordDays = new Set(
+    snapshots
+      .filter((item) => item.analysisMode === "managed")
+      .map((item) => item.savedOn),
+  ).size;
   const holdingCount = result.holdings.length;
   const annualizedReturn = result.annualizedReturnRate;
   const returnRate = result.returnRate;
@@ -541,6 +599,13 @@ export function findCompletedAchievementIds(snapshots: AchievementSnapshot[]) {
     [100, "hundred-record-days"],
   ] as const)
     award(id, recordDays >= days);
+  for (const [days, id] of [
+    [1, "first-managed-analysis"],
+    [3, "three-managed-days"],
+    [7, "seven-managed-days"],
+    [30, "thirty-managed-days"],
+  ] as const)
+    award(id, managedRecordDays >= days);
   for (const [count, id] of [
     [3, "three-holdings"],
     [5, "diversified-investor"],
