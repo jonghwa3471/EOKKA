@@ -2,6 +2,7 @@ import type { Route } from "./+types/analyze-portfolios";
 
 import { data } from "react-router";
 
+import { isAutomaticAnalysisEnabled } from "~/core/lib/app-environment.server";
 import { runAutomaticPortfolioAnalysis } from "~/features/stocks/history/automatic-analysis.server";
 
 function isAuthorized(request: Request) {
@@ -18,6 +19,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     );
   if (!isAuthorized(request))
     return data({ error: "인증되지 않은 요청입니다." }, { status: 401 });
+  if (!isAutomaticAnalysisEnabled())
+    return data(
+      { error: "베타 기간에는 자동 분석을 제공하지 않습니다." },
+      { status: 503 },
+    );
 
   const stats = await runAutomaticPortfolioAnalysis();
   return data({ ok: true, ...stats });

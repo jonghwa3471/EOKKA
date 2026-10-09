@@ -10,6 +10,10 @@ const BASE_URL = `http://localhost:${PORT}`;
 export default defineConfig({
   timeout: 60000 * 10,
   testDir: "./e2e",
+  // The older account lifecycle specs are kept as reference because they create
+  // and delete Supabase users. Default CI runs only non-destructive current
+  // service smoke tests.
+  testMatch: "smoke/**/*.spec.ts",
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */

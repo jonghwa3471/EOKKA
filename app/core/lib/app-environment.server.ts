@@ -32,6 +32,12 @@ export function isLocalDevelopmentEnvironment() {
   return getAppEnvironment() === "development" && !process.env.VERCEL_ENV;
 }
 
+export function isAutomaticAnalysisEnabled() {
+  return (
+    process.env.AUTOMATIC_ANALYSIS_ENABLED?.trim().toLowerCase() === "true"
+  );
+}
+
 export function validateEnvironmentConfiguration() {
   const appEnvironment = getAppEnvironment();
   const dataEnvironment = process.env.DATA_ENV?.trim().toLowerCase();

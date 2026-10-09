@@ -62,9 +62,11 @@ interface EmailMessage {
  */
 export async function action({ request }: Route.LoaderArgs) {
   // Security check: Verify this is a POST request with the correct secret
+  const cronSecret = process.env.CRON_SECRET;
   if (
     request.method !== "POST" ||
-    request.headers.get("Authorization") !== process.env.CRON_SECRET
+    !cronSecret ||
+    request.headers.get("Authorization") !== `Bearer ${cronSecret}`
   ) {
     return data(null, { status: 401 });
   }
