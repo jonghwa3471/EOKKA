@@ -6,6 +6,7 @@
 
 ## 코드 구조와 검증
 
+- [처음 읽는 개발자를 위한 유지보수 안내서: 기능별 파일·함수·수정 경로](docs/maintenance-guide.md)
 - [구조 리팩터링: 문제, 설계 결정, 변경 전후, 검증 범위](docs/refactoring-2026-10.md)
 - [페이지 로딩과 캐시 원칙](docs/loading-and-cache.md)
 - [개발·운영 환경 분리](docs/environment-separation.md)
