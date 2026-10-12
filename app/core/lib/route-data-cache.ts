@@ -51,3 +51,20 @@ export function invalidateRouteDataCache(keyPrefix: string) {
     if (key === keyPrefix || key.startsWith(`${keyPrefix}:`))
       routeDataCache.delete(key);
 }
+
+/** Every view derived from an analysis must refresh after it is saved or promoted. */
+export function invalidateAnalysisRouteData() {
+  for (const key of [
+    "home",
+    "dashboard",
+    "dashboard-layout",
+    "analysis-history",
+    "investment-insights",
+    "precise-analysis",
+    "achievements",
+    "profile",
+    "account",
+  ]) {
+    invalidateRouteDataCache(key);
+  }
+}

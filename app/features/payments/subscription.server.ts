@@ -1,157 +1,23 @@
 import { and, eq, lte } from "drizzle-orm";
-import {
-  createCipheriv,
-  createDecipheriv,
-  createHash,
-  randomBytes,
-  randomUUID,
-} from "node:crypto";
 
 import db from "~/core/db/drizzle-client.server";
-import { requireTossPaymentsSecretKey } from "~/core/lib/app-environment.server";
 import { recordAdminActivity } from "~/features/admin/activity.server";
 import { createNotification } from "~/features/notifications/notifications.server";
 import { profiles } from "~/features/users/schema";
 
+import { decryptBillingKey, encryptBillingKey } from "./billing-crypto.server";
 import { payments, subscriptions } from "./schema";
-
-export const PRO_MONTHLY_PRICE = 990;
-export const PRO_ORDER_NAME = "EOKKA Pro 베타 월 구독";
-
-function encryptionKey() {
-  const value = process.env.BILLING_ENCRYPTION_KEY?.trim();
-  if (!value) throw new Error("BILLING_ENCRYPTION_KEY가 설정되지 않았습니다.");
-  return createHash("sha256").update(value).digest();
-}
-
-function encryptBillingKey(value: string) {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
-  const encrypted = Buffer.concat([
-    cipher.update(value, "utf8"),
-    cipher.final(),
-  ]);
-  return {
-    ciphertext: encrypted.toString("base64"),
-    iv: Buffer.from(iv).toString("base64"),
-    tag: cipher.getAuthTag().toString("base64"),
-  };
-}
-
-function decryptBillingKey(subscription: typeof subscriptions.$inferSelect) {
-  const decipher = createDecipheriv(
-    "aes-256-gcm",
-    encryptionKey(),
-    Buffer.from(subscription.billing_key_iv, "base64"),
-  );
-  decipher.setAuthTag(Buffer.from(subscription.billing_key_tag, "base64"));
-  return Buffer.concat([
-    decipher.update(Buffer.from(subscription.billing_key_ciphertext, "base64")),
-    decipher.final(),
-  ]).toString("utf8");
-}
-
-function tossAuthorization() {
-  return `Basic ${Buffer.from(`${requireTossPaymentsSecretKey()}:`).toString("base64")}`;
-}
-
-async function tossRequest<T>(url: string, init: RequestInit) {
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      Authorization: tossAuthorization(),
-      "Content-Type": "application/json",
-      ...init.headers,
-    },
-    signal: AbortSignal.timeout(65_000),
-  });
-  const body = response.status === 204 ? null : await response.json();
-  if (!response.ok) {
-    const error = body as { message?: string } | null;
-    throw new Error(error?.message ?? "토스페이먼츠 요청을 처리하지 못했어요.");
-  }
-  return body as T;
-}
-
-type TossBilling = {
-  billingKey: string;
-  card?: { issuerCode?: string; number?: string };
-  cardCompany?: string;
-  cardNumber?: string;
-};
-
-type TossPayment = {
-  paymentKey: string;
-  orderId: string;
-  orderName: string;
-  status: string;
-  requestedAt: string;
-  approvedAt: string;
-  totalAmount: number;
-  receipt?: { url?: string };
-  metadata?: Record<string, string>;
-  card?: unknown;
-};
-
-function nextMonth(from: Date) {
-  const next = new Date(from);
-  const originalDate = next.getDate();
-  next.setDate(1);
-  next.setMonth(next.getMonth() + 1);
-  const lastDateOfTargetMonth = new Date(
-    next.getFullYear(),
-    next.getMonth() + 1,
-    0,
-  ).getDate();
-  next.setDate(Math.min(originalDate, lastDateOfTargetMonth));
-  return next;
-}
-
-function paymentValues(userId: string, payment: TossPayment) {
-  return {
-    payment_key: payment.paymentKey,
-    order_id: payment.orderId,
-    order_name: payment.orderName,
-    total_amount: payment.totalAmount,
-    metadata: payment.metadata ?? { plan: "pro_beta_monthly" },
-    raw_data: payment,
-    receipt_url: payment.receipt?.url ?? "",
-    status: payment.status,
-    user_id: userId,
-    approved_at: new Date(payment.approvedAt),
-    requested_at: new Date(payment.requestedAt),
-  };
-}
-
-async function chargeBillingKey({
-  billingKey,
-  customerKey,
-  userId,
-  customerEmail,
-  customerName,
-}: {
-  billingKey: string;
-  customerKey: string;
-  userId: string;
-  customerEmail?: string;
-  customerName?: string;
-}) {
-  return tossRequest<TossPayment>(
-    `https://api.tosspayments.com/v1/billing/${encodeURIComponent(billingKey)}`,
-    {
-      method: "POST",
-      body: JSON.stringify({
-        amount: PRO_MONTHLY_PRICE,
-        customerKey,
-        orderId: `eokka_${randomUUID()}`,
-        orderName: PRO_ORDER_NAME,
-        customerEmail,
-        customerName,
-        metadata: { plan: "pro_beta_monthly" },
-      }),
-    },
-  );
-}
+import {
+  PRO_MONTHLY_PRICE,
+  nextMonth,
+  paymentValues,
+} from "./subscription-values";
+import {
+  type TossBilling,
+  type TossPayment,
+  chargeBillingKey,
+  tossRequest,
+} from "./toss-billing.server";
 
 export async function startSubscription({
   userId,
@@ -451,3 +317,7 @@ export async function renewDueSubscriptions() {
   }
   return stats;
 }
+
+export { PRO_MONTHLY_PRICE } from "./subscription-values";
+
+export { PRO_ORDER_NAME } from "./subscription-values";

@@ -1,8 +1,9 @@
+import type { AnalysisResult } from "./analysis.types";
+
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { AnalysisResult } from "./analysis.types";
-import { restoreStoredHoldingAliases } from "./components/analysis-result";
+import { restoreStoredHoldingAliases } from "./holding-aliases";
 
 const holdings = [
   { name: "애플" },

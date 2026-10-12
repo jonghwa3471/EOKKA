@@ -4,6 +4,21 @@ import { inArray } from "drizzle-orm";
 
 import db from "~/core/db/drizzle-client.server";
 
+import { goalLabel, periodLabel } from "./analysis/labels";
+import {
+  type PriceHistory,
+  annualizedVolatility,
+  cagr,
+  clampStyleScore,
+  longTermAnnualReturn,
+  maximumDrawdown,
+  monthlyReturnMap,
+  positiveRollingYearRatio,
+  priceRangePosition,
+  quantile,
+  weightedMonthlyReturns,
+} from "./analysis/metrics";
+import { PATHS, simulatePaths } from "./analysis/simulation";
 import { getDomesticMarketData } from "./fsc-client.server";
 import {
   type KisBenchmarkKind,
@@ -18,9 +33,7 @@ import {
 import { calculatePersonalReturnAdjustment } from "./scenario-adjustment";
 import { stocks } from "./schema";
 
-const PATHS = 5_000;
 const GOAL_MONTHS = 360;
-const SIMULATION_MONTHS = 600;
 
 export interface AnalysisInput {
   goalAmount: number;
@@ -34,207 +47,6 @@ export interface AnalysisInput {
     currency: "KRW" | "USD";
     costKrw?: number;
   }>;
-}
-
-function goalLabel(amount: number) {
-  return `${(amount / 100_000_000).toLocaleString("ko-KR")}억`;
-}
-
-function periodLabel(months: number) {
-  const years = Math.floor(months / 12);
-  const remainingMonths = months % 12;
-  return [
-    years > 0 ? `${years}년` : "",
-    remainingMonths > 0 ? `${remainingMonths}개월` : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
-
-function quantile(values: Float64Array, percentile: number) {
-  const sorted = Array.from(values).sort((a, b) => a - b);
-  return sorted[Math.floor((sorted.length - 1) * percentile)];
-}
-
-function priceRangePosition(prices: number[], averagePrice: number) {
-  if (prices.length === 0) return 50;
-  const low = Math.min(...prices);
-  const high = Math.max(...prices);
-  if (high === low) return 50;
-  const position = ((averagePrice - low) / (high - low)) * 100;
-  return Math.round(Math.min(100, Math.max(0, position)) * 10) / 10;
-}
-
-function cagr(returns: number[], months: number) {
-  if (returns.length < months) return null;
-  const selected = returns.slice(-months);
-  const growth = selected.reduce((value, rate) => value * (1 + rate), 1);
-  return (growth ** (12 / months) - 1) * 100;
-}
-
-const clampStyleScore = (score: number) =>
-  Math.round(Math.max(0, Math.min(100, score)));
-
-function annualizedVolatility(returns: number[]) {
-  if (returns.length < 2) return 0;
-  const average = returns.reduce((sum, rate) => sum + rate, 0) / returns.length;
-  const variance =
-    returns.reduce((sum, rate) => sum + (rate - average) ** 2, 0) /
-    (returns.length - 1);
-  return Math.sqrt(variance) * Math.sqrt(12) * 100;
-}
-
-function maximumDrawdown(returns: number[]) {
-  let value = 1;
-  let peak = 1;
-  let drawdown = 0;
-  for (const rate of returns) {
-    value *= 1 + rate;
-    peak = Math.max(peak, value);
-    drawdown = Math.max(drawdown, (peak - value) / peak);
-  }
-  return drawdown * 100;
-}
-
-function positiveRollingYearRatio(returns: number[]) {
-  if (returns.length < 12) return 0;
-  let positive = 0;
-  let windows = 0;
-  for (let end = 12; end <= returns.length; end++) {
-    const growth = returns
-      .slice(end - 12, end)
-      .reduce((value, rate) => value * (1 + rate), 1);
-    if (growth > 1) positive++;
-    windows++;
-  }
-  return windows ? positive / windows : 0;
-}
-
-function seededRandom(seed: number) {
-  let state = seed >>> 0;
-  return () => {
-    state = (state * 1_664_525 + 1_013_904_223) >>> 0;
-    return state / 4_294_967_296;
-  };
-}
-
-function historicalDriftWeight(month: number) {
-  if (month <= 120) return 0.6 - (month / 120) * 0.25;
-  if (month <= 360) return 0.35 - ((month - 120) / 240) * 0.25;
-  return 0.1 - ((month - 360) / 240) * 0.05;
-}
-
-function residualVolatilityWeight(month: number) {
-  if (month <= 120) return 1;
-  return 1 - ((month - 120) / 480) * 0.2;
-}
-
-function longTermAnnualReturn(
-  marketData: Array<{ stock: { country: string; exchange: string } }>,
-  weights: number[],
-) {
-  return marketData.reduce((sum, { stock }, index) => {
-    const expected =
-      stock.country === "KR"
-        ? stock.exchange === "KOSDAQ"
-          ? 0.075
-          : 0.07
-        : stock.exchange === "NASDAQ"
-          ? 0.08
-          : 0.07;
-    return sum + expected * weights[index];
-  }, 0);
-}
-
-type PriceHistory = Array<{ date: string; close: number }>;
-
-function monthlyReturnMap(history: PriceHistory) {
-  const map = new Map<string, number>();
-  for (let index = 1; index < history.length; index++) {
-    const previous = history[index - 1];
-    const current = history[index];
-    const rate = current.close / previous.close - 1;
-    if (Number.isFinite(rate))
-      map.set(current.date.slice(0, 6), Math.max(-0.8, Math.min(1, rate)));
-  }
-  return map;
-}
-
-function weightedMonthlyReturns(
-  components: Array<{ weight: number; history: PriceHistory }>,
-) {
-  if (!components.length) return [];
-  const maps = components.map(({ history }) => monthlyReturnMap(history));
-  const totalWeight = components.reduce((sum, item) => sum + item.weight, 0);
-  const commonMonths = [...maps[0].keys()]
-    .filter((month) => maps.every((map) => map.has(month)))
-    .sort();
-  return commonMonths.map((month) =>
-    maps.reduce(
-      (sum, map, index) =>
-        sum + map.get(month)! * (components[index].weight / totalWeight),
-      0,
-    ),
-  );
-}
-
-function simulatePaths(
-  returns: number[],
-  initialValue: number,
-  goalAmount: number,
-  seed: number,
-  longTermAnnualReturn: number,
-  monthlyContribution = 0,
-  personalMonthlyLogAdjustment = 0,
-) {
-  const logReturns = returns.map((rate) => Math.log1p(rate));
-  const rawHistoricalMonthlyDrift =
-    logReturns.reduce((sum, rate) => sum + rate, 0) / logReturns.length;
-  const historicalMonthlyDrift = Math.min(
-    Math.log1p(0.2) / 12,
-    Math.max(Math.log1p(-0.1) / 12, rawHistoricalMonthlyDrift),
-  );
-  const longTermMonthlyDrift = Math.log1p(longTermAnnualReturn) / 12;
-  const valuesByMonth = Array.from(
-    { length: SIMULATION_MONTHS + 1 },
-    () => new Float64Array(PATHS),
-  );
-  const goalMonths = new Int16Array(PATHS).fill(-1);
-  const random = seededRandom(seed);
-
-  for (let path = 0; path < PATHS; path++) {
-    let value = initialValue;
-    let blockStart = 0;
-    for (let month = 0; month <= SIMULATION_MONTHS; month++) {
-      valuesByMonth[month][path] = value;
-      if (
-        month <= SIMULATION_MONTHS &&
-        value >= goalAmount &&
-        goalMonths[path] === -1
-      )
-        goalMonths[path] = month;
-      if (month === SIMULATION_MONTHS) break;
-      if (month % 6 === 0)
-        blockStart = Math.floor(random() * logReturns.length);
-      const sampledLogReturn =
-        logReturns[(blockStart + (month % 6)) % logReturns.length];
-      const residual = sampledLogReturn - rawHistoricalMonthlyDrift;
-      const driftWeight = historicalDriftWeight(month);
-      const monthlyDrift =
-        historicalMonthlyDrift * driftWeight +
-        longTermMonthlyDrift * (1 - driftWeight);
-      const projectedLogReturn =
-        monthlyDrift +
-        personalMonthlyLogAdjustment +
-        residual * residualVolatilityWeight(month);
-      value = Math.max(
-        0,
-        value * Math.exp(projectedLogReturn) + monthlyContribution,
-      );
-    }
-  }
-
-  return { valuesByMonth, goalMonths };
 }
 
 export async function analyzePortfolio(

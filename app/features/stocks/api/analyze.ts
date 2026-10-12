@@ -9,6 +9,7 @@ import {
   manualAnalysisLimitResponse,
   rateLimitResponse,
 } from "~/core/lib/rate-limit.server";
+import { holdingLimitFor } from "~/core/lib/service-limits";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { recordAdminActivity } from "~/features/admin/activity.server";
 import { awardUserAchievementsForAnalysis } from "~/features/users/achievements.server";
@@ -95,7 +96,7 @@ export async function action({ request }: Route.ActionArgs) {
     const isPro = user
       ? (await getAutomaticAnalysisSettings(user.id)).isPro
       : false;
-    const holdingLimit = isPro ? 20 : 10;
+    const holdingLimit = holdingLimitFor(isPro);
     if (input.holdings.length > holdingLimit)
       return data(
         {

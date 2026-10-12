@@ -27,6 +27,7 @@ import {
   loadCachedRouteData,
   usePrimeRouteDataCache,
 } from "~/core/lib/route-data-cache";
+import { holdingLimitFor } from "~/core/lib/service-limits";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
 import { recordAdminActivity } from "~/features/admin/activity.server";
@@ -53,7 +54,6 @@ import {
   investmentMonthsSince,
   managedPortfolioCashFlows,
 } from "~/features/stocks/portfolio/portfolio.server";
-import { awardUserAchievementsForAnalysis } from "~/features/users/achievements.server";
 import { getAutomaticAnalysisSettings } from "~/features/users/automatic-analysis-settings.server";
 
 const analysisSchema = z.object({
@@ -190,12 +190,11 @@ export async function action({ request }: Route.ActionArgs) {
     if (managed.portfolio.status !== "active" && parsed.confirmReset !== "on")
       throw new Error("정밀 분석 전환에 동의해 주세요.");
     const accountSettings = initialAccountSettings;
-    if (accountSettings.isPro)
-      await assertFreeAccountGoal({
-        userId: user.id,
-        goalAmount: parsed.goalAmount,
-        replaceExistingGoal: parsed.replaceExistingGoal === "on",
-      });
+    await assertFreeAccountGoal({
+      userId: user.id,
+      goalAmount: parsed.goalAmount,
+      replaceExistingGoal: parsed.replaceExistingGoal === "on",
+    });
     request.signal.throwIfAborted();
     const durableLimit = await consumeManualAnalysisLimit(request, user.id);
     if (!durableLimit.allowed) return manualAnalysisLimitResponse(durableLimit);
@@ -203,7 +202,7 @@ export async function action({ request }: Route.ActionArgs) {
     const holdings = calculateManagedHoldings(managed.transactions);
     if (!holdings.length)
       throw new Error("현재 보유 중인 종목이 없어 분석할 수 없어요.");
-    const holdingLimit = accountSettings.isPro ? 20 : 10;
+    const holdingLimit = holdingLimitFor(accountSettings.isPro);
     if (holdings.length > holdingLimit)
       throw new Error(
         `${accountSettings.isPro ? "EOKKA Pro" : "무료 플랜"} 정밀 분석은 최대 ${holdingLimit}개 보유 종목을 지원해요.`,
@@ -250,24 +249,6 @@ export async function action({ request }: Route.ActionArgs) {
       userId: user.id,
       targetType: "analysis",
     });
-
-    if (!accountSettings.isPro) {
-      try {
-        await awardUserAchievementsForAnalysis(
-          user.id,
-          completeResult,
-          "managed",
-        );
-      } catch (achievementError) {
-        console.error("Achievement award failed", achievementError);
-      }
-      return data({
-        result: completeResult,
-        error: null,
-        code: undefined,
-        historySaved: false,
-      });
-    }
 
     request.signal.throwIfAborted();
     const saved =

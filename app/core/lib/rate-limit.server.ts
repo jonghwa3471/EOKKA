@@ -4,6 +4,8 @@ import { createHmac, randomUUID } from "node:crypto";
 import db from "~/core/db/drizzle-client.server";
 import { analysisRateLimits } from "~/features/stocks/history/schema";
 
+import { SERVICE_LIMITS } from "./service-limits";
+
 type RateLimitOptions = {
   key: string;
   limit: number;
@@ -137,7 +139,7 @@ function secondsUntilNextSeoulDay() {
 function durableIdentifiers(
   request: Request,
   userId: string | null,
-  userLimit = 5,
+  userLimit: number = SERVICE_LIMITS.manualAnalysesPerDay,
 ) {
   if (userId)
     return {
@@ -152,18 +154,23 @@ function durableIdentifiers(
     identifiers: [
       {
         raw: `anonymous-browser:${browserId}:${request.headers.get("user-agent") ?? "unknown"}`,
-        limit: 5,
+        limit: SERVICE_LIMITS.manualAnalysesPerDay,
       },
       ...(ip === "untrusted-client" || ip === "local-development"
         ? []
-        : [{ raw: `anonymous-ip:${ip}`, limit: 30 }]),
+        : [
+            {
+              raw: `anonymous-ip:${ip}`,
+              limit: SERVICE_LIMITS.anonymousAnalysesPerIpPerDay,
+            },
+          ]),
     ],
     setCookie: existingBrowserId ? null : browserCookie(browserId),
   };
 }
 
 async function manualAnalysisLimit(_userId: string | null) {
-  return 5;
+  return SERVICE_LIMITS.manualAnalysesPerDay;
 }
 
 function rateLimitSecret() {

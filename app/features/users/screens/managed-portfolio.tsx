@@ -45,6 +45,7 @@ import {
   loadCachedRouteData,
   usePrimeRouteDataCache,
 } from "~/core/lib/route-data-cache";
+import { SERVICE_LIMITS } from "~/core/lib/service-limits";
 import makeServerClient from "~/core/lib/supa-client.server";
 import { cn } from "~/core/lib/utils";
 import { recordAdminActivity } from "~/features/admin/activity.server";
@@ -204,7 +205,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       holdings: [],
       lastManagedAnalysisAt: null,
       hasUnappliedChanges: false,
-      holdingLimit: 20,
+      holdingLimit: SERVICE_LIMITS.proHoldings,
     };
 
   const [managed, quickHistory] = await Promise.all([
@@ -242,7 +243,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     holdings,
     lastManagedAnalysisAt,
     hasUnappliedChanges,
-    holdingLimit: 20,
+    holdingLimit: SERVICE_LIMITS.proHoldings,
   };
 }
 
@@ -274,7 +275,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
-  const holdingLimit = 20;
+  const holdingLimit = SERVICE_LIMITS.proHoldings;
 
   try {
     if (intent === "add-transaction") {

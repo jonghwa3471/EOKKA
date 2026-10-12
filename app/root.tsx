@@ -58,7 +58,7 @@ import { validateEnvironmentConfiguration } from "./core/lib/app-environment.ser
 import i18next from "./core/lib/i18next.server";
 import {
   hasCachedRouteData,
-  invalidateRouteDataCache,
+  invalidateAnalysisRouteData,
 } from "./core/lib/route-data-cache";
 import { themeSessionResolver } from "./core/lib/theme-session.server";
 import { cn } from "./core/lib/utils";
@@ -519,11 +519,7 @@ export default function App() {
     if (!analyticsEvent || !isAnalyticsEventName(analyticsEvent)) return;
     consumePendingAnalyticsEvent(analyticsEvent);
     if (analyticsEvent === "precise_analysis_complete") {
-      invalidateRouteDataCache("dashboard");
-      invalidateRouteDataCache("analysis-history");
-      invalidateRouteDataCache("investment-insights");
-      invalidateRouteDataCache("precise-analysis");
-      invalidateRouteDataCache("home");
+      invalidateAnalysisRouteData();
     }
     const nextSearchParams = new URLSearchParams(searchParams);
     nextSearchParams.delete("analytics");

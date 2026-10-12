@@ -20,7 +20,7 @@ import { Button } from "~/core/components/ui/button";
 import db from "~/core/db/drizzle-client.server";
 import { isLocalDevelopmentEnvironment } from "~/core/lib/app-environment.server";
 import {
-  invalidateRouteDataCache,
+  invalidateAnalysisRouteData,
   loadCachedRouteData,
   usePrimeRouteDataCache,
 } from "~/core/lib/route-data-cache";
@@ -195,11 +195,7 @@ export default function EokkaPro({ loaderData }: Route.ComponentProps) {
   usePrimeRouteDataCache("eokka-pro", loaderData);
   useEffect(() => {
     if (!loaderData.betaJustStarted) return;
-    invalidateRouteDataCache("dashboard");
-    invalidateRouteDataCache("analysis-history");
-    invalidateRouteDataCache("investment-insights");
-    invalidateRouteDataCache("home");
-    invalidateRouteDataCache("dashboard-layout");
+    invalidateAnalysisRouteData();
   }, [loaderData.betaJustStarted]);
   return (
     <main className="flex flex-1 flex-col px-5 pt-8 pb-12 md:px-8 md:pt-12">

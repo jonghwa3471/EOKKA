@@ -23,7 +23,7 @@ import {
   setPreferredGoalAmount,
 } from "~/features/stocks/history/analysis-history.server";
 
-import { HistoricalInsights } from "./dashboard";
+import { HistoricalInsights } from "../dashboard/historical-insights";
 
 type InsightPeriod = "weekly" | "monthly" | "annual";
 

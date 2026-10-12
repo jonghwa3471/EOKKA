@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { calculateHoldingConsensus } from "./ai-strategy.server";
+import { calculateHoldingConsensus } from "./committee/holding-consensus";
 
 const baseInput = {
   portfolioWeightPercent: 18,

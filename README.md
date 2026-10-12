@@ -4,6 +4,16 @@
 
 국내 보유 주식의 현재 수익률과 1억 도달 시나리오를 분석하는 서비스입니다.
 
+## 코드 구조와 검증
+
+- [구조 리팩터링: 문제, 설계 결정, 변경 전후, 검증 범위](docs/refactoring-2026-10.md)
+- [페이지 로딩과 캐시 원칙](docs/loading-and-cache.md)
+- [개발·운영 환경 분리](docs/environment-separation.md)
+- [서비스 정책 변경 기록](docs/product-evolution.md)
+
+`npm test`로 계산·정책 단위 테스트, `npm run build`로 타입 검사와 배포 빌드,
+`npm run test:e2e`로 공개 페이지 브라우저 테스트를 실행합니다.
+
 ## Getting Started
 
 기본값은 금융위원회 공공데이터를 사용하는 국내주식 모드입니다.
