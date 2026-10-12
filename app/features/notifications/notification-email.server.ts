@@ -122,7 +122,7 @@ export async function sendNotificationEmail(input: {
     const { error } = await resendClient.emails.send({
       from:
         process.env.NOTIFICATION_EMAIL_FROM ??
-        "EOKKA <notifications@mail.jjongstudio.co>",
+        "EOKKA <notifications@mail.qualius.co>",
       to: [recipient],
       subject: `[EOKKA] ${input.title}`,
       html: notificationEmailHtml({

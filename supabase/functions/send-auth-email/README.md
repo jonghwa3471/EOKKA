@@ -15,7 +15,7 @@ supabase functions deploy send-auth-email --no-verify-jwt
 ```bash
 supabase secrets set RESEND_API_KEY=re_...
 supabase secrets set SEND_EMAIL_HOOK_SECRET='v1,whsec_...'
-supabase secrets set 'AUTH_EMAIL_FROM=EOKKA <eokka@mail.jjongstudio.co>'
+supabase secrets set 'AUTH_EMAIL_FROM=EOKKA <eokka@mail.qualius.co>'
 ```
 
 `SEND_EMAIL_HOOK_SECRET`은 다음 단계에서 Hook을 생성하며 발급받습니다. 이미 Custom SMTP에 사용한 Resend API 키를 재사용할 수 있지만, 운영 환경에서는 인증 이메일 전용 키를 권장합니다.
@@ -32,7 +32,7 @@ Send Email Hook이 활성화되면 Supabase의 기본 SMTP 이메일 발송을 �
 
 ## 4. 확인 사항
 
-- Resend 도메인 `mail.jjongstudio.co`가 Verified 상태여야 합니다.
+- Resend 도메인 `mail.qualius.co`가 Verified 상태여야 합니다.
 - Resend의 Open Tracking과 Click Tracking은 인증 링크 보호를 위해 끕니다.
 - Supabase URL Configuration에 로컬과 배포 주소를 Redirect URL로 등록합니다.
 - 로그인과 회원가입에서 각각 이메일을 요청해 수신, 링크 클릭, 세션 생성을 확인합니다.

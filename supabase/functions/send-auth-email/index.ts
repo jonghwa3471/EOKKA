@@ -1,7 +1,7 @@
-import { render } from "npm:@react-email/render@^2.0.6";
-import React from "npm:react@^19.0.0";
-import { Resend } from "npm:resend@^6.0.0";
-import { Webhook } from "npm:standardwebhooks@^1.0.0";
+import { render } from "@react-email/render";
+import React from "react";
+import { Resend } from "resend";
+import { Webhook } from "standardwebhooks";
 
 import AuthEmail from "./_templates/auth-email.tsx";
 
@@ -29,7 +29,7 @@ interface Delivery {
 const resendApiKey = Deno.env.get("RESEND_API_KEY");
 const rawHookSecret = Deno.env.get("SEND_EMAIL_HOOK_SECRET");
 const sender =
-  Deno.env.get("AUTH_EMAIL_FROM") ?? "EOKKA <eokka@mail.jjongstudio.co>";
+  Deno.env.get("AUTH_EMAIL_FROM") ?? "EOKKA <eokka@mail.qualius.co>";
 
 if (!resendApiKey || !rawHookSecret) {
   throw new Error("Required email hook secrets are not configured.");

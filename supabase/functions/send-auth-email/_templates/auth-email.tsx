@@ -9,8 +9,8 @@ import {
   Preview,
   Section,
   Text,
-} from "npm:@react-email/components@^1.0.0";
-import React from "npm:react@^19.0.0";
+} from "@react-email/components";
+import React from "react";
 
 type EmailActionType = "signup" | "magiclink" | "recovery" | "email_change";
 
