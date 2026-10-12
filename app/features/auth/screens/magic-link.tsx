@@ -94,6 +94,8 @@ export async function action({ request }: Route.ActionArgs) {
     options: {
       // Only allow existing users to sign in with magic link
       shouldCreateUser: false,
+      // Keep local and Preview logins on the environment that requested the link.
+      emailRedirectTo: new URL(request.url).origin,
     },
   });
 
