@@ -34,6 +34,7 @@ import {
   AuthDivider,
   SocialAuthButtons,
 } from "../components/auth-login-buttons";
+import { AuthTurnstile, authCaptchaToken } from "../components/auth-turnstile";
 import {
   BETA_MEMBER_CAPACITY_MESSAGE,
   getBetaMemberCapacity,
@@ -51,6 +52,8 @@ const joinSchema = z.object({
 });
 
 function signupErrorMessage(code?: string) {
+  if (code === "captcha_failed")
+    return "보안 확인이 만료되었어요. 다시 확인한 뒤 시도해 주세요.";
   if (code === "over_email_send_rate_limit")
     return "가입 이메일을 너무 자주 요청했어요. 잠시 후 다시 시도해 주세요.";
   if (code === "over_request_rate_limit")
@@ -63,9 +66,8 @@ export async function loader() {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const parsed = joinSchema.safeParse(
-    Object.fromEntries(await request.formData()),
-  );
+  const formData = await request.formData();
+  const parsed = joinSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success)
     return data(
       { fieldErrors: parsed.error.flatten().fieldErrors },
@@ -82,6 +84,13 @@ export async function action({ request }: Route.ActionArgs) {
       },
     );
 
+  const captchaToken = authCaptchaToken(formData);
+  if (captchaToken === null)
+    return data(
+      { error: "보안 확인을 완료한 뒤 다시 시도해 주세요." },
+      { status: 400 },
+    );
+
   const capacity = await getBetaMemberCapacity();
   if (capacity.isFull)
     return data({ error: BETA_MEMBER_CAPACITY_MESSAGE }, { status: 403 });
@@ -93,6 +102,7 @@ export async function action({ request }: Route.ActionArgs) {
     options: {
       shouldCreateUser: true,
       emailRedirectTo: origin,
+      captchaToken,
       data: {
         name: parsed.data.name,
         display_name: parsed.data.name,
@@ -279,6 +289,8 @@ export default function Join({ actionData, loaderData }: Route.ComponentProps) {
                 </Label>
               </div>
             </div>
+
+            <AuthTurnstile action="email_signup" />
 
             <FormButton
               label={loaderData.isFull ? "베타 모집 마감" : "이메일로 시작하기"}

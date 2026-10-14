@@ -31,6 +31,8 @@ import { Label } from "~/core/components/ui/label";
 import { checkAuthEmailRequestRateLimit } from "~/core/lib/rate-limit.server";
 import makeServerClient from "~/core/lib/supa-client.server";
 
+import { AuthTurnstile, authCaptchaToken } from "../components/auth-turnstile";
+
 /**
  * Meta function for the magic link page
  *
@@ -96,6 +98,13 @@ export async function action({ request }: Route.ActionArgs) {
       },
     );
 
+  const captchaToken = authCaptchaToken(formData);
+  if (captchaToken === null)
+    return data(
+      { error: "보안 확인을 완료한 뒤 다시 시도해 주세요." },
+      { status: 400 },
+    );
+
   // Create Supabase client
   const [client] = makeServerClient(request);
 
@@ -107,11 +116,18 @@ export async function action({ request }: Route.ActionArgs) {
       shouldCreateUser: false,
       // Keep local and Preview logins on the environment that requested the link.
       emailRedirectTo: new URL(request.url).origin,
+      captchaToken,
     },
   });
 
   // Handle specific errors
   if (error) {
+    if (error.code === "captcha_failed") {
+      return data(
+        { error: "보안 확인이 만료되었어요. 다시 확인한 뒤 시도해 주세요." },
+        { status: 400 },
+      );
+    }
     // Handle case where user doesn't exist
     if (error.code === "otp_disabled") {
       return data({ error: "먼저 회원가입을 완료해주세요." }, { status: 400 });
@@ -178,6 +194,7 @@ export default function MagicLink({ actionData }: Route.ComponentProps) {
                 placeholder="name@example.com"
               />
             </div>
+            <AuthTurnstile action="magic_link" />
             <FormButton label="이메일 링크 보내기" className="w-full" />
             {actionData && "error" in actionData && actionData.error ? (
               <FormErrors errors={[actionData.error]} />

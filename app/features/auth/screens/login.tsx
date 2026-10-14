@@ -34,6 +34,7 @@ import {
   AuthDivider,
   SocialAuthButtons,
 } from "../components/auth-login-buttons";
+import { AuthTurnstile, authCaptchaToken } from "../components/auth-turnstile";
 import { getBetaMemberCapacity } from "../member-capacity.server";
 
 export const meta: Route.MetaFunction = () => [
@@ -45,6 +46,8 @@ const loginSchema = z.object({
 });
 
 function loginErrorMessage(code?: string) {
+  if (code === "captcha_failed")
+    return "보안 확인이 만료되었어요. 다시 확인한 뒤 시도해 주세요.";
   if (code === "otp_disabled")
     return "가입되지 않은 이메일이에요. 먼저 회원가입을 진행해 주세요.";
   if (code === "over_email_send_rate_limit")
@@ -59,9 +62,8 @@ export async function loader() {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const parsed = loginSchema.safeParse(
-    Object.fromEntries(await request.formData()),
-  );
+  const formData = await request.formData();
+  const parsed = loginSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success)
     return data(
       { fieldErrors: parsed.error.flatten().fieldErrors },
@@ -78,6 +80,13 @@ export async function action({ request }: Route.ActionArgs) {
       },
     );
 
+  const captchaToken = authCaptchaToken(formData);
+  if (captchaToken === null)
+    return data(
+      { error: "보안 확인을 완료한 뒤 다시 시도해 주세요." },
+      { status: 400 },
+    );
+
   const [client] = makeServerClient(request);
   const origin = new URL(request.url).origin;
   const { error } = await client.auth.signInWithOtp({
@@ -85,6 +94,7 @@ export async function action({ request }: Route.ActionArgs) {
     options: {
       shouldCreateUser: false,
       emailRedirectTo: origin,
+      captchaToken,
     },
   });
   if (error)
@@ -180,6 +190,7 @@ export default function Login({
                 <FormErrors errors={actionData.fieldErrors.email} />
               ) : null}
             </div>
+            <AuthTurnstile action="email_login" />
             <FormButton label="이메일 로그인 링크 받기" className="w-full" />
             {actionData && "error" in actionData && actionData.error ? (
               <FormErrors errors={[actionData.error]} />
