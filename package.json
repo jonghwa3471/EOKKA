@@ -13,6 +13,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate-database.ts",
     "db:typegen": "tsx scripts/generate-database-types.ts",
+    "env:preview": "tsx scripts/generate-preview-environment.ts",
     "stocks:sync": "tsx scripts/sync-stocks.ts",
     "stocks:sync:dry": "tsx scripts/sync-stocks.ts --dry-run",
     "test:e2e": "playwright test --project=chromium",
