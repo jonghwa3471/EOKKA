@@ -18,14 +18,14 @@ export function AuthTurnstile({ action }: { action: string }) {
   if (!siteKey) return null;
 
   return (
-    <div className="bg-muted/20 flex min-h-16 w-full items-center justify-center overflow-hidden rounded-xl border p-2">
+    <div className="flex w-full justify-center py-1">
       <Turnstile
         sitekey={siteKey}
         action={action}
         theme="auto"
         language="ko"
-        size="flexible"
-        appearance="interaction-only"
+        size="normal"
+        appearance="always"
         refreshExpired="auto"
         responseField
         responseFieldName="captchaToken"
