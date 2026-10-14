@@ -220,10 +220,13 @@ export async function consumeManualAnalysisLimit(
   const identity = durableIdentifiers(request, userId, limit);
   const secret = rateLimitSecret();
   const windowOn = seoulDay();
+  const identifierHashes = identity.identifiers.map((identifier) =>
+    identifierHash(identifier.raw, secret),
+  );
   const entries = await db.transaction(async (transaction) => {
     const consumed: { count: number; limit: number }[] = [];
-    for (const identifier of identity.identifiers) {
-      const hash = identifierHash(identifier.raw, secret);
+    for (const [index, identifier] of identity.identifiers.entries()) {
+      const hash = identifierHashes[index];
       const [entry] = await transaction
         .insert(analysisRateLimits)
         .values({
@@ -254,6 +257,7 @@ export async function consumeManualAnalysisLimit(
     remaining: Math.max(0, limit - primaryEntry.count),
     retryAfter: secondsUntilNextSeoulDay(),
     setCookie: identity.setCookie,
+    anonymousVisitorId: userId ? null : identifierHashes[0],
   };
 }
 

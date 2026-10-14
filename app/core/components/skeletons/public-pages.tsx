@@ -133,6 +133,7 @@ export function HomeSkeleton() {
             <Skeleton className="mx-auto mt-3 h-12 w-[62%] rounded-2xl sm:hidden" />
             <Skeleton className="mx-auto mt-6 h-5 w-full max-w-xl rounded-full" />
             <Skeleton className="mx-auto mt-5 h-10 w-80 max-w-full rounded-xl" />
+            <Skeleton className="mx-auto mt-6 h-12 w-[25rem] max-w-full rounded-2xl" />
           </div>
 
           <div className="mx-auto mt-12 max-w-4xl">

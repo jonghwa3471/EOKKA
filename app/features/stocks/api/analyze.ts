@@ -174,12 +174,13 @@ export async function action({ request }: Route.ActionArgs) {
         console.error("Achievement award failed", achievementError);
       }
     }
-    if (user)
-      await recordAdminActivity({
-        eventType: "quick_analysis_completed",
-        userId: user.id,
-        targetType: "analysis",
-      });
+    await recordAdminActivity({
+      eventType: "quick_analysis_completed",
+      userId: user?.id,
+      targetType: "analysis",
+      targetId: user?.id ?? durableLimit.anonymousVisitorId,
+      targetLabel: user ? undefined : "비로그인 사용자",
+    });
 
     return data(
       { ...completeResult, historySaved: isPro },

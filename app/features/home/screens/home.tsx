@@ -11,6 +11,7 @@ import {
   SparklesIcon,
   Trash2Icon,
   TrendingUpIcon,
+  UsersRoundIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -75,6 +76,7 @@ import {
   MONTHLY_CONTRIBUTION_PRESETS,
   emptyHolding,
 } from "../quick-analysis-model";
+import { getServiceUsage } from "../service-usage.server";
 
 export const meta: Route.MetaFunction = ({ data }) => [
   { title: data?.title ?? "억까 — 내 주식, 목표까지" },
@@ -95,14 +97,22 @@ export async function loader({ request }: Route.LoaderArgs) {
     savedPreferredGoal,
     managedAnalysisActive,
     accountSettings,
+    serviceUsage,
   ] = user
     ? await Promise.all([
         getActiveAnalysisHistory(user.id),
         getPreferredGoalAmount(user.id),
         isManagedPortfolioActive(user.id),
         getAutomaticAnalysisSettings(user.id),
+        getServiceUsage(),
       ])
-    : [[], null, false, null];
+    : await Promise.all([
+        Promise.resolve([]),
+        Promise.resolve(null),
+        Promise.resolve(false),
+        Promise.resolve(null),
+        getServiceUsage(),
+      ]);
   const goalOptions = [
     ...new Set(allHistory.map((item) => item.goalAmount)),
   ].sort((a, b) => a - b);
@@ -230,6 +240,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     isAuthenticated: user !== null,
     isPro: accountSettings?.isPro ?? false,
     managedAnalysisActive,
+    serviceUsage,
     moneyInsights:
       latest && preferredGoal
         ? {
@@ -297,6 +308,7 @@ export default function Home() {
     isAuthenticated,
     isPro,
     managedAnalysisActive,
+    serviceUsage,
     moneyInsights,
   } = loaderData;
   const location = useLocation();
@@ -848,6 +860,28 @@ export default function Home() {
               {isGlobalTest
                 ? "로컬 KIS 테스트 모드 · 국내·미국 주식 지원"
                 : "베타 서비스 기간에는 국내 주식·ETF·ETN만 지원합니다"}
+            </div>
+            <div className="bg-background/65 mx-auto mt-6 flex w-fit flex-wrap items-center justify-center gap-x-5 gap-y-2 rounded-2xl border px-5 py-3 text-sm shadow-sm backdrop-blur">
+              <span className="flex items-center gap-2">
+                <UsersRoundIcon className="size-4 text-emerald-500" />
+                <strong>
+                  {serviceUsage.userCount.toLocaleString("ko-KR")}명
+                </strong>
+                <span className="text-muted-foreground">
+                  의 유저가 분석했어요
+                </span>
+              </span>
+              <span className="bg-border hidden h-4 w-px sm:block" />
+              <span
+                className="flex items-center gap-2"
+                title="로그인하지 않은 빠른 분석도 포함한 누적 횟수예요."
+              >
+                <BarChart3Icon className="size-4 text-sky-500" />
+                <strong>
+                  {serviceUsage.analysisCount.toLocaleString("ko-KR")}회
+                </strong>
+                <span className="text-muted-foreground">누적 분석 완료</span>
+              </span>
             </div>
           </header>
 
