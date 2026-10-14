@@ -200,7 +200,7 @@ export default function MagicLink({ actionData }: Route.ComponentProps) {
               <FormErrors errors={[actionData.error]} />
             ) : null}
             {actionData && "success" in actionData && actionData.success ? (
-              <FormSuccess message="로그인 링크를 이메일로 보냈어요." />
+              <FormSuccess message="가입된 이메일이라면 로그인 링크를 보내드렸어요. 이메일이 오지 않으면 회원가입 여부와 스팸함을 확인해 주세요." />
             ) : null}
           </Form>
         </CardContent>

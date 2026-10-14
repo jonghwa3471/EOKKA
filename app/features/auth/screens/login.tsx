@@ -198,9 +198,10 @@ export default function Login({
             {actionData && "success" in actionData && actionData.success ? (
               <Alert className="border-emerald-500/30 bg-emerald-500/[0.08]">
                 <CheckCircle2Icon className="size-4 text-emerald-500" />
-                <AlertTitle>로그인 링크를 보냈어요</AlertTitle>
+                <AlertTitle>이메일을 확인해 주세요</AlertTitle>
                 <AlertDescription>
-                  이메일에서 링크를 누르면 바로 로그인돼요.
+                  가입된 이메일이라면 로그인 링크를 보내드렸어요. 이메일이 오지
+                  않으면 회원가입 여부와 스팸함을 확인해 주세요.
                 </AlertDescription>
               </Alert>
             ) : null}
