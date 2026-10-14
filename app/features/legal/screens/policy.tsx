@@ -3,6 +3,7 @@ import type { Route } from "./+types/policy";
 import { bundleMDX } from "mdx-bundler";
 import { getMDXComponent } from "mdx-bundler/client";
 import path from "node:path";
+import { renderToStaticMarkup } from "react-dom/server";
 import { Link, data } from "react-router";
 
 import {
@@ -53,7 +54,31 @@ export async function loader({ params }: Route.LoaderArgs) {
 
   try {
     const { code, frontmatter } = await bundleMDX({ file: filePath });
-    return { frontmatter, code };
+    const MDXContent = getMDXComponent(code);
+    const html = renderToStaticMarkup(
+      <MDXContent
+        components={{
+          h1: TypographyH1,
+          h2: TypographyH2,
+          h3: TypographyH3,
+          h4: TypographyH4,
+          p: TypographyP,
+          blockquote: TypographyBlockquote,
+          ul: TypographyList,
+          ol: TypographyOrderedList,
+          code: TypographyInlineCode,
+          a: ({ href, ...props }) => (
+            <a
+              className="text-primary font-medium underline underline-offset-4"
+              href={href}
+              rel={href?.startsWith("http") ? "noreferrer" : undefined}
+              {...props}
+            />
+          ),
+        }}
+      />,
+    );
+    return { frontmatter, html };
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       throw data(null, { status: 404 });
@@ -63,10 +88,8 @@ export async function loader({ params }: Route.LoaderArgs) {
 }
 
 export default function Policy({
-  loaderData: { frontmatter, code },
+  loaderData: { frontmatter, html },
 }: Route.ComponentProps) {
-  const MDXContent = getMDXComponent(code);
-
   return (
     <main className="mx-auto w-full max-w-4xl px-5 py-10 md:px-10 md:py-16">
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
@@ -86,27 +109,7 @@ export default function Policy({
       </div>
 
       <article className="border-border bg-card rounded-3xl border px-6 py-8 shadow-sm md:px-12 md:py-12">
-        <MDXContent
-          components={{
-            h1: TypographyH1,
-            h2: TypographyH2,
-            h3: TypographyH3,
-            h4: TypographyH4,
-            p: TypographyP,
-            blockquote: TypographyBlockquote,
-            ul: TypographyList,
-            ol: TypographyOrderedList,
-            code: TypographyInlineCode,
-            a: ({ href, ...props }) => (
-              <a
-                className="text-primary font-medium underline underline-offset-4"
-                href={href}
-                rel={href?.startsWith("http") ? "noreferrer" : undefined}
-                {...props}
-              />
-            ),
-          }}
-        />
+        <div dangerouslySetInnerHTML={{ __html: html }} />
       </article>
     </main>
   );
