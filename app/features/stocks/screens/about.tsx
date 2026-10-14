@@ -685,6 +685,100 @@ export default function AboutScreen() {
         </div>
       </section>
 
+      <section className="relative border-b px-5 py-16 md:py-24">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute top-1/2 -left-32 size-72 -translate-y-1/2 rounded-full bg-emerald-400/[0.08] blur-3xl" />
+          <div className="absolute -right-24 bottom-0 size-64 rounded-full bg-sky-400/[0.06] blur-3xl" />
+        </div>
+
+        <div className="relative mx-auto max-w-6xl">
+          <div className="grid items-start gap-10 lg:grid-cols-[0.82fr_1.18fr] lg:gap-16">
+            <div className="lg:sticky lg:top-28">
+              <p className="text-xs font-black tracking-[0.16em] text-emerald-500 uppercase">
+                Why I built EOKKA
+              </p>
+              <h2 className="mt-3 text-3xl font-black tracking-[-0.035em] text-balance md:text-4xl">
+                “이대로 꾸준히 투자하면,
+                <br className="hidden sm:block" /> 1억까지 얼마나 걸릴까?”
+              </h2>
+              <p className="text-muted-foreground mt-5 max-w-xl text-sm leading-7 break-keep md:text-base">
+                주식 투자를 꾸준히 이어오며 자연스럽게 떠오른 이 질문이 EOKKA의
+                시작이었어요. 숫자 하나로 기간만 계산하기보다, 지금까지 걸어온
+                길과 앞으로의 가능성을 여러 인사이트와 함께 눈으로 확인할 수
+                있다면 목표가 조금 더 가까이 느껴질 것 같았어요.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {[
+                {
+                  icon: GoalIcon,
+                  step: "01",
+                  title: "막연한 목표를 눈앞의 여정으로",
+                  text: "목표 금액까지 남은 거리와 예상 기간, 자산이 변화해 온 흐름을 시각적으로 보여줘요. 멀게만 느껴지던 목표를 오늘의 투자와 이어진 구체적인 과정으로 바라볼 수 있도록 만들었어요.",
+                  color: "text-emerald-500",
+                  background: "bg-emerald-500/10",
+                },
+                {
+                  icon: AwardIcon,
+                  step: "02",
+                  title: "꾸준함도 하나의 성취가 되도록",
+                  text: "기록을 쌓고 도전과제를 하나씩 달성하며 긴 투자 과정을 즐길 수 있어요. 수익률만 바라보기보다 오래 이어온 시간과 좋은 투자 습관도 의미 있는 성과로 남겨요.",
+                  color: "text-amber-500",
+                  background: "bg-amber-500/10",
+                },
+                {
+                  icon: TrendingUpIcon,
+                  step: "03",
+                  title: "기업과 함께 오래 성장하는 투자",
+                  text: "주식을 짧은 수익을 위한 거래로만 보기보다 좋은 기업을 함께 성장할 파트너로 바라보길 바랐어요. 조급함을 덜고 긴 시간 동안 복리의 힘을 쌓으며, 각자가 원하는 목표를 향해 꾸준히 나아가는 여정을 EOKKA가 곁에서 보여드릴게요.",
+                  color: "text-sky-500",
+                  background: "bg-sky-500/10",
+                },
+              ].map(({ icon: Icon, step, title, text, color, background }) => (
+                <article
+                  key={step}
+                  className="bg-card/80 group rounded-3xl border p-5 shadow-sm backdrop-blur transition-transform duration-300 hover:-translate-y-0.5 md:p-6"
+                >
+                  <div className="flex items-start gap-4">
+                    <div
+                      className={cn(
+                        "flex size-11 shrink-0 items-center justify-center rounded-2xl",
+                        background,
+                      )}
+                    >
+                      <Icon className={cn("size-5", color)} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={cn("text-[10px] font-black", color)}>
+                          {step}
+                        </span>
+                        <span className="bg-border h-px flex-1" />
+                      </div>
+                      <h3 className="mt-2 text-lg font-black tracking-tight">
+                        {title}
+                      </h3>
+                      <p className="text-muted-foreground mt-2 text-sm leading-7 break-keep">
+                        {text}
+                      </p>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-10 rounded-[2rem] border border-emerald-500/20 bg-gradient-to-r from-emerald-500/[0.09] via-emerald-500/[0.04] to-transparent px-6 py-6 md:px-8 md:py-7">
+            <p className="text-sm leading-7 font-bold break-keep md:text-base">
+              EOKKA가 정답을 대신 정해주지는 않아요. 다만 목표를 잊지 않고,
+              달성해 가는 모든 과정을 더 선명하게 바라보며 자신만의 속도로 오래
+              달릴 수 있도록 돕고 싶어요.
+            </p>
+          </div>
+        </div>
+      </section>
+
       <section className="border-b px-5 py-12">
         <div className="mx-auto max-w-7xl">
           <p className="text-center text-xs font-black tracking-[0.16em] text-emerald-500 uppercase">
