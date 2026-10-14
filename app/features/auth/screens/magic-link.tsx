@@ -28,6 +28,7 @@ import {
 } from "~/core/components/ui/card";
 import { Input } from "~/core/components/ui/input";
 import { Label } from "~/core/components/ui/label";
+import { checkAuthEmailRequestRateLimit } from "~/core/lib/rate-limit.server";
 import makeServerClient from "~/core/lib/supa-client.server";
 
 /**
@@ -84,6 +85,16 @@ export async function action({ request }: Route.ActionArgs) {
       { status: 400 },
     );
   }
+
+  const rateLimit = checkAuthEmailRequestRateLimit(request, validData.email);
+  if (!rateLimit.allowed)
+    return data(
+      { error: "로그인 요청이 너무 많아요. 잠시 후 다시 시도해 주세요." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(rateLimit.retryAfter) },
+      },
+    );
 
   // Create Supabase client
   const [client] = makeServerClient(request);

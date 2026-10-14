@@ -56,10 +56,21 @@ export function checkRateLimit(
   request: Request,
   { key, limit, windowMs }: RateLimitOptions,
 ) {
+  return checkIdentifierRateLimit(
+    `${key}:${clientIdentifier(request)}`,
+    limit,
+    windowMs,
+  );
+}
+
+function checkIdentifierRateLimit(
+  identifier: string,
+  limit: number,
+  windowMs: number,
+) {
   const now = Date.now();
   removeExpiredEntries(now);
 
-  const identifier = `${key}:${clientIdentifier(request)}`;
   const existing = rateLimits.get(identifier);
   if (!existing && rateLimits.size >= 10_000)
     return { allowed: false, retryAfter: Math.ceil(windowMs / 1000) };
@@ -75,6 +86,28 @@ export function checkRateLimit(
     allowed: entry.count <= limit,
     retryAfter: Math.max(1, Math.ceil((entry.resetAt - now) / 1000)),
   };
+}
+
+export function checkAuthEmailRequestRateLimit(
+  request: Request,
+  email: string,
+) {
+  const ip = clientIdentifier(request);
+  if (ip !== "untrusted-client" && ip !== "local-development") {
+    const ipResult = checkIdentifierRateLimit(
+      `auth:email-request:${ip}`,
+      5,
+      10 * 60_000,
+    );
+    if (!ipResult.allowed) return ipResult;
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const emailHash = identifierHash(
+    `auth-email:${normalizedEmail}`,
+    rateLimitSecret(),
+  );
+  return checkIdentifierRateLimit(`auth:email-address:${emailHash}`, 1, 60_000);
 }
 
 export function rateLimitResponse(retryAfter: number) {
