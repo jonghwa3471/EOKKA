@@ -29,9 +29,7 @@ export default {
       ...urls,
     ];
   },
-  presets: [
-    ...(process.env.VERCEL_ENV === "production" ? [vercelPreset()] : []),
-  ],
+  presets: [...(process.env.VERCEL_ENV ? [vercelPreset()] : [])],
   buildEnd: async ({ viteConfig, reactRouterConfig, buildManifest }) => {
     if (
       process.env.SENTRY_ORG &&
