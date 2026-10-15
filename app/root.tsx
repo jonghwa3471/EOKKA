@@ -41,6 +41,7 @@ import {
 } from "remix-themes";
 import { Toaster } from "sonner";
 
+import { DataRefreshBanner } from "./core/components/data-refresh-banner";
 import { ErrorState } from "./core/components/error-state";
 import {
   ANALYSIS_PROGRESS_MESSAGES,
@@ -57,6 +58,7 @@ import {
 import { validateEnvironmentConfiguration } from "./core/lib/app-environment.server";
 import i18next from "./core/lib/i18next.server";
 import {
+  clearRouteDataCache,
   hasCachedRouteData,
   invalidateAnalysisRouteData,
 } from "./core/lib/route-data-cache";
@@ -357,7 +359,7 @@ export default function App() {
     useAdaptiveProgress(isActionBusy, progressKey, progressEstimateMs);
   const [showBlockingLoader, setShowBlockingLoader] = useState(false);
   const [showRouteSkeleton, setShowRouteSkeleton] = useState(false);
-  const actionInvalidationRef = useRef(false);
+  const authInvalidationRef = useRef(false);
 
   // Initialize NProgress with spinner for better UX during navigation
   useEffect(() => {
@@ -384,16 +386,14 @@ export default function App() {
   }, [isActionBusy]);
 
   useEffect(() => {
-    if (!isActionBusy) {
-      actionInvalidationRef.current = false;
+    if (!isAuthAction) {
+      authInvalidationRef.current = false;
       return;
     }
-    if (actionInvalidationRef.current) return;
-    actionInvalidationRef.current = true;
-    const key = "eokka:dashboard-cache-version";
-    const nextVersion = Number(window.sessionStorage.getItem(key) ?? 0) + 1;
-    window.sessionStorage.setItem(key, String(nextVersion));
-  }, [isActionBusy]);
+    if (authInvalidationRef.current) return;
+    authInvalidationRef.current = true;
+    clearRouteDataCache();
+  }, [isAuthAction]);
 
   useEffect(() => {
     if (!isRouteBusy) {
@@ -547,6 +547,7 @@ export default function App() {
     <Sheet>
       <Dialog>
         <Outlet />
+        <DataRefreshBanner actionBusy={isActionBusy} />
         {showRouteSkeleton &&
           (!isInsideDashboardShell || !isTargetInsideDashboardShell) && (
             <RouteTransitionSkeleton

@@ -35,6 +35,7 @@ export default [
       route("/password", "features/users/api/change-password.tsx"),
       route("/email", "features/users/api/change-email.tsx"),
       route("/social-avatar", "features/users/api/use-social-avatar.tsx"),
+      route("/data-revisions", "features/users/api/data-revisions.ts"),
       route("/data", "features/users/api/reset-user-data.tsx"),
       route("/profile", "features/users/api/edit-profile.tsx"),
       route(
