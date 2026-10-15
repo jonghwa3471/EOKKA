@@ -65,10 +65,14 @@ export async function action({ request }: Route.ActionArgs) {
     return data({ error: "Invalid email address" }, { status: 400 });
   }
 
-  const rateLimit = checkAuthEmailRequestRateLimit(request, validData.email);
+  const rateLimit = checkAuthEmailRequestRateLimit(request);
   if (!rateLimit.allowed)
     return data(
-      { error: "인증 이메일 요청이 너무 많아요. 잠시 후 다시 시도해 주세요." },
+      {
+        error: "인증 이메일 요청이 너무 많아요.",
+        source: "app" as const,
+        retryAfter: rateLimit.retryAfter,
+      },
       {
         status: 429,
         headers: { "Retry-After": String(rateLimit.retryAfter) },

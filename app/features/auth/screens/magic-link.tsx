@@ -31,6 +31,7 @@ import { Label } from "~/core/components/ui/label";
 import { checkAuthEmailRequestRateLimit } from "~/core/lib/rate-limit.server";
 import makeServerClient from "~/core/lib/supa-client.server";
 
+import { useAuthRequestCooldown } from "../components/auth-request-cooldown";
 import { AuthTurnstile, authCaptchaToken } from "../components/auth-turnstile";
 
 /**
@@ -88,10 +89,14 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
-  const rateLimit = checkAuthEmailRequestRateLimit(request, validData.email);
+  const rateLimit = checkAuthEmailRequestRateLimit(request);
   if (!rateLimit.allowed)
     return data(
-      { error: "로그인 요청이 너무 많아요. 잠시 후 다시 시도해 주세요." },
+      {
+        error: "로그인 요청이 너무 많아요.",
+        source: "app" as const,
+        retryAfter: rateLimit.retryAfter,
+      },
       {
         status: 429,
         headers: { "Retry-After": String(rateLimit.retryAfter) },
@@ -132,6 +137,16 @@ export async function action({ request }: Route.ActionArgs) {
     if (error.code === "otp_disabled") {
       return data({ error: "먼저 회원가입을 완료해주세요." }, { status: 400 });
     }
+    if (error.code === "over_email_send_rate_limit") {
+      return data(
+        {
+          error: "로그인 이메일을 너무 자주 요청했어요.",
+          source: "supabase" as const,
+          retryAfter: 60,
+        },
+        { status: 429, headers: { "Retry-After": "60" } },
+      );
+    }
     // Handle other errors
     return data({ error: error.message }, { status: 400 });
   }
@@ -157,6 +172,7 @@ export async function action({ request }: Route.ActionArgs) {
 export default function MagicLink({ actionData }: Route.ComponentProps) {
   // Reference to the form element for resetting after successful submission
   const formRef = useRef<HTMLFormElement>(null);
+  const cooldown = useAuthRequestCooldown(actionData);
 
   // Reset the form when the magic link is successfully sent
   useEffect(() => {
@@ -195,9 +211,17 @@ export default function MagicLink({ actionData }: Route.ComponentProps) {
               />
             </div>
             <AuthTurnstile action="magic_link" />
-            <FormButton label="이메일 링크 보내기" className="w-full" />
-            {actionData && "error" in actionData && actionData.error ? (
-              <FormErrors errors={[actionData.error]} />
+            <FormButton
+              label={
+                cooldown.isRateLimited
+                  ? `${cooldown.remaining}초 후 다시 시도`
+                  : "이메일 링크 보내기"
+              }
+              className="w-full"
+              disabled={cooldown.isRateLimited}
+            />
+            {cooldown.errorMessage ? (
+              <FormErrors errors={[cooldown.errorMessage]} />
             ) : null}
             {actionData && "success" in actionData && actionData.success ? (
               <FormSuccess message="가입된 이메일이라면 로그인 링크를 보내드렸어요. 이메일이 오지 않으면 회원가입 여부와 스팸함을 확인해 주세요." />

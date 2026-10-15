@@ -34,6 +34,7 @@ import {
   AuthDivider,
   SocialAuthButtons,
 } from "../components/auth-login-buttons";
+import { useAuthRequestCooldown } from "../components/auth-request-cooldown";
 import { AuthTurnstile, authCaptchaToken } from "../components/auth-turnstile";
 import { getBetaMemberCapacity } from "../member-capacity.server";
 
@@ -70,10 +71,14 @@ export async function action({ request }: Route.ActionArgs) {
       { status: 400 },
     );
 
-  const rateLimit = checkAuthEmailRequestRateLimit(request, parsed.data.email);
+  const rateLimit = checkAuthEmailRequestRateLimit(request);
   if (!rateLimit.allowed)
     return data(
-      { error: "로그인 요청이 너무 많아요. 잠시 후 다시 시도해 주세요." },
+      {
+        error: "로그인 요청이 너무 많아요.",
+        source: "app" as const,
+        retryAfter: rateLimit.retryAfter,
+      },
       {
         status: 429,
         headers: { "Retry-After": String(rateLimit.retryAfter) },
@@ -97,6 +102,15 @@ export async function action({ request }: Route.ActionArgs) {
       captchaToken,
     },
   });
+  if (error?.code === "over_email_send_rate_limit")
+    return data(
+      {
+        error: "로그인 이메일을 너무 자주 요청했어요.",
+        source: "supabase" as const,
+        retryAfter: 60,
+      },
+      { status: 429, headers: { "Retry-After": "60" } },
+    );
   if (error)
     return data({ error: loginErrorMessage(error.code) }, { status: 400 });
 
@@ -108,6 +122,7 @@ export default function Login({
   loaderData,
 }: Route.ComponentProps) {
   const formRef = useRef<HTMLFormElement>(null);
+  const cooldown = useAuthRequestCooldown(actionData);
   useEffect(() => {
     if (actionData && "success" in actionData && actionData.success)
       formRef.current?.reset();
@@ -191,9 +206,17 @@ export default function Login({
               ) : null}
             </div>
             <AuthTurnstile action="email_login" />
-            <FormButton label="이메일 로그인 링크 받기" className="w-full" />
-            {actionData && "error" in actionData && actionData.error ? (
-              <FormErrors errors={[actionData.error]} />
+            <FormButton
+              label={
+                cooldown.isRateLimited
+                  ? `${cooldown.remaining}초 후 다시 시도`
+                  : "이메일 로그인 링크 받기"
+              }
+              className="w-full"
+              disabled={cooldown.isRateLimited}
+            />
+            {cooldown.errorMessage ? (
+              <FormErrors errors={[cooldown.errorMessage]} />
             ) : null}
             {actionData && "success" in actionData && actionData.success ? (
               <Alert className="border-emerald-500/30 bg-emerald-500/[0.08]">

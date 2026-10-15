@@ -88,26 +88,13 @@ function checkIdentifierRateLimit(
   };
 }
 
-export function checkAuthEmailRequestRateLimit(
-  request: Request,
-  email: string,
-) {
+export function checkAuthEmailRequestRateLimit(request: Request) {
   const ip = clientIdentifier(request);
   if (ip !== "untrusted-client" && ip !== "local-development") {
-    const ipResult = checkIdentifierRateLimit(
-      `auth:email-request:${ip}`,
-      5,
-      10 * 60_000,
-    );
-    if (!ipResult.allowed) return ipResult;
+    return checkIdentifierRateLimit(`auth:email-request:${ip}`, 5, 60_000);
   }
 
-  const normalizedEmail = email.trim().toLowerCase();
-  const emailHash = identifierHash(
-    `auth-email:${normalizedEmail}`,
-    rateLimitSecret(),
-  );
-  return checkIdentifierRateLimit(`auth:email-address:${emailHash}`, 1, 60_000);
+  return { allowed: true, retryAfter: 0 };
 }
 
 export function rateLimitResponse(retryAfter: number) {
