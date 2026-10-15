@@ -1,5 +1,77 @@
 import type { AiStrategy, AnalysisResult } from "../analysis.types";
 
+import { z } from "zod";
+
+const boundedText = z.string().trim().min(1).max(2_000);
+
+export const publicDeveloperPortfolioSnapshotSchema = z.object({
+  version: z.literal(1),
+  asOf: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  publishedAt: z.string().datetime(),
+  returnRate: z.number().finite(),
+  annualizedReturnRate: z.number().finite().nullable(),
+  investmentPeriodMonths: z.number().int().nonnegative().nullable(),
+  holdingCount: z.number().int().nonnegative().max(1_000),
+  investmentStyle: z.object({
+    title: boundedText,
+    description: boundedText,
+    reason: boundedText,
+    scores: z
+      .array(
+        z.object({
+          key: z.enum([
+            "stability",
+            "growth",
+            "concentration",
+            "diversification",
+            "etf",
+            "aggression",
+          ]),
+          label: boundedText,
+          score: z.number().finite(),
+        }),
+      )
+      .max(12),
+  }),
+  holdings: z
+    .array(
+      z.object({
+        name: boundedText,
+        ticker: boundedText,
+        country: z.string().trim().max(100).optional(),
+        exchange: z.string().trim().max(100).optional(),
+        weightPercent: z.number().finite(),
+        returnRate: z.number().finite(),
+        dailyChangeRate: z.number().finite().nullable(),
+      }),
+    )
+    .max(1_000),
+  summary: z.array(boundedText).max(30),
+  committee: z
+    .object({
+      headline: boundedText,
+      diagnosis: boundedText,
+      committeeConclusion: boundedText.optional(),
+      overallCommitteeScore: z.number().finite().optional(),
+      strengths: z
+        .array(z.object({ title: boundedText, detail: boundedText }))
+        .max(30),
+      improvements: z
+        .array(z.object({ title: boundedText, detail: boundedText }))
+        .max(30),
+      actions: z
+        .array(
+          z.object({
+            title: boundedText,
+            detail: boundedText,
+            priority: z.enum(["높음", "보통", "낮음"]),
+          }),
+        )
+        .max(30),
+    })
+    .nullable(),
+});
+
 export interface PublicDeveloperPortfolioSnapshot {
   version: 1;
   asOf: string;

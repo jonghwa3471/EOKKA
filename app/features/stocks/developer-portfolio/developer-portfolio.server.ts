@@ -16,7 +16,11 @@ import {
   managedPortfolioCashFlows,
 } from "~/features/stocks/portfolio/portfolio.server";
 
-import { toPublicDeveloperPortfolioSnapshot } from "./developer-portfolio.types";
+import {
+  type PublicDeveloperPortfolioSnapshot,
+  publicDeveloperPortfolioSnapshotSchema,
+  toPublicDeveloperPortfolioSnapshot,
+} from "./developer-portfolio.types";
 import { developerPortfolioSnapshots } from "./schema";
 
 export async function getLatestDeveloperPortfolioSnapshot() {
@@ -96,26 +100,68 @@ export async function publishDeveloperPortfolio(
 ) {
   const publishedAt = new Date();
   const snapshot = toPublicDeveloperPortfolioSnapshot(result, publishedAt);
+  if (isLocalDevelopmentEnvironment()) {
+    await publishDeveloperPortfolioToProduction(snapshot);
+    return { snapshot };
+  }
+  return storeDeveloperPortfolioSnapshot(snapshot, userId);
+}
+
+export async function storeDeveloperPortfolioSnapshot(
+  snapshot: PublicDeveloperPortfolioSnapshot,
+  publishedBy: string | null,
+) {
+  const validatedSnapshot =
+    publicDeveloperPortfolioSnapshotSchema.parse(snapshot);
+  const publishedAt = new Date(validatedSnapshot.publishedAt);
   const [row] = await db
     .insert(developerPortfolioSnapshots)
     .values({
-      as_of: result.asOf,
-      snapshot,
-      published_by: userId,
+      as_of: validatedSnapshot.asOf,
+      snapshot: validatedSnapshot,
+      published_by: publishedBy,
       published_at: publishedAt,
       updated_at: publishedAt,
     })
     .onConflictDoUpdate({
       target: developerPortfolioSnapshots.as_of,
       set: {
-        snapshot,
-        published_by: userId,
+        snapshot: validatedSnapshot,
+        published_by: publishedBy,
         published_at: publishedAt,
         updated_at: publishedAt,
       },
     })
     .returning();
   return row;
+}
+
+async function publishDeveloperPortfolioToProduction(
+  snapshot: PublicDeveloperPortfolioSnapshot,
+) {
+  const secret = process.env.DEVELOPER_PORTFOLIO_PUBLISH_SECRET?.trim();
+  if (!secret)
+    throw new Error(
+      "DEVELOPER_PORTFOLIO_PUBLISH_SECRET을 로컬 환경에 설정해 주세요.",
+    );
+  const endpoint =
+    process.env.DEVELOPER_PORTFOLIO_PUBLISH_URL?.trim() ||
+    "https://eokka.qualius.co/api/admin/developer-portfolio";
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${secret}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(snapshot),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) {
+    const message = await response.text().catch(() => "");
+    throw new Error(
+      `운영 포트폴리오 공개에 실패했어요 (${response.status})${message ? `: ${message}` : ""}`,
+    );
+  }
 }
 
 export function isLocalDeveloperPortfolioPublishingEnabled() {

@@ -3,7 +3,10 @@ import type { AnalysisResult } from "../analysis.types";
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { toPublicDeveloperPortfolioSnapshot } from "./developer-portfolio.types";
+import {
+  publicDeveloperPortfolioSnapshotSchema,
+  toPublicDeveloperPortfolioSnapshot,
+} from "./developer-portfolio.types";
 
 test("공개 포트폴리오에는 정확한 금액·수량·가격을 포함하지 않는다", () => {
   const result = {
@@ -83,4 +86,42 @@ test("보유 종목은 공개 비중이 큰 순서로 정렬한다", () => {
     snapshot.holdings.map((holding) => holding.weightPercent),
     [80, 20],
   );
+});
+
+test("운영 게시 입력은 공개 필드만 허용하고 민감한 필드는 제거한다", () => {
+  const result = {
+    asOf: "2026-09-30",
+    currentValue: 100,
+    returnRate: 10,
+    holdings: [
+      {
+        name: "테스트 종목",
+        ticker: "TEST",
+        valueKrw: 100,
+        returnRate: 10,
+      },
+    ],
+    investmentStyle: {
+      title: "투자자",
+      description: "설명",
+      reason: "근거",
+      scores: [],
+    },
+    summary: ["요약"],
+  } as unknown as AnalysisResult;
+  const snapshot = toPublicDeveloperPortfolioSnapshot(result);
+  const parsed = publicDeveloperPortfolioSnapshotSchema.parse({
+    ...snapshot,
+    currentValue: 100,
+    holdings: snapshot.holdings.map((holding) => ({
+      ...holding,
+      quantity: 123,
+      averagePrice: 456,
+    })),
+  });
+  const serialized = JSON.stringify(parsed);
+
+  assert.equal(serialized.includes("currentValue"), false);
+  assert.equal(serialized.includes("quantity"), false);
+  assert.equal(serialized.includes("averagePrice"), false);
 });

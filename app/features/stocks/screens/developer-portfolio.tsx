@@ -270,20 +270,21 @@ export default function DeveloperPortfolio({
                         )}
                         {publishing
                           ? "분석 후 반영 중..."
-                          : "최신 분석을 로컬 공개본에 반영"}
+                          : "최신 분석을 운영 서비스에 공개"}
                       </Button>
                     </Form>
                   </div>
                   <p className="text-muted-foreground mt-4 text-xs leading-5 font-medium">
                     페이지에 들어오는 것만으로 분석하지 않아요. 버튼을 누를 때만
-                    로컬의 해외주식 포트폴리오를 1억 목표로 분석해 공개 전용
-                    스냅샷을 갱신하며, 대시보드·분석 기록·기준 목표에는 영향을
-                    주지 않아요.
+                    로컬의 해외주식 포트폴리오를 1억 목표로 분석한 뒤 공개에
+                    필요한 정보만 운영 서비스로 전송해 공개 스냅샷을 갱신해요.
+                    정확한 수량·매수가·평가금액과 대시보드 분석 기록은
+                    전송하거나 변경하지 않아요.
                   </p>
                   <div className="mt-3 rounded-2xl border border-amber-500/20 bg-amber-500/[0.07] px-4 py-3 text-xs leading-5 font-semibold text-amber-700 dark:text-amber-300">
-                    아직 배포된 서비스가 없어 지금 확인할 수 있는 곳은 로컬 공개
-                    화면뿐이에요. 실제 서비스 배포를 시작할 때 배포 환경 연결을
-                    확인하고 버튼 문구도 배포용으로 바꿀 예정이에요.
+                    공개가 끝나면 실제 서비스의 개발자 포트폴리오 페이지에 바로
+                    반영돼요. 로컬·Preview 데이터베이스에는 공개본을 저장하지
+                    않아요.
                   </div>
                 </section>
               )}
