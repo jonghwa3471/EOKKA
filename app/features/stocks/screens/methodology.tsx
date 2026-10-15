@@ -16,11 +16,11 @@ import { Link } from "react-router";
 import { Button } from "~/core/components/ui/button";
 
 export const meta: Route.MetaFunction = () => [
-  { title: "주식 목표 달성 시점 계산 방법 | 억까(EOKKA)" },
+  { title: "분석 방법 | EOKKA" },
   {
     name: "description",
     content:
-      "억까(EOKKA)가 보유 주식의 평가금액, 수익률과 목표 금액 달성 시나리오를 계산하는 기준, 데이터와 분석 한계를 확인하세요.",
+      "EOKKA가 현재 평가금액과 목표 도달 시나리오를 계산하는 방법과 한계를 확인하세요.",
   },
   {
     tagName: "link",
