@@ -78,10 +78,35 @@ import {
 } from "../quick-analysis-model";
 import { getServiceUsage } from "../service-usage.server";
 
-export const meta: Route.MetaFunction = ({ data }) => [
-  { title: data?.title ?? "억까 — 내 주식, 목표까지" },
-  { name: "description", content: data?.subtitle },
-];
+const productionSiteUrl = "https://eokka.qualius.co";
+
+export const meta: Route.MetaFunction = ({ data }) => {
+  const title = data?.title ?? "억까 — 내 주식, 목표까지";
+  const description =
+    data?.subtitle ??
+    "보유 주식을 입력하고 목표까지 얼마나 남았는지 확인해보세요.";
+  const previewImage = `${productionSiteUrl}/api/social-og`;
+
+  return [
+    { title },
+    { name: "description", content: description },
+    { property: "og:type", content: "website" },
+    { property: "og:site_name", content: "EOKKA" },
+    { property: "og:title", content: title },
+    { property: "og:description", content: description },
+    { property: "og:url", content: productionSiteUrl },
+    { property: "og:image", content: previewImage },
+    { property: "og:image:secure_url", content: previewImage },
+    { property: "og:image:type", content: "image/png" },
+    { property: "og:image:width", content: "1200" },
+    { property: "og:image:height", content: "630" },
+    { property: "og:image:alt", content: "EOKKA 서비스 소개" },
+    { name: "twitter:card", content: "summary_large_image" },
+    { name: "twitter:title", content: title },
+    { name: "twitter:description", content: description },
+    { name: "twitter:image", content: previewImage },
+  ];
+};
 
 export async function loader({ request }: Route.LoaderArgs) {
   await i18next.getFixedT(request);

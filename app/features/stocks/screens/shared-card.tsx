@@ -39,18 +39,7 @@ const investmentStyleTitles = new Set([
   "균형을 다듬는 포트폴리오 조율사",
 ]);
 
-const tierPreviewImages: Record<SharedInvestmentCardPayload["tier"], string> = {
-  아이언: "/images/speed-tiers/iron-fantasy-v2-og.jpg",
-  브론즈: "/images/speed-tiers/bronze-fantasy-v2-og.jpg",
-  실버: "/images/speed-tiers/silver-fantasy-v2-og.jpg",
-  골드: "/images/speed-tiers/gold-fantasy-v2-og.jpg",
-  플래티넘: "/images/speed-tiers/platinum-fantasy-v2-og.jpg",
-  에메랄드: "/images/speed-tiers/emerald-fantasy-v2-og.jpg",
-  다이아: "/images/speed-tiers/diamond-supercar-v3.png",
-  마스터: "/images/speed-tiers/master-fantasy-v2-og.jpg",
-  "그랜드 마스터": "/images/speed-tiers/grand-master-fantasy-v2-og.jpg",
-  챌린저: "/images/speed-tiers/challenger-fantasy-v2-og.jpg",
-};
+const productionSiteUrl = "https://eokka.qualius.co";
 
 function parsePayload(
   params: URLSearchParams,
@@ -94,12 +83,11 @@ function parsePayload(
 export function loader({ request }: Route.LoaderArgs) {
   const requestUrl = new URL(request.url);
   const payload = parsePayload(requestUrl.searchParams);
-  const configuredOrigin = process.env.SITE_URL?.replace(/\/$/, "");
-  const origin = configuredOrigin || requestUrl.origin;
+  const origin = productionSiteUrl;
   const canonicalUrl = `${origin}${requestUrl.pathname}${requestUrl.search}`;
   const previewImage = payload
-    ? `${origin}${tierPreviewImages[payload.tier]}`
-    : `${origin}/images/speed-tiers/iron-fantasy-v2-og.jpg`;
+    ? `${origin}/api/social-og?tier=${encodeURIComponent(payload.tier)}`
+    : `${origin}/api/social-og`;
 
   return { payload, canonicalUrl, previewImage };
 }
@@ -122,8 +110,11 @@ export const meta: Route.MetaFunction = ({ data }) => {
     { property: "og:description", content: description },
     { property: "og:url", content: data?.canonicalUrl },
     { property: "og:image", content: data?.previewImage },
-    { property: "og:image:width", content: "900" },
-    { property: "og:image:height", content: "900" },
+    { property: "og:image:secure_url", content: data?.previewImage },
+    { property: "og:image:type", content: "image/png" },
+    { property: "og:image:width", content: "1200" },
+    { property: "og:image:height", content: "630" },
+    { property: "og:image:alt", content: title },
     { name: "twitter:card", content: "summary_large_image" },
     { name: "twitter:title", content: title },
     { name: "twitter:description", content: description },
