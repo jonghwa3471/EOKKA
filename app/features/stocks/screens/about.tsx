@@ -32,11 +32,16 @@ import { Button } from "~/core/components/ui/button";
 import { cn } from "~/core/lib/utils";
 
 export const meta: Route.MetaFunction = () => [
-  { title: "서비스 소개 | EOKKA" },
+  { title: "주식 투자 분석 서비스 소개 | 억까(EOKKA)" },
   {
     name: "description",
     content:
-      "빠른 분석부터 정밀 포트폴리오, 대시보드, 투자 인사이트와 EOKKA Pro까지 모든 기능을 예시 화면으로 확인하세요.",
+      "억까(EOKKA)의 무료 주식 분석, 목표 금액 달성 예측, 정밀 포트폴리오, 투자 인사이트와 기록 관리 기능을 확인하세요.",
+  },
+  {
+    tagName: "link",
+    rel: "canonical",
+    href: "https://eokka.qualius.co/about",
   },
 ];
 

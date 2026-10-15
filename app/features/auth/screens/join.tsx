@@ -43,6 +43,7 @@ import {
 
 export const meta: Route.MetaFunction = () => [
   { title: `회원가입 | ${import.meta.env.VITE_APP_NAME}` },
+  { name: "robots", content: "noindex, follow" },
 ];
 
 const joinSchema = z.object({

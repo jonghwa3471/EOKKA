@@ -104,6 +104,7 @@ export const meta: Route.MetaFunction = ({ data }) => {
   return [
     { title },
     { name: "description", content: description },
+    { name: "robots", content: "noindex, follow, max-image-preview:large" },
     { property: "og:type", content: "website" },
     { property: "og:site_name", content: "EOKKA" },
     { property: "og:title", content: title },

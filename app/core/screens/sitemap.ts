@@ -34,8 +34,7 @@ import path from "node:path";
  * @returns {Response} XML response containing the sitemap
  */
 export async function loader() {
-  // Get the site domain from environment variables
-  const DOMAIN = process.env.SITE_URL;
+  const domain = "https://eokka.qualius.co";
 
   // Scan the blog directory for MDX files and convert to URLs
   const blogUrls = (
@@ -52,13 +51,14 @@ export async function loader() {
     .map((file) => `/legal/${file.replace(".mdx", "")}`);
 
   // Define static routes that should be included in the sitemap
-  const customUrls = ["/", "/about", "/methodology", "/login", "/join"];
+  const customUrls = ["/", "/about", "/methodology"];
 
   // Combine all URLs and format them according to sitemap protocol
-  const sitemapUrls = [...blogUrls, ...legalUrls, ...customUrls].map((url) => {
+  const sitemapUrls = [...customUrls, ...blogUrls, ...legalUrls].map((url) => {
     return `<url>
-      <loc>${DOMAIN}${url}</loc>
-      <lastmod>${new Date().toISOString()}</lastmod>
+      <loc>${domain}${url}</loc>
+      <changefreq>${url === "/" ? "daily" : url.startsWith("/blog/") ? "weekly" : "monthly"}</changefreq>
+      <priority>${url === "/" ? "1.0" : url === "/about" || url === "/methodology" ? "0.8" : "0.6"}</priority>
     </url>`;
   });
 
@@ -74,7 +74,10 @@ export async function loader() {
     </urlset>
     `,
     {
-      headers: { "Content-Type": "application/xml" }, // Set proper content type for XML
+      headers: {
+        "Cache-Control": "public, max-age=3600, s-maxage=86400",
+        "Content-Type": "application/xml",
+      },
     },
   );
 }

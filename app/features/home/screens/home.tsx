@@ -81,15 +81,18 @@ import { getServiceUsage } from "../service-usage.server";
 const productionSiteUrl = "https://eokka.qualius.co";
 
 export const meta: Route.MetaFunction = ({ data }) => {
-  const title = data?.title ?? "억까 — 내 주식, 목표까지";
+  const title =
+    data?.title ?? "억까(EOKKA) | 무료 주식 투자 분석·목표 달성 예측";
   const description =
     data?.subtitle ??
-    "보유 주식을 입력하고 목표까지 얼마나 남았는지 확인해보세요.";
+    "보유 주식과 투자 금액을 입력하면 포트폴리오 수익률, 투자 성향, 목표 금액까지의 예상 달성 시점을 무료로 분석하는 주식 투자 서비스입니다.";
   const previewImage = `${productionSiteUrl}/api/social-og`;
 
   return [
     { title },
     { name: "description", content: description },
+    { name: "robots", content: "index, follow, max-image-preview:large" },
+    { tagName: "link", rel: "canonical", href: productionSiteUrl },
     { property: "og:type", content: "website" },
     { property: "og:site_name", content: "EOKKA" },
     { property: "og:title", content: title },
@@ -105,6 +108,49 @@ export const meta: Route.MetaFunction = ({ data }) => {
     { name: "twitter:title", content: title },
     { name: "twitter:description", content: description },
     { name: "twitter:image", content: previewImage },
+    {
+      "script:ld+json": {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": `${productionSiteUrl}/#website`,
+            url: productionSiteUrl,
+            name: "억까",
+            alternateName: ["EOKKA", "억까 EOKKA"],
+            description,
+            inLanguage: "ko-KR",
+          },
+          {
+            "@type": "WebApplication",
+            "@id": `${productionSiteUrl}/#application`,
+            name: "억까(EOKKA)",
+            url: productionSiteUrl,
+            description,
+            applicationCategory: "FinanceApplication",
+            applicationSubCategory: "주식 투자 분석 서비스",
+            operatingSystem: "Web",
+            browserRequirements: "JavaScript를 지원하는 최신 웹 브라우저",
+            inLanguage: "ko-KR",
+            image: previewImage,
+            offers: {
+              "@type": "Offer",
+              price: "0",
+              priceCurrency: "KRW",
+              description: "기본 주식 포트폴리오 분석 무료 제공",
+            },
+          },
+          {
+            "@type": "Organization",
+            "@id": `${productionSiteUrl}/#organization`,
+            name: "EOKKA",
+            alternateName: "억까",
+            url: productionSiteUrl,
+            logo: `${productionSiteUrl}/images/eokka-app-logo-kakao.png`,
+          },
+        ],
+      },
+    },
   ];
 };
 
@@ -258,8 +304,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     marketMode === "domestic" ? await getLatestCachedMarketDate() : null;
 
   return {
-    title: "억까 — 내 주식, 목표까지",
-    subtitle: "보유 주식을 입력하고 목표까지 얼마나 남았는지 확인해보세요.",
+    title: "억까(EOKKA) | 무료 주식 투자 분석·목표 달성 예측",
+    subtitle:
+      "보유 주식과 투자 금액을 입력하면 포트폴리오 수익률, 투자 성향, 목표 금액까지의 예상 달성 시점을 무료로 분석하는 주식 투자 서비스입니다.",
     marketMode,
     analysisAsOfPreview: latestCachedMarketDate ?? latest?.result.asOf ?? null,
     isAuthenticated: user !== null,
@@ -878,7 +925,8 @@ export default function Home() {
               얼마나 남았을까?
             </h1>
             <p className="text-muted-foreground mx-auto mt-6 max-w-2xl leading-7 text-pretty md:text-lg">
-              보유 주식의 현재 수익률과 목표 달성 시점을 확인해보세요.
+              보유 주식과 투자 금액을 입력하고 포트폴리오 수익률, 투자 성향과
+              목표 금액 달성 예상 시점을 무료로 분석해보세요.
             </p>
             <div className="mx-auto mt-5 flex w-fit items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-700 dark:text-amber-300">
               <span className="size-2 rounded-full bg-amber-500" />

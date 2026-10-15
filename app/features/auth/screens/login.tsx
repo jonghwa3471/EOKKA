@@ -40,6 +40,7 @@ import { getBetaMemberCapacity } from "../member-capacity.server";
 
 export const meta: Route.MetaFunction = () => [
   { title: `로그인 | ${import.meta.env.VITE_APP_NAME}` },
+  { name: "robots", content: "noindex, follow" },
 ];
 
 const loginSchema = z.object({
