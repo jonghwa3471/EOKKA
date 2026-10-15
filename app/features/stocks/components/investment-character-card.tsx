@@ -19,6 +19,8 @@ type Scenario = AnalysisResult["scenarios"][number];
 type ScenarioKey = Scenario["key"];
 type InvestmentStyle = AnalysisResult["investmentStyle"];
 
+const productionSiteUrl = "https://eokka.qualius.co";
+
 const investmentStyleVisuals: Record<
   string,
   { image: string; summary: string }
@@ -644,7 +646,7 @@ export function InvestmentCharacterCard({
   };
 
   function shareUrl() {
-    const url = new URL("/share/card", window.location.origin);
+    const url = new URL("/share/card", productionSiteUrl);
     url.searchParams.set("tier", tier.tier);
     url.searchParams.set("scenario", scenario.key);
     url.searchParams.set("label", scenario.label);
