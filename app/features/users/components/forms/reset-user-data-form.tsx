@@ -43,8 +43,8 @@ export default function ResetUserDataForm() {
           <div className="space-y-1">
             <CardTitle>모든 분석과 기록 정보 지우기</CardTitle>
             <CardDescription>
-              계정은 유지하고 포트폴리오, 매매일지, 분석 기록과 알림을 모두
-              초기화해요.
+              계정은 유지하고 포트폴리오, 매매일지, 분석 기록, 알림과 모든
+              도전과제 배지를 초기화해요.
             </CardDescription>
           </div>
         </div>
@@ -88,7 +88,7 @@ export default function ResetUserDataForm() {
             )}
           </Button>
           {fetcher.data && "success" in fetcher.data && fetcher.data.success ? (
-            <FormSuccess message="분석과 기록 정보를 모두 초기화했어요." />
+            <FormSuccess message="분석 기록과 도전과제 배지를 모두 초기화했어요." />
           ) : null}
           {fetcher.data && "error" in fetcher.data && fetcher.data.error ? (
             <FormErrors errors={[fetcher.data.error]} />
@@ -99,7 +99,7 @@ export default function ResetUserDataForm() {
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title="모든 분석과 기록을 지울까요?"
-        description="포트폴리오, 매매일지, 분석 기록과 알림이 모두 삭제되며 복구할 수 없어요. 계정과 결제 내역은 유지됩니다."
+        description="포트폴리오, 매매일지, 분석 기록, 알림과 획득한 모든 도전과제 배지가 삭제되며 복구할 수 없어요. 계정과 결제 내역은 유지됩니다."
         confirmLabel="모든 정보 지우기"
         destructive
         busy={isSubmitting}

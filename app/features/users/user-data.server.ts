@@ -11,7 +11,7 @@ import {
   portfolioTransactions,
 } from "~/features/stocks/portfolio/schema";
 
-import { profiles } from "./schema";
+import { profiles, userAchievements } from "./schema";
 
 export async function resetUserInvestmentData(userId: string) {
   await db.transaction(async (transaction) => {
@@ -31,8 +31,12 @@ export async function resetUserInvestmentData(userId: string) {
       .delete(notifications)
       .where(eq(notifications.user_id, userId));
     await transaction
+      .delete(userAchievements)
+      .where(eq(userAchievements.user_id, userId));
+    await transaction
       .update(profiles)
       .set({
+        featured_achievement_ids: [],
         preferred_goal_amount: null,
         automatic_analysis_goal_amount: null,
         automatic_analysis_monthly_contribution: null,
