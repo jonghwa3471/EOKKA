@@ -23,6 +23,14 @@ export default defineConfig((config) => {
     plugins = [...plugins, sentryReactRouter(sentryConfig, config)];
   }
   return {
+    define: {
+      "import.meta.env.VITE_SENTRY_ENVIRONMENT": JSON.stringify(
+        process.env.SENTRY_ENVIRONMENT ?? process.env.VERCEL_ENV ?? config.mode,
+      ),
+      "import.meta.env.VITE_SENTRY_RELEASE": JSON.stringify(
+        process.env.SENTRY_RELEASE ?? process.env.VERCEL_GIT_COMMIT_SHA ?? "",
+      ),
+    },
     server: {
       allowedHosts: true,
       watch: {

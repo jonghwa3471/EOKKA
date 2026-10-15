@@ -20,14 +20,15 @@ import type {
 } from "react-router";
 
 import { createReadableStreamFromReadable } from "@react-router/node";
-import * as Sentry from "@sentry/node";
+import * as Sentry from "@sentry/react-router";
 import { createInstance } from "i18next";
 import { isbot } from "isbot";
 import { PassThrough } from "node:stream";
 import { renderToPipeableStream } from "react-dom/server";
 import { I18nextProvider, initReactI18next } from "react-i18next";
-import { ServerRouter } from "react-router";
+import { ServerRouter, isRouteErrorResponse } from "react-router";
 
+import "../instrument.server.mjs";
 // Import i18n configuration and translation resources
 import i18next from "./core/lib/i18next.server";
 // Server-side i18n instance
@@ -51,6 +52,9 @@ import ko from "./locales/ko";
  * After this timeout, the stream will be aborted and the current content will be sent.
  */
 export const streamTimeout = 5_000;
+
+// Trace React Router loaders, actions and middleware on the server.
+export const instrumentations = [Sentry.createSentryServerInstrumentation()];
 
 /**
  * Main server-side rendering handler
@@ -205,6 +209,7 @@ export default async function handleRequest(
  * @param context - Context object containing the request and other information
  */
 export const handleError: HandleErrorFunction = (error, { request }) => {
+  if (isRouteErrorResponse(error) && error.status < 500) return;
   if (
     !request.signal.aborted &&
     process.env.SENTRY_DSN &&
