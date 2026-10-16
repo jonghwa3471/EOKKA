@@ -6,7 +6,7 @@
  * - Internationalization (i18n) configuration
  * - Global UI components like dialogs and sheets
  * - Error boundaries and 404 handling
- * - Google Analytics 4 integration
+ * - Google Tag Manager integration
  * - Customer support integration (Channel.io)
  * - Progress indicators for navigation
  */
@@ -192,6 +192,7 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
   const data = useRouteLoaderData<typeof loader>("root");
   const { i18n } = useTranslation();
   const { pathname } = useLocation();
+  const googleTagManagerId = import.meta.env.VITE_GOOGLE_TAG_MANAGER_ID;
 
   // Set the i18next language based on the locale from the loader
   useChangeLanguage(data?.locale ?? "en");
@@ -212,6 +213,17 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
+        {googleTagManagerId && (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer',${JSON.stringify(googleTagManagerId)});`,
+            }}
+          />
+        )}
         {isPreRendered ? (
           <script src="/scripts/prerendered-theme.js" />
         ) : (
@@ -219,27 +231,21 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
         )}
       </head>
       <body className="h-full">
+        {googleTagManagerId && (
+          <noscript>
+            <iframe
+              src={`https://www.googletagmanager.com/ns.html?id=${googleTagManagerId}`}
+              height="0"
+              width="0"
+              className="hidden invisible"
+              title="Google Tag Manager"
+            />
+          </noscript>
+        )}
         {children}
         <Toaster richColors position="bottom-right" />
         <ScrollRestoration />
         <Scripts />
-        {import.meta.env.VITE_GOOGLE_TAG_ID &&
-          import.meta.env.VITE_GOOGLE_TAG_ID !== "" && (
-            <>
-              <script
-                async
-                src={`https://www.googletagmanager.com/gtag/js?id=${import.meta.env.VITE_GOOGLE_TAG_ID}`}
-              ></script>
-              <script
-                dangerouslySetInnerHTML={{
-                  __html: `window.dataLayer = window.dataLayer || [];
-                  function gtag(){dataLayer.push(arguments);}
-                  gtag('js', new Date());
-                  gtag('config', '${import.meta.env.VITE_GOOGLE_TAG_ID}', { send_page_view: false });`,
-                }}
-              />
-            </>
-          )}
         {import.meta.env.VITE_CHANNEL_PLUGIN_KEY &&
           import.meta.env.VITE_CHANNEL_PLUGIN_KEY !== "" && (
             <script

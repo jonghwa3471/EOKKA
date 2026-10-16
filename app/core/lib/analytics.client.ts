@@ -1,26 +1,19 @@
 /**
- * Google Analytics Integration Module
+ * Google Tag Manager analytics integration module.
  *
- * This module provides a simple interface for tracking events with Google Analytics 4 (GA4).
- * It extends the global Window interface to include the gtag function provided by the
- * Google Analytics script, which is typically loaded in the application's root layout.
+ * Events are pushed to the dataLayer. Google Tag Manager decides which services
+ * (GA4, Google Ads, etc.) receive each event.
  *
  * The module offers a type-safe way to track custom events with optional properties,
  * making it easy to implement consistent analytics tracking throughout the application.
  */
 
 /**
- * Extend the Window interface to include the Google Analytics gtag function
- * This allows TypeScript to recognize the globally available gtag function
- * that's injected by the Google Analytics script
+ * Extend Window with the dataLayer created by the GTM container snippet.
  */
 declare global {
   interface Window {
-    gtag?: (
-      command: string,
-      event: string,
-      params?: Record<string, unknown>,
-    ) => void;
+    dataLayer?: Array<Record<string, unknown>>;
   }
 }
 
@@ -79,11 +72,9 @@ export function consumePendingAnalyticsEvent(eventName: AnalyticsEventName) {
 }
 
 /**
- * Track a custom event in Google Analytics
+ * Push a custom event to Google Tag Manager.
  *
- * This function provides a type-safe way to send custom events to Google Analytics.
- * It safely checks for the existence of the gtag function before attempting to use it,
- * which prevents errors if the analytics script hasn't loaded or is blocked.
+ * GTM can route the same event to GA4, Google Ads, or another configured tag.
  *
  * @example
  * // Track a simple event
@@ -98,14 +89,13 @@ export function consumePendingAnalyticsEvent(eventName: AnalyticsEventName) {
  *
  * @param eventName - The name of the event to track
  * @param properties - Optional object containing additional event properties
- * @returns The result of the gtag call, or undefined if gtag is not available
+ * @returns The new dataLayer length, or undefined if GTM is not configured
  */
 export default function trackEvent(
   eventName: AnalyticsEventName | "test_event",
   properties?: Record<string, unknown>,
 ) {
-  // Only call gtag if it exists (prevents errors if analytics is blocked or not loaded)
-  return window.gtag?.("event", eventName, properties);
+  return window.dataLayer?.push({ event: eventName, ...properties });
 }
 
 /**
@@ -114,7 +104,8 @@ export default function trackEvent(
  * which belongs in analytics.
  */
 export function trackPageView(pathname: string, title: string) {
-  return window.gtag?.("event", "page_view", {
+  return window.dataLayer?.push({
+    event: "page_view",
     page_location: `${window.location.origin}${pathname}`,
     page_path: pathname,
     page_title: title,
