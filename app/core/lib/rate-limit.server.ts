@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { createHmac, randomUUID } from "node:crypto";
+import { isIP } from "node:net";
 
 import db from "~/core/db/drizzle-client.server";
 import {
@@ -30,9 +31,12 @@ const rateLimits =
 
 function clientIdentifier(request: Request) {
   const trustedHeader = (
-    process.env.RATE_LIMIT_IP_HEADER ||
-    (process.env.VERCEL ? "x-forwarded-for" : "")
-  ).toLowerCase();
+    process.env.VERCEL
+      ? "x-forwarded-for"
+      : process.env.RATE_LIMIT_IP_HEADER || ""
+  )
+    .trim()
+    .toLowerCase();
   const allowedHeaders = new Set([
     "cf-connecting-ip",
     "x-real-ip",
@@ -48,7 +52,7 @@ function clientIdentifier(request: Request) {
     trustedHeader === "x-forwarded-for"
       ? value?.split(",")[0]?.trim()
       : value?.trim();
-  return identifier || "missing-client-ip";
+  return identifier && isIP(identifier) ? identifier : "missing-client-ip";
 }
 
 function removeExpiredEntries(now: number) {
@@ -94,8 +98,23 @@ function checkIdentifierRateLimit(
   };
 }
 
+const blockedAuthRequests = new Map<string, number>();
+let nextAuthCleanupAt = 0;
+
 export async function checkAuthEmailRequestRateLimit(request: Request) {
   const ip = clientIdentifier(request);
+  if (ip === "untrusted-client" || ip === "missing-client-ip") {
+    console.error(
+      "인증 요청 IP를 확인할 수 없습니다. 프록시 설정을 확인하세요.",
+    );
+    throw new Response(
+      "요청 정보를 확인할 수 없어요. 잠시 후 다시 시도해 주세요.",
+      {
+        status: 503,
+        headers: { "Cache-Control": "no-store", "Retry-After": "60" },
+      },
+    );
+  }
   if (ip === "local-development")
     return checkIdentifierRateLimit(`auth:email-request:${ip}`, 5, 60_000);
 
@@ -104,8 +123,31 @@ export async function checkAuthEmailRequestRateLimit(request: Request) {
   const now = new Date();
   const windowStartedAt = new Date(Math.floor(now.getTime() / 60_000) * 60_000);
   const hash = identifierHash(`auth:email-request:${ip}`, rateLimitSecret());
+  const blockedUntil = blockedAuthRequests.get(hash) ?? 0;
+  if (blockedUntil > now.getTime())
+    return {
+      allowed: false,
+      retryAfter: Math.max(1, Math.ceil((blockedUntil - now.getTime()) / 1000)),
+    };
 
   try {
+    // Bounded cleanup: old counters have no use after their one-minute window.
+    // Never let a cleanup failure affect authentication.
+    if (now.getTime() >= nextAuthCleanupAt) {
+      nextAuthCleanupAt = now.getTime() + 60 * 60_000;
+      await db
+        .execute(
+          sql`delete from auth_request_rate_limits where ctid in (
+        select ctid from auth_request_rate_limits
+        where window_started_at < now() - interval '1 day' limit 1000
+      )`,
+        )
+        .catch((error) =>
+          console.error("인증 요청 제한 기록 정리 실패", error),
+        );
+      for (const [key, expires] of blockedAuthRequests)
+        if (expires <= now.getTime()) blockedAuthRequests.delete(key);
+    }
     const [entry] = await db
       .insert(authRequestRateLimits)
       .values({ identifier_hash: hash, window_started_at: windowStartedAt })
@@ -120,6 +162,9 @@ export async function checkAuthEmailRequestRateLimit(request: Request) {
         },
       })
       .returning({ count: authRequestRateLimits.count });
+
+    if ((entry?.count ?? 1) > 5 && blockedAuthRequests.size < 10_000)
+      blockedAuthRequests.set(hash, windowStartedAt.getTime() + 60_000);
 
     return {
       allowed: (entry?.count ?? 1) <= 5,

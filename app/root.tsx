@@ -57,6 +57,7 @@ import {
   trackPageView,
 } from "./core/lib/analytics.client";
 import { validateEnvironmentConfiguration } from "./core/lib/app-environment.server";
+import { useCspNonce } from "./core/lib/csp-context";
 import i18next from "./core/lib/i18next.server";
 import {
   clearRouteDataCache,
@@ -188,6 +189,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
  * @param children - Child components to render within the layout
  */
 function InnerLayout({ children }: { children: React.ReactNode }) {
+  const nonce = useCspNonce();
   const [theme] = useTheme();
   const data = useRouteLoaderData<typeof loader>("root");
   const { i18n } = useTranslation();
@@ -210,11 +212,13 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
     >
       <head>
         <meta charSet="utf-8" />
+        <meta name="csp-nonce" content={nonce} />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
         {googleTagManagerId && (
           <script
+            nonce={nonce}
             dangerouslySetInnerHTML={{
               __html: `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
 new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -227,7 +231,10 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         {isPreRendered ? (
           <script src="/scripts/prerendered-theme.js" />
         ) : (
-          <PreventFlashOnWrongTheme ssrTheme={Boolean(data?.theme)} />
+          <PreventFlashOnWrongTheme
+            ssrTheme={Boolean(data?.theme)}
+            nonce={nonce}
+          />
         )}
       </head>
       <body className="h-full">
@@ -237,18 +244,19 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
               src={`https://www.googletagmanager.com/ns.html?id=${googleTagManagerId}`}
               height="0"
               width="0"
-              className="hidden invisible"
+              className="invisible hidden"
               title="Google Tag Manager"
             />
           </noscript>
         )}
         {children}
         <Toaster richColors position="bottom-right" />
-        <ScrollRestoration />
-        <Scripts />
+        <ScrollRestoration nonce={nonce} />
+        <Scripts nonce={nonce} />
         {import.meta.env.VITE_CHANNEL_PLUGIN_KEY &&
           import.meta.env.VITE_CHANNEL_PLUGIN_KEY !== "" && (
             <script
+              nonce={nonce}
               dangerouslySetInnerHTML={{
                 __html: `(function(){var w=window;if(w.ChannelIO){return w.console.error("ChannelIO script included twice.");}var ch=function(){ch.c(arguments);};ch.q=[];ch.c=function(args){ch.q.push(args);};w.ChannelIO=ch;function l(){if(w.ChannelIOInitialized){return;}w.ChannelIOInitialized=true;var s=document.createElement("script");s.type="text/javascript";s.async=true;s.src="https://cdn.channel.io/plugin/ch-plugin-web.js";var x=document.getElementsByTagName("script")[0];if(x.parentNode){x.parentNode.insertBefore(s,x);}}if(document.readyState==="complete"){l();}else{w.addEventListener("DOMContentLoaded",l);w.addEventListener("load",l);}})();
             ChannelIO('boot', {

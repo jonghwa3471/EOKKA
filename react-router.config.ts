@@ -5,6 +5,8 @@ import { vercelPreset } from "@vercel/react-router/vite";
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 
+import { protectStaticHtml } from "./scripts/static-csp";
+
 declare module "react-router" {
   interface Future {
     unstable_middleware: true;
@@ -31,6 +33,9 @@ export default {
   },
   presets: [...(process.env.VERCEL_ENV ? [vercelPreset()] : [])],
   buildEnd: async ({ viteConfig, reactRouterConfig, buildManifest }) => {
+    await protectStaticHtml(
+      path.join(reactRouterConfig.buildDirectory, "client"),
+    );
     if (
       process.env.SENTRY_ORG &&
       process.env.SENTRY_PROJECT &&

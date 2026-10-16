@@ -20,6 +20,7 @@ import { I18nextProvider, initReactI18next } from "react-i18next";
 import { HydratedRouter } from "react-router/dom";
 import { getInitialNamespaces } from "remix-i18next/client";
 
+import { CspNonceContext } from "./core/lib/csp-context";
 // Import i18n configuration and language resources
 import i18n from "./i18n";
 import en from "./locales/en";
@@ -107,10 +108,17 @@ async function hydrate() {
         {/* Provide i18n context to the entire application */}
         <StrictMode>
           {/* Enable React strict mode for additional development checks */}
-          <HydratedRouter
-            instrumentations={[Sentry.createSentryClientInstrumentation()]}
-            onError={Sentry.sentryOnError}
-          />
+          <CspNonceContext.Provider
+            value={
+              document.querySelector<HTMLMetaElement>('meta[name="csp-nonce"]')
+                ?.content
+            }
+          >
+            <HydratedRouter
+              instrumentations={[Sentry.createSentryClientInstrumentation()]}
+              onError={Sentry.sentryOnError}
+            />
+          </CspNonceContext.Provider>
           {/* Use the HydratedRouter from React Router */}
         </StrictMode>
       </I18nextProvider>,

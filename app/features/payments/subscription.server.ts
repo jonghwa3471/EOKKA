@@ -196,6 +196,14 @@ export async function resumeSubscription(userId: string) {
 }
 
 export async function renewDueSubscriptions() {
+  if (process.env.PAYMENTS_ENABLED?.trim().toLowerCase() !== "true")
+    return {
+      attempted: 0,
+      renewed: 0,
+      failed: 0,
+      cancelled: 0,
+      skipped: "payments_disabled",
+    };
   const cancelledDue = await db
     .select()
     .from(subscriptions)

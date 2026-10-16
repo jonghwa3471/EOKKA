@@ -23,12 +23,14 @@ import { createReadableStreamFromReadable } from "@react-router/node";
 import * as Sentry from "@sentry/react-router";
 import { createInstance } from "i18next";
 import { isbot } from "isbot";
+import { randomBytes } from "node:crypto";
 import { PassThrough } from "node:stream";
 import { renderToPipeableStream } from "react-dom/server";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 import { ServerRouter, isRouteErrorResponse } from "react-router";
 
 import "../instrument.server.mjs";
+import { CspNonceContext } from "./core/lib/csp-context";
 // Import i18n configuration and translation resources
 import i18next from "./core/lib/i18next.server";
 // Server-side i18n instance
@@ -78,6 +80,7 @@ export default async function handleRequest(
   // If you have middleware enabled:
   // loadContext: unstable_RouterContextProvider
 ) {
+  const nonce = randomBytes(18).toString("base64");
   return new Promise(async (resolve, reject) => {
     const i18nextInstance = createInstance();
 
@@ -123,9 +126,16 @@ export default async function handleRequest(
 
     const { pipe, abort } = renderToPipeableStream(
       <I18nextProvider i18n={i18nextInstance}>
-        <ServerRouter context={routerContext} url={request.url} />
+        <CspNonceContext.Provider value={nonce}>
+          <ServerRouter
+            context={routerContext}
+            url={request.url}
+            nonce={nonce}
+          />
+        </CspNonceContext.Provider>
       </I18nextProvider>,
       {
+        nonce,
         [readyOption]() {
           shellRendered = true;
           const body = new PassThrough();
@@ -141,7 +151,7 @@ export default async function handleRequest(
               "Content-Security-Policy",
               `
                 default-src 'self';
-                script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://cdn.channel.io https://challenges.cloudflare.com;
+                script-src 'self' 'nonce-${nonce}' https://www.googletagmanager.com https://cdn.channel.io https://challenges.cloudflare.com;
                 style-src 'self' 'unsafe-inline' https:;
                 font-src 'self' https: data:;
                 img-src 'self' https: data: blob:;
