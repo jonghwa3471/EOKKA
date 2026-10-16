@@ -116,10 +116,8 @@ export async function action({ request }: Route.ActionArgs) {
     throw new Response("로컬 환경에서만 게시할 수 있어요.", { status: 403 });
   const user = await requireAdmin(request);
   const result = await analyzeDeveloperPortfolio(user.id, true);
-  await publishDeveloperPortfolio(user.id, result);
-  return Response.redirect(
-    new URL("/dashboard/developer-portfolio?published=1", request.url),
-  );
+  const { snapshot } = await publishDeveloperPortfolio(user.id, result);
+  return { published: true, snapshot };
 }
 
 function DeveloperPortfolioDataSkeleton({ canManage }: { canManage: boolean }) {
@@ -181,8 +179,13 @@ function DeveloperPortfolioDataSkeleton({ canManage }: { canManage: boolean }) {
 
 export default function DeveloperPortfolio({
   loaderData,
+  actionData,
 }: Route.ComponentProps) {
-  const { snapshotPromise, canManage, published } = loaderData;
+  const { canManage } = loaderData;
+  const snapshotPromise = actionData?.snapshot
+    ? Promise.resolve(actionData.snapshot)
+    : loaderData.snapshotPromise;
+  const published = actionData?.published ?? loaderData.published;
   usePrimeRouteDataCache("developer-portfolio", loaderData);
   const navigation = useNavigation();
   const publishing = navigation.state !== "idle";
