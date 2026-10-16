@@ -46,12 +46,13 @@ export default defineConfig((config) => {
     build: {
       sourcemap: canUploadSentrySourceMaps ? "hidden" : false,
     },
-    // react-turnstile is published as CommonJS. Bundling it into the SSR build
-    // prevents Node from handing React the CommonJS module object instead of
-    // the component function in production.
-    ssr: {
-      noExternal: ["react-turnstile"],
-    },
+    // react-turnstile is published as CommonJS. Production SSR needs it bundled
+    // for the server output, but Vite's development SSR must externalize it so
+    // Node performs the CommonJS interop without creating a second React copy.
+    ssr:
+      config.command === "build"
+        ? { noExternal: ["react-turnstile"] }
+        : { external: ["react-turnstile"] },
     plugins,
     sentryConfig,
   };

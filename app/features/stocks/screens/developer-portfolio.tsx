@@ -98,10 +98,16 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 type DeveloperPortfolioLoaderData = Awaited<ReturnType<typeof loader>>;
 
-export async function clientLoader({ serverLoader }: Route.ClientLoaderArgs) {
+export async function clientLoader({
+  request,
+  serverLoader,
+}: Route.ClientLoaderArgs) {
+  const justPublished =
+    new URL(request.url).searchParams.get("published") === "1";
   return loadCachedRouteData<DeveloperPortfolioLoaderData>(
     "developer-portfolio",
     async () => serverLoader() as Promise<DeveloperPortfolioLoaderData>,
+    { maxAgeMs: justPublished ? 0 : undefined },
   );
 }
 

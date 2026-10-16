@@ -30,3 +30,13 @@ test("저장한 분석의 영향을 받는 화면은 명시적으로 갱신할 �
   }
   for (const key of [...keys, "contact"]) clearRouteDataCache(key);
 });
+
+test("최대 캐시 나이가 0이면 서버에서 최신 데이터를 다시 불러온다", async () => {
+  const key = "developer-portfolio";
+  assert.equal(await loadCachedRouteData(key, async () => "before"), "before");
+  assert.equal(
+    await loadCachedRouteData(key, async () => "after", { maxAgeMs: 0 }),
+    "after",
+  );
+  clearRouteDataCache(key);
+});

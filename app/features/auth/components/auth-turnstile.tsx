@@ -1,6 +1,13 @@
 import { useEffect, useRef } from "react";
 import { useNavigation } from "react-router";
-import Turnstile, { type BoundTurnstileObject } from "react-turnstile";
+import TurnstileImport, { type BoundTurnstileObject } from "react-turnstile";
+
+// react-turnstile is CommonJS even though its package metadata exposes it to
+// ESM importers. Node's development SSR can therefore return the module object
+// while the production bundle returns the component itself.
+const Turnstile =
+  (TurnstileImport as unknown as { default?: typeof TurnstileImport }).default ??
+  TurnstileImport;
 
 const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim();
 
