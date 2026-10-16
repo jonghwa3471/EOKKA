@@ -102,7 +102,7 @@ export async function publishDeveloperPortfolio(
   const snapshot = toPublicDeveloperPortfolioSnapshot(result, publishedAt);
   if (isLocalDevelopmentEnvironment()) {
     await publishDeveloperPortfolioToProduction(snapshot);
-    return { snapshot };
+    return storeDeveloperPortfolioSnapshot(snapshot, userId);
   }
   return storeDeveloperPortfolioSnapshot(snapshot, userId);
 }

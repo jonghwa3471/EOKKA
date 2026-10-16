@@ -116,8 +116,10 @@ export async function action({ request }: Route.ActionArgs) {
     throw new Response("로컬 환경에서만 게시할 수 있어요.", { status: 403 });
   const user = await requireAdmin(request);
   const result = await analyzeDeveloperPortfolio(user.id, true);
-  const { snapshot } = await publishDeveloperPortfolio(user.id, result);
-  return { published: true, snapshot };
+  await publishDeveloperPortfolio(user.id, result);
+  return Response.redirect(
+    new URL("/dashboard/developer-portfolio?published=1", request.url),
+  );
 }
 
 function DeveloperPortfolioDataSkeleton({ canManage }: { canManage: boolean }) {
@@ -179,13 +181,8 @@ function DeveloperPortfolioDataSkeleton({ canManage }: { canManage: boolean }) {
 
 export default function DeveloperPortfolio({
   loaderData,
-  actionData,
 }: Route.ComponentProps) {
-  const { canManage } = loaderData;
-  const snapshotPromise = actionData?.snapshot
-    ? Promise.resolve(actionData.snapshot)
-    : loaderData.snapshotPromise;
-  const published = actionData?.published ?? loaderData.published;
+  const { snapshotPromise, canManage, published } = loaderData;
   usePrimeRouteDataCache("developer-portfolio", loaderData);
   const navigation = useNavigation();
   const publishing = navigation.state !== "idle";
@@ -292,8 +289,9 @@ export default function DeveloperPortfolio({
                   </p>
                   <div className="mt-3 rounded-2xl border border-amber-500/20 bg-amber-500/[0.07] px-4 py-3 text-xs leading-5 font-semibold text-amber-700 dark:text-amber-300">
                     공개가 끝나면 실제 서비스의 개발자 포트폴리오 페이지에 바로
-                    반영돼요. 로컬·Preview 데이터베이스에는 공개본을 저장하지
-                    않아요.
+                    반영되고, 같은 공개본을 로컬 데이터베이스에도 저장해 다음에
+                    서버를 다시 켰을 때 이어서 보여줘요. Preview
+                    데이터베이스에는 저장하지 않아요.
                   </div>
                 </section>
               )}
