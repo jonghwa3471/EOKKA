@@ -16,7 +16,7 @@
  */
 declare global {
   interface Window {
-    gtag: (
+    gtag?: (
       command: string,
       event: string,
       params?: Record<string, unknown>,
@@ -105,5 +105,18 @@ export default function trackEvent(
   properties?: Record<string, unknown>,
 ) {
   // Only call gtag if it exists (prevents errors if analytics is blocked or not loaded)
-  return window.gtag && window.gtag("event", eventName, properties);
+  return window.gtag?.("event", eventName, properties);
+}
+
+/**
+ * Records client-side route changes without including query parameters.
+ * Query strings can contain share-card copy or temporary auth state, neither of
+ * which belongs in analytics.
+ */
+export function trackPageView(pathname: string, title: string) {
+  return window.gtag?.("event", "page_view", {
+    page_location: `${window.location.origin}${pathname}`,
+    page_path: pathname,
+    page_title: title,
+  });
 }

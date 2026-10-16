@@ -6,7 +6,7 @@
  * - Internationalization (i18n) configuration
  * - Global UI components like dialogs and sheets
  * - Error boundaries and 404 handling
- * - Analytics integrations (Google Tag Manager)
+ * - Google Analytics 4 integration
  * - Customer support integration (Channel.io)
  * - Progress indicators for navigation
  */
@@ -54,6 +54,7 @@ import { useAdaptiveProgress } from "./core/hooks/use-adaptive-progress";
 import {
   consumePendingAnalyticsEvent,
   isAnalyticsEventName,
+  trackPageView,
 } from "./core/lib/analytics.client";
 import { validateEnvironmentConfiguration } from "./core/lib/app-environment.server";
 import i18next from "./core/lib/i18next.server";
@@ -234,7 +235,7 @@ function InnerLayout({ children }: { children: React.ReactNode }) {
                   __html: `window.dataLayer = window.dataLayer || [];
                   function gtag(){dataLayer.push(arguments);}
                   gtag('js', new Date());
-                  gtag('config', '${import.meta.env.VITE_GOOGLE_TAG_ID}');`,
+                  gtag('config', '${import.meta.env.VITE_GOOGLE_TAG_ID}', { send_page_view: false });`,
                 }}
               />
             </>
@@ -365,6 +366,12 @@ export default function App() {
   useEffect(() => {
     NProgress.configure({ showSpinner: false });
   }, []);
+
+  // React Router changes pages without a full document load. Send one explicit
+  // GA4 page_view per pathname and intentionally omit query parameters.
+  useEffect(() => {
+    trackPageView(location.pathname, document.title);
+  }, [location.pathname]);
 
   // Fast route changes stay visually instant. Only requests that take longer
   // than the threshold show a blocking loader.
