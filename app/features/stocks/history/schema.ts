@@ -9,6 +9,7 @@ import {
   pgTable,
   primaryKey,
   text,
+  timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -185,5 +186,21 @@ export const analysisRateLimits = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.identifier_hash, table.window_on] }),
+  ],
+).enableRLS();
+
+export const authRequestRateLimits = pgTable(
+  "auth_request_rate_limits",
+  {
+    identifier_hash: text().notNull(),
+    window_started_at: timestamp({ withTimezone: true }).notNull(),
+    count: integer().notNull().default(1),
+    created_at: timestamps.created_at,
+    updated_at: timestamps.updated_at,
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.identifier_hash, table.window_started_at],
+    }),
   ],
 ).enableRLS();

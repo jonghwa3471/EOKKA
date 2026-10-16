@@ -65,7 +65,7 @@ export async function action({ request }: Route.ActionArgs) {
     return data({ error: "Invalid email address" }, { status: 400 });
   }
 
-  const rateLimit = checkAuthEmailRequestRateLimit(request);
+  const rateLimit = await checkAuthEmailRequestRateLimit(request);
   if (!rateLimit.allowed)
     return data(
       {

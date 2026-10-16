@@ -46,6 +46,12 @@ export default defineConfig((config) => {
     build: {
       sourcemap: canUploadSentrySourceMaps ? "hidden" : false,
     },
+    // react-turnstile is published as CommonJS. Bundling it into the SSR build
+    // prevents Node from handing React the CommonJS module object instead of
+    // the component function in production.
+    ssr: {
+      noExternal: ["react-turnstile"],
+    },
     plugins,
     sentryConfig,
   };

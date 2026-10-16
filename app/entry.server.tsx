@@ -141,7 +141,7 @@ export default async function handleRequest(
               "Content-Security-Policy",
               `
                 default-src 'self';
-                script-src 'self' 'unsafe-inline' https:;
+                script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://cdn.channel.io https://challenges.cloudflare.com;
                 style-src 'self' 'unsafe-inline' https:;
                 font-src 'self' https: data:;
                 img-src 'self' https: data: blob:;

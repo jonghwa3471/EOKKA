@@ -89,7 +89,7 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
-  const rateLimit = checkAuthEmailRequestRateLimit(request);
+  const rateLimit = await checkAuthEmailRequestRateLimit(request);
   if (!rateLimit.allowed)
     return data(
       {

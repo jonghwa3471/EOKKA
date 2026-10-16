@@ -2,7 +2,10 @@ import { sql } from "drizzle-orm";
 import { createHmac, randomUUID } from "node:crypto";
 
 import db from "~/core/db/drizzle-client.server";
-import { analysisRateLimits } from "~/features/stocks/history/schema";
+import {
+  analysisRateLimits,
+  authRequestRateLimits,
+} from "~/features/stocks/history/schema";
 
 import { SERVICE_LIMITS } from "./service-limits";
 
@@ -26,7 +29,10 @@ const rateLimits =
   (globalRateLimitState.__eokkaRateLimits = new Map());
 
 function clientIdentifier(request: Request) {
-  const trustedHeader = process.env.RATE_LIMIT_IP_HEADER?.toLowerCase();
+  const trustedHeader = (
+    process.env.RATE_LIMIT_IP_HEADER ||
+    (process.env.VERCEL ? "x-forwarded-for" : "")
+  ).toLowerCase();
   const allowedHeaders = new Set([
     "cf-connecting-ip",
     "x-real-ip",
@@ -88,13 +94,46 @@ function checkIdentifierRateLimit(
   };
 }
 
-export function checkAuthEmailRequestRateLimit(request: Request) {
+export async function checkAuthEmailRequestRateLimit(request: Request) {
   const ip = clientIdentifier(request);
-  if (ip !== "untrusted-client" && ip !== "local-development") {
+  if (ip === "local-development")
+    return checkIdentifierRateLimit(`auth:email-request:${ip}`, 5, 60_000);
+
+  // Keep one shared counter across serverless instances. The hash prevents
+  // raw client addresses from being persisted in the database.
+  const now = new Date();
+  const windowStartedAt = new Date(Math.floor(now.getTime() / 60_000) * 60_000);
+  const hash = identifierHash(`auth:email-request:${ip}`, rateLimitSecret());
+
+  try {
+    const [entry] = await db
+      .insert(authRequestRateLimits)
+      .values({ identifier_hash: hash, window_started_at: windowStartedAt })
+      .onConflictDoUpdate({
+        target: [
+          authRequestRateLimits.identifier_hash,
+          authRequestRateLimits.window_started_at,
+        ],
+        set: {
+          count: sql`${authRequestRateLimits.count} + 1`,
+          updated_at: new Date(),
+        },
+      })
+      .returning({ count: authRequestRateLimits.count });
+
+    return {
+      allowed: (entry?.count ?? 1) <= 5,
+      retryAfter: Math.max(
+        1,
+        Math.ceil((windowStartedAt.getTime() + 60_000 - now.getTime()) / 1000),
+      ),
+    };
+  } catch (error) {
+    // A temporary database outage must not remove all protection. This local
+    // fallback still limits the current instance while the error is reported.
+    console.error("분산 인증 요청 제한을 적용하지 못했습니다.", error);
     return checkIdentifierRateLimit(`auth:email-request:${ip}`, 5, 60_000);
   }
-
-  return { allowed: true, retryAfter: 0 };
 }
 
 export function rateLimitResponse(retryAfter: number) {
@@ -116,7 +155,13 @@ function cookieValue(request: Request, name: string) {
   const cookie = request.headers.get("cookie") ?? "";
   for (const part of cookie.split(";")) {
     const [key, ...value] = part.trim().split("=");
-    if (key === name) return decodeURIComponent(value.join("="));
+    if (key === name) {
+      try {
+        return decodeURIComponent(value.join("="));
+      } catch {
+        return null;
+      }
+    }
   }
   return null;
 }

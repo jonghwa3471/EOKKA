@@ -76,7 +76,7 @@ export async function action({ request }: Route.ActionArgs) {
       { status: 400 },
     );
 
-  const rateLimit = checkAuthEmailRequestRateLimit(request);
+  const rateLimit = await checkAuthEmailRequestRateLimit(request);
   if (!rateLimit.allowed)
     return data(
       {
