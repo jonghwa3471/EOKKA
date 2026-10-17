@@ -11,6 +11,9 @@ if (process.env.SENTRY_DSN) {
     environment,
     release: process.env.SENTRY_RELEASE || process.env.VERCEL_GIT_COMMIT_SHA,
     sendDefaultPii: false,
+    // Public-data gateways reject Sentry propagation headers with HTTP 400.
+    // Keep error/span collection, but do not propagate traces to external APIs.
+    tracePropagationTargets: [],
     integrations: [nodeProfilingIntegration()],
     tracesSampleRate: 0.1,
     profilesSampleRate: 0.1,
