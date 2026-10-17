@@ -131,6 +131,13 @@ async function fetchPricePage(
     headers: { Accept: "application/json" },
     signal: AbortSignal.timeout(15_000),
   });
+  const responseText = await response.text();
+  let body: FscResponse | null = null;
+  try {
+    body = JSON.parse(responseText) as FscResponse;
+  } catch {
+    // Some public-data gateway errors are returned as XML or plain text.
+  }
   if (response.status === 401)
     throw new Error(
       "공공데이터 인증키가 유효하지 않습니다. 주식시세정보 활용신청 승인 상태와 일반 인증키를 확인해 주세요.",
@@ -141,12 +148,31 @@ async function fetchPricePage(
         ? "금융위원회 주식시세정보 API 활용신청 상태를 확인해 주세요."
         : "금융위원회 증권상품시세정보 API 활용신청이 필요합니다.",
     );
-  if (!response.ok)
+  if (!response.ok) {
+    const gatewayMessage =
+      body?.response?.header?.resultMsg ??
+      responseText
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 300);
+    console.error("FSC price API request failed", {
+      status: response.status,
+      securityType,
+      ticker,
+      beginDate,
+      endDate,
+      pageNo,
+      gatewayMessage: gatewayMessage || "empty response",
+    });
     throw new Error(
-      `공공데이터 시세 조회에 실패했습니다. (${response.status})`,
+      `공공데이터 시세 조회에 실패했습니다. (${response.status})${
+        gatewayMessage ? `: ${gatewayMessage}` : ""
+      }`,
     );
+  }
 
-  const body = (await response.json()) as FscResponse;
+  if (!body) throw new Error("공공데이터 시세 응답 형식이 올바르지 않습니다.");
   const header = body.response?.header;
   if (header?.resultCode && header.resultCode !== "00")
     throw new Error(header.resultMsg || "공공데이터 시세 조회에 실패했습니다.");
