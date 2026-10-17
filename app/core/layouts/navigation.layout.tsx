@@ -38,7 +38,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 export default function NavigationLayout({ loaderData }: Route.ComponentProps) {
   const { userPromise } = loaderData;
   return (
-    <div className="flex min-h-screen flex-col justify-between">
+    <div className="flex min-h-screen flex-col justify-between overflow-x-clip">
       <Suspense fallback={<NavigationBar loading={true} />}>
         <Await resolve={userPromise}>
           {({ data: { user }, unreadNotificationCount, profile, isAdmin }) =>
