@@ -1,11 +1,9 @@
-import { RefreshCwIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useLocation, useRevalidator } from "react-router";
 
 import {
   markRouteDataStale,
   refreshRouteDataCache,
-  useIsRouteDataStale,
 } from "~/core/lib/route-data-cache";
 
 type DataRevisions = {
@@ -62,16 +60,49 @@ export function DataRefreshBanner({ actionBusy }: { actionBusy: boolean }) {
   const location = useLocation();
   const revalidator = useRevalidator();
   const key = cacheKey(location.pathname);
-  const contentStale = useIsRouteDataStale(key);
-  const shellStale = useIsRouteDataStale(
+  const shellKey =
     location.pathname.startsWith("/dashboard") ||
-      location.pathname.startsWith("/account")
+    location.pathname.startsWith("/account")
       ? "dashboard-layout"
-      : null,
-  );
-  const stale = contentStale || shellStale;
+      : null;
   const revisionsRef = useRef<DataRevisions | null>(null);
   const actionWasBusy = useRef(false);
+  const currentKeyRef = useRef(key);
+  const shellKeyRef = useRef(shellKey);
+  const revalidatorRef = useRef(revalidator);
+
+  currentKeyRef.current = key;
+  shellKeyRef.current = shellKey;
+  revalidatorRef.current = revalidator;
+
+  function applyRevisions(next: DataRevisions, markChanges: boolean) {
+    const previous = revisionsRef.current;
+    revisionsRef.current = next;
+    if (!previous || !markChanges) return;
+
+    const changedRouteKeys = (
+      Object.keys(next) as (keyof DataRevisions)[]
+    ).flatMap((revisionKey) =>
+      previous[revisionKey] === next[revisionKey]
+        ? []
+        : revisionRouteKeys[revisionKey],
+    );
+    if (changedRouteKeys.length === 0) return;
+
+    markRouteDataStale(changedRouteKeys);
+
+    const currentKey = currentKeyRef.current;
+    const currentShellKey = shellKeyRef.current;
+    const refreshContent =
+      currentKey !== null && changedRouteKeys.includes(currentKey);
+    const refreshShell =
+      currentShellKey !== null && changedRouteKeys.includes(currentShellKey);
+    if (!refreshContent && !refreshShell) return;
+
+    if (refreshContent && currentKey) refreshRouteDataCache(currentKey);
+    if (refreshShell && currentShellKey) refreshRouteDataCache(currentShellKey);
+    void revalidatorRef.current.revalidate();
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -85,12 +116,7 @@ export function DataRefreshBanner({ actionBusy }: { actionBusy: boolean }) {
         if (!response.ok) return;
         const next = (await response.json()) as DataRevisions;
         if (cancelled) return;
-        const previous = revisionsRef.current;
-        revisionsRef.current = next;
-        if (!previous || !markChanges) return;
-        for (const revisionKey of Object.keys(next) as (keyof DataRevisions)[])
-          if (previous[revisionKey] !== next[revisionKey])
-            markRouteDataStale(revisionRouteKeys[revisionKey]);
+        applyRevisions(next, markChanges);
       } catch {
         // A revision check must never interrupt normal navigation.
       }
@@ -126,35 +152,10 @@ export function DataRefreshBanner({ actionBusy }: { actionBusy: boolean }) {
       .then((response) => (response.ok ? response.json() : null))
       .then((next: DataRevisions | null) => {
         if (!next) return;
-        const previous = revisionsRef.current;
-        revisionsRef.current = next;
-        if (!previous) return;
-        for (const revisionKey of Object.keys(next) as (keyof DataRevisions)[])
-          if (previous[revisionKey] !== next[revisionKey])
-            markRouteDataStale(revisionRouteKeys[revisionKey]);
+        applyRevisions(next, true);
       })
       .catch(() => undefined);
   }, [actionBusy]);
 
-  if (!key || !stale) return null;
-
-  return (
-    <aside className="fixed inset-x-4 top-4 z-[90] mx-auto flex max-w-xl items-center justify-between gap-3 rounded-2xl border border-cyan-400/30 bg-slate-950/95 px-4 py-3 text-sm text-white shadow-2xl backdrop-blur">
-      <div>
-        <strong className="block font-bold">새로운 데이터가 있어요</strong>
-        <span className="text-slate-300">현재 화면을 유지하고 있어요.</span>
-      </div>
-      <button
-        type="button"
-        className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-white px-3 py-2 font-bold text-slate-950 transition hover:bg-slate-200"
-        onClick={() => {
-          if (key) refreshRouteDataCache(key);
-          if (shellStale) refreshRouteDataCache("dashboard-layout");
-          void revalidator.revalidate();
-        }}
-      >
-        <RefreshCwIcon className="size-4" /> 업데이트
-      </button>
-    </aside>
-  );
+  return null;
 }

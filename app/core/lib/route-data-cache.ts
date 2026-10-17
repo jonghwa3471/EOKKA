@@ -19,6 +19,10 @@ function matchesKey(key: string, keyPrefix: string) {
   return key === keyPrefix || key.startsWith(`${keyPrefix}:`);
 }
 
+function isRouteDataStale(key: string) {
+  return [...staleRouteData].some((staleKey) => matchesKey(staleKey, key));
+}
+
 function currentVersion() {
   if (typeof window === "undefined") return "server";
   return window.sessionStorage.getItem(VERSION_KEY) ?? "0";
@@ -33,6 +37,7 @@ export async function loadCachedRouteData<T>(
   const cached = routeDataCache.get(key);
   const isFresh =
     cached?.version === version &&
+    !isRouteDataStale(key) &&
     (options?.maxAgeMs === undefined ||
       Date.now() - cached.cachedAt < options.maxAgeMs);
   if (isFresh) return cached.data as T;
@@ -45,7 +50,7 @@ export async function loadCachedRouteData<T>(
 
 export function hasCachedRouteData(key: string) {
   const cached = routeDataCache.get(key);
-  return cached?.version === currentVersion();
+  return cached?.version === currentVersion() && !isRouteDataStale(key);
 }
 
 export function usePrimeRouteDataCache<T>(key: string, data: T) {
@@ -100,9 +105,7 @@ export function useIsRouteDataStale(key: string | null) {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    () =>
-      key !== null &&
-      [...staleRouteData].some((staleKey) => matchesKey(staleKey, key)),
+    () => key !== null && isRouteDataStale(key),
     () => false,
   );
 }
