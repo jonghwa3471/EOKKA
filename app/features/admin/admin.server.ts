@@ -607,6 +607,7 @@ export async function getAdminOverview(
       username: string;
       joined_at: string;
       last_active_on: string;
+      email_confirmed: boolean;
       pro: boolean;
       admin: boolean;
       ticket_count: number;
@@ -619,6 +620,7 @@ export async function getAdminOverview(
       }>;
     }>(sql`select st.id, st.title, st.status, st.category, st.created_at, st.updated_at,
       st.user_id, p.name, u.email, p.avatar_url, p.username, p.created_at as joined_at, p.last_active_on,
+      (u.confirmed_at is not null) as email_confirmed,
       (p.pro_expires_at > now()) as pro, (a.user_id is not null) as admin,
       (select count(*)::int from support_tickets own where own.user_id = st.user_id) as ticket_count,
       coalesce((select json_agg(json_build_object(
@@ -639,10 +641,12 @@ export async function getAdminOverview(
       username: string;
       created_at: string;
       last_active_on: string;
+      email_confirmed: boolean;
       pro: boolean;
       admin: boolean;
       ticket_count: number;
     }>(sql`select p.profile_id as id, p.name, u.email, p.avatar_url, p.username, p.created_at, p.last_active_on,
+      (u.confirmed_at is not null) as email_confirmed,
       (p.pro_expires_at > now()) as pro, (a.user_id is not null) as admin,
       (select count(*)::int from support_tickets own where own.user_id = p.profile_id) as ticket_count
       from profiles p join auth.users u on u.id = p.profile_id left join admin_members a on a.user_id = p.profile_id
@@ -683,12 +687,14 @@ export async function getAdminOverview(
       username: string | null;
       joined_at: string | null;
       last_active_on: string | null;
+      email_confirmed: boolean;
       pro: boolean;
       admin: boolean;
       ticket_count: number;
     }>(sql`select e.id, e.event_type, e.actor_user_id, e.target_type, e.target_id,
       e.target_label, e.created_at, p.profile_id as user_id, p.name, u.email,
       p.avatar_url, p.username, p.created_at as joined_at, p.last_active_on,
+      coalesce(u.confirmed_at is not null, false) as email_confirmed,
       coalesce(p.pro_expires_at > now(), false) as pro,
       (a.user_id is not null) as admin,
       coalesce((select count(*)::int from support_tickets own where own.user_id = p.profile_id), 0) as ticket_count

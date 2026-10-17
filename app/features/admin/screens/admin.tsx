@@ -339,6 +339,7 @@ export default function Admin({
         ticket_count: user.ticket_count,
         last_active_on: user.last_active_on,
         joined_at: user.created_at,
+        email_confirmed: user.email_confirmed,
       };
     const ticket = d.tickets.find((item) => item.user_id === selectedUserId);
     if (ticket)
@@ -353,6 +354,7 @@ export default function Admin({
         ticket_count: ticket.ticket_count,
         last_active_on: ticket.last_active_on,
         joined_at: ticket.joined_at,
+        email_confirmed: ticket.email_confirmed,
       };
     const activity = activityData.activities.find(
       (item) => item.user_id === selectedUserId,
@@ -369,6 +371,7 @@ export default function Admin({
           ticket_count: activity.ticket_count,
           last_active_on: activity.last_active_on ?? "-",
           joined_at: activity.joined_at ?? activity.created_at,
+          email_confirmed: activity.email_confirmed,
         }
       : null;
   }, [activityData.activities, d.tickets, d.users, selectedUserId]);
@@ -708,13 +711,17 @@ export default function Admin({
             <table className="w-full text-left text-sm">
               <thead className="text-muted-foreground border-b">
                 <tr>
-                  {["사용자", "이메일", "상태", "최근 활동", "가입일"].map(
-                    (s) => (
-                      <th key={s} className="p-3 whitespace-nowrap">
-                        {s}
-                      </th>
-                    ),
-                  )}
+                  {[
+                    "사용자",
+                    "이메일",
+                    "가입·이용 상태",
+                    "최근 활동",
+                    "가입 요청일",
+                  ].map((s) => (
+                    <th key={s} className="p-3 whitespace-nowrap">
+                      {s}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -742,8 +749,21 @@ export default function Admin({
                     </td>
                     <td className="p-3">{u.email}</td>
                     <td className="p-3 whitespace-nowrap">
-                      {u.admin ? "관리자 · " : ""}
-                      {u.pro ? "Pro" : "무료"}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${
+                            u.email_confirmed
+                              ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                              : "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                          }`}
+                        >
+                          {u.email_confirmed ? "회원가입 완료" : "가입 대기"}
+                        </span>
+                        <span className="text-muted-foreground text-xs">
+                          {u.admin ? "관리자 · " : ""}
+                          {u.pro ? "Pro" : "무료"}
+                        </span>
+                      </div>
                     </td>
                     <td className="p-3 whitespace-nowrap">
                       {String(u.last_active_on).slice(0, 10)}
@@ -1262,6 +1282,20 @@ export default function Admin({
                 </dd>
               </div>
               <div className="bg-muted/50 rounded-2xl p-4">
+                <dt className="text-muted-foreground text-xs">가입 상태</dt>
+                <dd
+                  className={`mt-1 text-sm font-bold ${
+                    selectedUser.email_confirmed
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-amber-700 dark:text-amber-400"
+                  }`}
+                >
+                  {selectedUser.email_confirmed
+                    ? "회원가입 완료"
+                    : "가입 대기 · 이메일 인증 전"}
+                </dd>
+              </div>
+              <div className="bg-muted/50 rounded-2xl p-4">
                 <dt className="text-muted-foreground text-xs">이용 상태</dt>
                 <dd className="mt-1 font-bold">
                   {selectedUser.admin ? "관리자 · " : ""}
@@ -1293,7 +1327,7 @@ export default function Admin({
                 </dd>
               </div>
               <div className="bg-muted/50 rounded-2xl p-4">
-                <dt className="text-muted-foreground text-xs">가입일</dt>
+                <dt className="text-muted-foreground text-xs">가입 요청일</dt>
                 <dd className="mt-1 text-sm font-bold">
                   {new Date(selectedUser.joined_at).toLocaleDateString("ko-KR")}
                 </dd>
