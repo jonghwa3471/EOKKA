@@ -842,7 +842,7 @@ export default function Home() {
 
   return (
     <main
-      className="relative -my-16 overflow-hidden md:-my-32"
+      className="relative -my-16 ml-[calc(50%-50dvw)] w-dvw max-w-none overflow-hidden md:-my-32"
       onPointerMove={moveMatrixSpotlight}
       onPointerEnter={moveMatrixSpotlight}
       onPointerLeave={() => {
